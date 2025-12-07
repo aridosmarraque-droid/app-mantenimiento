@@ -31,6 +31,7 @@ export interface Machine {
   id: string;
   costCenterId: string;
   name: string;
+  companyCode?: string; // Nuevo campo: Código Interno
   currentHours: number;
   requiresHours: boolean;
   adminExpenses: boolean; // "Gastos de Administración"
