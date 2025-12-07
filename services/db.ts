@@ -93,6 +93,7 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
       currentHours: Number(m.horas_actuales),
       requiresHours: m.requiere_horas,
       adminExpenses: m.gastos_admin,
+      transportExpenses: m.gastos_transporte,
       maintenanceDefs: m.mant_mantenimientos_def.map((def: any) => ({
         id: def.id,
         machineId: def.maquina_id,
@@ -108,32 +109,52 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
   }
 };
 
-export const createMachine = async (machine: Omit<Machine, 'id' | 'maintenanceDefs'>): Promise<Machine> => {
+export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
     if (!isConfigured) return mock.createMachine(machine);
     
     try {
-        const { data, error } = await supabase
+        // 1. Create Machine
+        const { data: machineData, error: machineError } = await supabase
             .from('mant_maquinas')
             .insert({
                 centro_id: machine.costCenterId,
                 nombre: machine.name,
                 horas_actuales: machine.currentHours,
                 requiere_horas: machine.requiresHours,
-                gastos_admin: machine.adminExpenses
+                gastos_admin: machine.adminExpenses,
+                gastos_transporte: machine.transportExpenses
             })
             .select()
             .single();
 
-        if (error) throw error;
+        if (machineError) throw machineError;
+
+        // 2. Insert Maintenance Definitions if any
+        if (machine.maintenanceDefs.length > 0) {
+            const defsToInsert = machine.maintenanceDefs.map(def => ({
+                maquina_id: machineData.id,
+                nombre: def.name,
+                intervalo_horas: def.intervalHours,
+                tareas: def.tasks,
+                horas_preaviso: def.warningHours
+            }));
+
+            const { error: defsError } = await supabase
+                .from('mant_mantenimientos_def')
+                .insert(defsToInsert);
+
+            if (defsError) console.error("Error inserting defs:", defsError);
+        }
 
         return {
-            id: data.id,
-            costCenterId: data.centro_id,
-            name: data.nombre,
-            currentHours: Number(data.horas_actuales),
-            requiresHours: data.requiere_horas,
-            adminExpenses: data.gastos_admin,
-            maintenanceDefs: []
+            id: machineData.id,
+            costCenterId: machineData.centro_id,
+            name: machineData.nombre,
+            currentHours: Number(machineData.horas_actuales),
+            requiresHours: machineData.requiere_horas,
+            adminExpenses: machineData.gastos_admin,
+            transportExpenses: machineData.gastos_transporte,
+            maintenanceDefs: machine.maintenanceDefs // Return what we passed, as we just created them
         };
     } catch (error) {
         console.error('Error creating machine:', error);
