@@ -46,11 +46,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
         <div className="flex flex-col items-center mb-6">
-          <div className="bg-blue-100 p-3 rounded-full mb-4">
-            <UserCircle className="w-12 h-12 text-blue-600" />
+          <div className="bg-red-50 p-3 rounded-full mb-4">
+            <UserCircle className="w-12 h-12 text-red-600" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Aridos Marraque</h1>
-          <p className="text-slate-500">Gestión de Mantenimiento</p>
+          <h1 className="text-3xl font-bold text-red-600 mb-1">Aridos Marraque</h1>
+          <p className="text-slate-500 font-medium">Gestión de Mantenimiento</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -61,7 +61,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <select
               value={selectedWorkerId}
               onChange={(e) => setSelectedWorkerId(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
             >
               <option value="">-- Seleccionar --</option>
               {workers.map(w => (
@@ -79,7 +79,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               inputMode="numeric"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
               placeholder="****"
               maxLength={4}
             />
@@ -93,7 +93,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
+            className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
           >
             Entrar
           </button>
