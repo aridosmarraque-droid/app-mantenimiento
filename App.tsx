@@ -121,9 +121,9 @@ function App() {
              </div>
           )}
           <div className="p-4 flex justify-between items-center relative">
-            <h1 className="font-bold text-lg flex items-center gap-2">
+            <h1 className="font-bold text-lg flex items-center gap-2 text-red-500">
               <LayoutDashboard className="w-5 h-5" />
-              GMAO Marraque
+              Aridos Marraque
             </h1>
             <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
@@ -146,7 +146,7 @@ function App() {
                   </div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <Factory className="w-5 h-5 text-blue-500" />
-                      Nuevo Centro / Grupo
+                      Nueva Cantera / Grupo
                   </button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
                       <Truck className="w-5 h-5 text-blue-500" />
@@ -182,7 +182,7 @@ function App() {
               {viewState === ViewState.ADMIN_CREATE_CENTER && (
                   <CreateCenterForm 
                     onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
-                    onSuccess={() => handleAdminSuccess('Centro creado correctamente')}
+                    onSuccess={() => handleAdminSuccess('Cantera creada correctamente')}
                   />
               )}
 
