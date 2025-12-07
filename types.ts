@@ -19,8 +19,8 @@ export interface CostCenter {
 }
 
 export interface MaintenanceDefinition {
-  id: string;
-  machineId: string;
+  id?: string; // Optional for creation
+  machineId?: string;
   name: string; // e.g., "Mantenimiento 500h"
   intervalHours: number; // 500
   tasks: string; // "Cambio aceite y filtros"
@@ -34,6 +34,7 @@ export interface Machine {
   currentHours: number;
   requiresHours: boolean;
   adminExpenses: boolean; // "Gastos de Administración"
+  transportExpenses: boolean; // "Gastos de Transporte"
   maintenanceDefs: MaintenanceDefinition[];
 }
 
