@@ -23,19 +23,19 @@ const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
 
 export const MACHINES: Machine[] = [
   { 
-    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false,
+    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm1') 
   },
   { 
-    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false,
+    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm2')
   },
   { 
-    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false,
+    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: []
   },
   { 
-    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false,
+    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false,
     maintenanceDefs: []
   },
 ];
