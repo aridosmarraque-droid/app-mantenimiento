@@ -83,7 +83,7 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
             <option value="">-- Seleccione Máquina --</option>
             {machines.map(m => (
               <option key={m.id} value={m.id}>
-                {m.name} {m.adminExpenses ? '(Gastos Admin)' : ''}
+                {m.name} {m.companyCode ? `(${m.companyCode})` : ''} {m.adminExpenses ? '(Gastos Admin)' : ''}
               </option>
             ))}
           </select>
