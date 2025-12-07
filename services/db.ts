@@ -90,6 +90,7 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
       id: m.id,
       costCenterId: m.centro_id,
       name: m.nombre,
+      companyCode: m.codigo_empresa, // Mapeo nuevo
       currentHours: Number(m.horas_actuales),
       requiresHours: m.requiere_horas,
       adminExpenses: m.gastos_admin,
@@ -119,6 +120,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
             .insert({
                 centro_id: machine.costCenterId,
                 nombre: machine.name,
+                codigo_empresa: machine.companyCode, // Insertar código
                 horas_actuales: machine.currentHours,
                 requiere_horas: machine.requiresHours,
                 gastos_admin: machine.adminExpenses,
@@ -150,11 +152,12 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
             id: machineData.id,
             costCenterId: machineData.centro_id,
             name: machineData.nombre,
+            companyCode: machineData.codigo_empresa,
             currentHours: Number(machineData.horas_actuales),
             requiresHours: machineData.requiere_horas,
             adminExpenses: machineData.gastos_admin,
             transportExpenses: machineData.gastos_transporte,
-            maintenanceDefs: machine.maintenanceDefs // Return what we passed, as we just created them
+            maintenanceDefs: machine.maintenanceDefs
         };
     } catch (error) {
         console.error('Error creating machine:', error);
