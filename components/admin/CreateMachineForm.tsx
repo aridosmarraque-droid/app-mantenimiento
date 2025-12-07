@@ -15,6 +15,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     
     // Main Form State
     const [name, setName] = useState('');
+    const [companyCode, setCompanyCode] = useState('');
     const [centerId, setCenterId] = useState('');
     const [currentHours, setCurrentHours] = useState(0);
     const [requiresHours, setRequiresHours] = useState(true);
@@ -75,6 +76,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         try {
             await createMachine({
                 name,
+                companyCode,
                 costCenterId: centerId,
                 currentHours,
                 requiresHours,
@@ -85,7 +87,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             onSuccess();
         } catch (error) {
             console.error(error);
-            alert("Error al crear máquina");
+            alert("Error al crear máquina. Revisa la consola para más detalles.");
         } finally {
             setLoading(false);
         }
@@ -109,6 +111,17 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         required
                         value={name}
                         onChange={e => setName(e.target.value)}
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+                
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno</label>
+                    <input
+                        type="text"
+                        value={companyCode}
+                        onChange={e => setCompanyCode(e.target.value)}
+                        placeholder="Ej. RETRO-01"
                         className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
@@ -254,3 +267,4 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         </form>
     );
 };
+
