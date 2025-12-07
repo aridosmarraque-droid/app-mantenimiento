@@ -32,11 +32,11 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                     <ArrowLeft className="w-5 h-5" />
                 </button>
-                <h3 className="text-xl font-bold text-slate-800">Nuevo Centro de Coste</h3>
+                <h3 className="text-xl font-bold text-slate-800">Nueva Cantera / Grupo</h3>
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre del Centro / Grupo *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Cantera / Grupo *</label>
                 <input
                     type="text"
                     required
@@ -52,7 +52,7 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 disabled={loading}
                 className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400"
             >
-                <Save className="w-5 h-5" /> {loading ? 'Guardando...' : 'Crear Centro'}
+                <Save className="w-5 h-5" /> {loading ? 'Guardando...' : 'Crear'}
             </button>
         </form>
     );
