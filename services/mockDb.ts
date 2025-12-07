@@ -23,19 +23,19 @@ const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
 
 export const MACHINES: Machine[] = [
   { 
-    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', currentHours: 4960, requiresHours: true, adminExpenses: false, 
+    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm1') 
   },
   { 
-    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', currentHours: 12100, requiresHours: true, adminExpenses: false,
+    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm2')
   },
   { 
-    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', currentHours: 0, requiresHours: false, adminExpenses: false,
+    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: []
   },
   { 
-    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', currentHours: 150000, requiresHours: false, adminExpenses: true, // Example of admin expenses
+    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false,
     maintenanceDefs: []
   },
 ];
@@ -71,11 +71,12 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
   return new Promise(resolve => setTimeout(() => resolve(MACHINES.filter(m => m.costCenterId === centerId)), 300));
 };
 
-export const createMachine = async (machine: Omit<Machine, 'id' | 'maintenanceDefs'>): Promise<Machine> => {
+export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
+    const newId = Math.random().toString(36).substr(2, 9);
     const newMachine: Machine = {
         ...machine,
-        id: Math.random().toString(36).substr(2, 9),
-        maintenanceDefs: []
+        id: newId,
+        maintenanceDefs: machine.maintenanceDefs.map(def => ({...def, id: Math.random().toString(36).substr(2, 9), machineId: newId}))
     };
     MACHINES.push(newMachine);
     return new Promise(resolve => setTimeout(() => resolve(newMachine), 300));
