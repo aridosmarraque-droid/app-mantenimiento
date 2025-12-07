@@ -55,14 +55,14 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <Factory className="w-5 h-5 text-blue-600" />
-          Centro de Coste / Grupo
+          Cantera / Grupo
         </h2>
         <select
           value={selectedCenterId}
           onChange={(e) => setSelectedCenterId(e.target.value)}
           className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-4"
         >
-          <option value="">-- Seleccione un Grupo --</option>
+          <option value="">-- Seleccione Cantera --</option>
           {centers.map(c => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
