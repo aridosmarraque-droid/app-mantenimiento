@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CostCenter, Machine } from '../types';
-import { getCostCenters, getMachinesByCenter } from '../services/db';
-import { Factory, Truck, ChevronRight } from 'lucide-react';
+import { getCostCenters, getMachinesByCenter, calculateAndSyncMachineStatus } from '../services/db'; // Importar nueva función
+import { Factory, Truck, ChevronRight, Loader2 } from 'lucide-react';
 
 interface MachineSelectorProps {
   onSelect: (machine: Machine, center: CostCenter) => void;
@@ -14,6 +14,7 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
   const [selectedCenterId, setSelectedCenterId] = useState('');
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState('');
+  const [loadingSelection, setLoadingSelection] = useState(false);
 
   useEffect(() => {
     getCostCenters().then(setCenters);
@@ -28,11 +29,22 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
     }
   }, [selectedCenterId]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const m = machines.find(mac => mac.id === selectedMachineId);
     const c = centers.find(cen => cen.id === selectedCenterId);
+    
     if (m && c) {
-      onSelect(m, c);
+      setLoadingSelection(true);
+      // Recalcular estado de mantenimientos antes de continuar
+      try {
+          const updatedMachine = await calculateAndSyncMachineStatus(m);
+          onSelect(updatedMachine, c);
+      } catch (error) {
+          console.error("Error syncing machine status", error);
+          onSelect(m, c); // Fallback to loaded data
+      } finally {
+          setLoadingSelection(false);
+      }
     }
   };
 
@@ -91,11 +103,11 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
       )}
 
       <button
-        disabled={!selectedMachineId || !selectedCenterId}
+        disabled={!selectedMachineId || !selectedCenterId || loadingSelection}
         onClick={handleContinue}
         className="w-full flex items-center justify-center gap-2 bg-blue-600 disabled:bg-slate-300 text-white font-bold py-4 px-6 rounded-xl shadow-md transition-all hover:bg-blue-700"
       >
-        Continuar <ChevronRight className="w-5 h-5" />
+        {loadingSelection ? <Loader2 className="animate-spin" /> : <>Continuar <ChevronRight className="w-5 h-5" /></>}
       </button>
     </div>
   );
