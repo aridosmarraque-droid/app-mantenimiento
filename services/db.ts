@@ -102,7 +102,8 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
         intervalHours: Number(def.intervalo_horas),
         tasks: def.tareas,
         warningHours: Number(def.horas_preaviso),
-        pending: def.pendiente // Mapeo de estado pendiente
+        pending: def.pendiente,
+        remainingHours: Number(def.horas_restantes)
       }))
     }));
   } catch (error) {
@@ -132,20 +133,30 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
         if (machineError) throw machineError;
 
         if (machine.maintenanceDefs.length > 0) {
-            const defsToInsert = machine.maintenanceDefs.map(def => ({
-                maquina_id: machineData.id,
-                nombre: def.name,
-                intervalo_horas: def.intervalHours,
-                tareas: def.tasks,
-                horas_preaviso: def.warningHours,
-                pendiente: false // Inicialmente falso
-            }));
+            const defsToInsert = machine.maintenanceDefs.map(def => {
+                // Calcular horas restantes iniciales
+                const hoursInCycle = machine.currentHours % def.intervalHours;
+                const remaining = def.intervalHours - hoursInCycle;
+
+                return {
+                    maquina_id: machineData.id,
+                    nombre: def.name,
+                    intervalo_horas: def.intervalHours,
+                    tareas: def.tasks,
+                    horas_preaviso: def.warningHours,
+                    pendiente: false,
+                    horas_restantes: remaining
+                };
+            });
 
             const { error: defsError } = await supabase
                 .from('mant_mantenimientos_def')
                 .insert(defsToInsert);
 
-            if (defsError) console.error("Error inserting defs:", defsError);
+            if (defsError) {
+                console.error("Error inserting defs:", defsError);
+                throw defsError; // Throw so UI knows it failed
+            }
         }
 
         return {
@@ -200,9 +211,7 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
 
 /**
  * LOGIC CORE: Updates the maintenance status for a machine.
- * 1. Iterates all defs.
- * 2. Checks mathematical condition: (Current % Interval) implies remaining <= warning.
- * 3. Sticky Logic: If already pending, stays pending unless explicitly completed now.
+ * Recalculates remaining hours and pending status.
  */
 export const updateMaintenanceStatus = async (machineId: string, currentHours: number, completedDefId?: string) => {
     if (!isConfigured) return;
@@ -218,40 +227,40 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
 
         // 2. Calculate updates
         const updates = defs.map(def => {
-            // Logic: 1800h / 500h => 3.6 => 0.6 * 500 = 300h consumed. 500-300 = 200h remaining.
-            // Simplified: 500 - (1800 % 500) = 200.
-            const hoursInCycle = currentHours % Number(def.intervalo_horas);
-            // Edge case: if hoursInCycle is 0 (exact multiple), remaining is interval (or 0 depending on perspective, usually means just done or due exactly now)
-            // Let's assume strict modulus.
-            const remaining = Number(def.intervalo_horas) - hoursInCycle;
+            // Calculation: Remaining Hours
+            const interval = Number(def.intervalo_horas);
+            const hoursInCycle = currentHours % interval;
+            const remaining = interval - hoursInCycle;
             
             const isWithinWarning = remaining <= Number(def.horas_preaviso);
-
-            let newPendingState = def.pendiente; // Default to existing state (Sticky)
+            let newPendingState = def.pendiente; // Sticky Logic
 
             if (completedDefId && def.id === completedDefId) {
-                // Explicit reset
+                // Explicit reset when completing a maintenance
                 newPendingState = false;
             } else if (isWithinWarning) {
                 // Mathematical Trigger
                 newPendingState = true;
-            } 
-            // Else: stay as is (if true, stays true. if false, stays false)
-
-            if (newPendingState !== def.pendiente) {
-                return { id: def.id, pendiente: newPendingState };
             }
-            return null;
-        }).filter(u => u !== null);
+            
+            // Only return if there is a change to save DB writes, 
+            // BUT since we are recalculating remaining hours every time, we almost always write if hours changed.
+            return { 
+                id: def.id, 
+                pendiente: newPendingState,
+                horas_restantes: remaining
+            };
+        });
 
         // 3. Perform Updates
         for (const update of updates) {
-            if (update) {
-                await supabase
-                    .from('mant_mantenimientos_def')
-                    .update({ pendiente: update.pendiente })
-                    .eq('id', update.id);
-            }
+            await supabase
+                .from('mant_mantenimientos_def')
+                .update({ 
+                    pendiente: update.pendiente,
+                    horas_restantes: update.horas_restantes 
+                })
+                .eq('id', update.id);
         }
 
     } catch (e) {
@@ -291,20 +300,13 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     if (logError) throw logError;
 
-    // 2. Update Machine Hours (if higher)
-    // We assume we should always update status even if hours don't change (e.g. forced check), 
-    // but definitely if they increase.
+    // 2. Update Machine Hours & Maintenance Status
     if (log.hoursAtExecution) {
-        // Fetch current to compare? Or just update if higher.
-        // For simplicity and to trigger triggers, we'll try to update.
-        // But we need to know if it's higher to respect the DB data integrity.
-        // Let's rely on the fact that the App validates inputs >= currentHours.
-        
         await supabase
             .from('mant_maquinas')
             .update({ horas_actuales: log.hoursAtExecution })
             .eq('id', log.machineId)
-            .lt('horas_actuales', log.hoursAtExecution); // Safety check SQL side
+            .lt('horas_actuales', log.hoursAtExecution);
         
         // 3. Update Maintenance Statuses (Centralized Logic)
         await updateMaintenanceStatus(log.machineId, log.hoursAtExecution, log.maintenanceDefId);
@@ -324,7 +326,6 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
     await updateMaintenanceStatus(machine.id, machine.currentHours);
     
     // Re-fetch machine to get updated definitions
-    // This is a bit expensive but ensures UI is 100% in sync with the logic we just ran
     const { data, error } = await supabase
       .from('mant_maquinas')
       .select(`*, mant_mantenimientos_def (*)`)
@@ -349,7 +350,8 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
         intervalHours: Number(def.intervalo_horas),
         tasks: def.tareas,
         warningHours: Number(def.horas_preaviso),
-        pending: def.pendiente
+        pending: def.pendiente,
+        remainingHours: Number(def.horas_restantes)
       }))
     };
 }
