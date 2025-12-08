@@ -25,6 +25,7 @@ export interface MaintenanceDefinition {
   intervalHours: number; // 500
   tasks: string; // "Cambio aceite y filtros"
   warningHours: number; // 50
+  pending?: boolean; // Check "Mantenimiento Pendiente"
 }
 
 export interface Machine {
@@ -72,4 +73,7 @@ export interface OperationLog {
   
   // Scheduled Specific
   maintenanceDefId?: string;
+  
+  // Refueling Specific
+  fuelLitres?: number;
 }
