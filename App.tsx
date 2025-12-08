@@ -71,6 +71,8 @@ function App() {
       await saveOperationLog(logData);
       
       // Update local state hours for immediate feedback
+      // NOTE: With the new sync logic, it's safer to re-fetch, but for UI responsiveness we update basic hours here.
+      // The pending checks are handled DB side and will reflect next time the machine is loaded.
       if (logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours) {
         selectedContext.machine.currentHours = logData.hoursAtExecution;
       }
@@ -234,16 +236,25 @@ function App() {
                   {selectedAction === 'REFUELING' && (
                     <div className="bg-white p-6 rounded-xl shadow-md text-center">
                         <h3 className="text-lg font-bold mb-4">Registro de Repostaje</h3>
-                         <p className="mb-4 text-slate-500">Funcionalidad básica: Registrar horas al repostar.</p>
                          <form onSubmit={(e) => {
                              e.preventDefault();
                              // @ts-ignore
                              const h = Number(e.target.hours.value);
-                             handleFormSubmit({ hoursAtExecution: h });
-                         }}>
-                             <input name="hours" type="number" placeholder="Horas Actuales" className="w-full border p-3 rounded mb-4" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
-                             <button className="bg-green-600 text-white w-full py-3 rounded font-bold">Guardar Repostaje</button>
-                             <button type="button" onClick={() => setViewState(ViewState.ACTION_MENU)} className="mt-3 text-slate-500 underline">Cancelar</button>
+                             // @ts-ignore
+                             const l = Number(e.target.litres.value);
+                             handleFormSubmit({ hoursAtExecution: h, fuelLitres: l });
+                         }} className="space-y-4 text-left">
+                             <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
+                                <input name="hours" type="number" placeholder="Horas" className="w-full border p-3 rounded-lg" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Litros Repostados</label>
+                                <input name="litres" type="number" placeholder="Litros" className="w-full border p-3 rounded-lg" required />
+                             </div>
+                             
+                             <button className="bg-green-600 text-white w-full py-3 rounded font-bold hover:bg-green-700">Guardar Repostaje</button>
+                             <button type="button" onClick={() => setViewState(ViewState.ACTION_MENU)} className="w-full text-slate-500 py-2">Cancelar</button>
                          </form>
                     </div>
                   )}
