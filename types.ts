@@ -26,6 +26,7 @@ export interface MaintenanceDefinition {
   tasks: string; // "Cambio aceite y filtros"
   warningHours: number; // 50
   pending?: boolean; // Check "Mantenimiento Pendiente"
+  remainingHours?: number; // Nuevo campo: Horas hasta el próximo
 }
 
 export interface Machine {
