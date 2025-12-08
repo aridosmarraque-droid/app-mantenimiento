@@ -1,18 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition } from '../../types';
-import { getServiceProviders, getLastMaintenanceLog } from '../../services/db';
+import { getServiceProviders } from '../../services/db';
 import { Save, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 
 interface Props {
   machine: Machine;
   onSubmit: (data: Partial<OperationLog>) => void;
   onCancel: () => void;
-}
-
-interface MaintenanceStatus {
-  def: MaintenanceDefinition;
-  nextDueHours: number;
 }
 
 export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) => {
@@ -27,8 +22,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
   useEffect(() => {
     getServiceProviders().then(setProviders);
     
-    // Filtrar directamente por el flag 'pending' que viene de la DB/Objeto Machine
-    // Ya que se calcula al abrir la app o al actualizar horas
+    // Filtrar por pendiente
     const pending = machine.maintenanceDefs.filter(def => def.pending);
     setPendingList(pending);
 
@@ -51,13 +45,6 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
           description: def?.name
       });
   };
-
-  // Helper calculation purely for display purposes of "Next Due"
-  const getNextDue = (def: MaintenanceDefinition) => {
-      const hoursInCycle = machine.currentHours % def.intervalHours;
-      const remaining = def.intervalHours - hoursInCycle;
-      return machine.currentHours + remaining;
-  }
 
   if (selectedDefId) {
       const def = machine.maintenanceDefs.find(d => d.id === selectedDefId);
@@ -114,11 +101,10 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
        ) : (
            <div className="space-y-4">
                {pendingList.map((def) => {
-                   const nextDue = getNextDue(def);
-                   const isOverdue = machine.currentHours > nextDue; 
-                   // Note: logic implies overdue if hours passed interval multiple, 
-                   // but strictly visually we use the calc.
-                   
+                   const remaining = def.remainingHours ?? 0;
+                   // Si es negativo (se pasó), mostrar en rojo
+                   const isOverdue = remaining < 0;
+
                    return (
                    <div key={def.id} className={`border rounded-lg p-4 border-amber-300 bg-amber-50`}>
                        <div className="flex justify-between items-start mb-2">
@@ -131,7 +117,9 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                        
                        <div className="flex justify-between items-center text-sm text-slate-500 mt-3 mb-3">
                            <span>Intervalo: {def.intervalHours}h</span>
-                           <span>Previsto: <strong>{nextDue}h</strong></span>
+                           <span className={isOverdue ? "text-red-600 font-bold" : "text-slate-700 font-bold"}>
+                               {isOverdue ? `Pasado por ${Math.abs(remaining)}h` : `Restan: ${remaining}h`}
+                           </span>
                        </div>
 
                        <button 
@@ -151,11 +139,10 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
            <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos (No pendientes)</h4>
            <ul className="text-xs text-slate-400 space-y-1">
                {machine.maintenanceDefs.filter(d => !d.pending).map(d => {
-                   const next = getNextDue(d);
                    return (
                    <li key={d.id} className="flex justify-between">
                        <span>{d.name}</span>
-                       <span>Previsto: {next}h (en {next - machine.currentHours}h)</span>
+                       <span>Restan: {d.remainingHours ?? '?'}h</span>
                    </li>
                    );
                })}
@@ -168,3 +155,4 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
     </div>
   );
 };
+
