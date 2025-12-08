@@ -16,9 +16,9 @@ export const COST_CENTERS: CostCenter[] = [
 ];
 
 const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
-  { id: 'md1', machineId: 'm1', name: 'Mantenimiento 250h', intervalHours: 250, tasks: 'Engrase general y revisión niveles', warningHours: 25 },
-  { id: 'md2', machineId: 'm1', name: 'Mantenimiento 500h', intervalHours: 500, tasks: 'Cambio aceite motor y filtros', warningHours: 50 },
-  { id: 'md3', machineId: 'm2', name: 'Mantenimiento 1000h', intervalHours: 1000, tasks: 'Cambio aceite hidráulico', warningHours: 100 },
+  { id: 'md1', machineId: 'm1', name: 'Mantenimiento 250h', intervalHours: 250, tasks: 'Engrase general y revisión niveles', warningHours: 25, pending: false },
+  { id: 'md2', machineId: 'm1', name: 'Mantenimiento 500h', intervalHours: 500, tasks: 'Cambio aceite motor y filtros', warningHours: 50, pending: false },
+  { id: 'md3', machineId: 'm2', name: 'Mantenimiento 1000h', intervalHours: 1000, tasks: 'Cambio aceite hidráulico', warningHours: 100, pending: true },
 ];
 
 export const MACHINES: Machine[] = [
@@ -76,7 +76,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
     const newMachine: Machine = {
         ...machine,
         id: newId,
-        maintenanceDefs: machine.maintenanceDefs.map(def => ({...def, id: Math.random().toString(36).substr(2, 9), machineId: newId}))
+        maintenanceDefs: machine.maintenanceDefs.map(def => ({...def, id: Math.random().toString(36).substr(2, 9), machineId: newId, pending: false}))
     };
     MACHINES.push(newMachine);
     return new Promise(resolve => setTimeout(() => resolve(newMachine), 300));
@@ -86,6 +86,31 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
 
+// Simplified Mock Logic for updating maintenance status
+const updateMockMaintenanceStatus = (machineId: string, currentHours: number, completedDefId?: string) => {
+    const machine = MACHINES.find(m => m.id === machineId);
+    if (!machine) return;
+
+    machine.maintenanceDefs.forEach(def => {
+        // If this exact def was just completed, reset it
+        if (completedDefId && def.id === completedDefId) {
+            def.pending = false;
+        } else {
+            // Check if it should be pending
+            const hoursInCycle = currentHours % def.intervalHours;
+            const remaining = def.intervalHours - hoursInCycle;
+            
+            // Logic: Sticky pending. If it was already true, stay true. 
+            // If not, become true if within warning window.
+            const shouldBePending = remaining <= def.warningHours;
+            
+            if (shouldBePending) {
+                def.pending = true;
+            }
+        }
+    });
+};
+
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
   const newLog = { ...log, id: Math.random().toString(36).substr(2, 9) };
   logs.push(newLog);
@@ -93,6 +118,10 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
   const machineIndex = MACHINES.findIndex(m => m.id === log.machineId);
   if (machineIndex >= 0 && log.hoursAtExecution && log.hoursAtExecution > MACHINES[machineIndex].currentHours) {
     MACHINES[machineIndex].currentHours = log.hoursAtExecution;
+    updateMockMaintenanceStatus(log.machineId, log.hoursAtExecution, log.maintenanceDefId);
+  } else if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
+    // Even if hours didn't increase (weird but possible), if it's scheduled, we reset pending
+    updateMockMaintenanceStatus(log.machineId, MACHINES[machineIndex].currentHours, log.maintenanceDefId);
   }
 
   return new Promise(resolve => setTimeout(() => resolve(newLog), 500));
@@ -107,3 +136,8 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
 export const getMachineDetails = async (machineId: string): Promise<Machine | undefined> => {
     return MACHINES.find(m => m.id === machineId);
 };
+
+export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
+    updateMockMaintenanceStatus(machine.id, machine.currentHours);
+    return machine;
+}
