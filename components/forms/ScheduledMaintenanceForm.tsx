@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition } from '../../types';
 import { getServiceProviders, getLastMaintenanceLog } from '../../services/db';
@@ -11,15 +12,11 @@ interface Props {
 
 interface MaintenanceStatus {
   def: MaintenanceDefinition;
-  lastPerformedHours: number;
   nextDueHours: number;
-  isDue: boolean;
-  isOverdue: boolean;
 }
 
 export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) => {
-  const [statuses, setStatuses] = useState<MaintenanceStatus[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [pendingList, setPendingList] = useState<MaintenanceDefinition[]>([]);
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   
   // Selected for execution
@@ -28,38 +25,13 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
   const [providerId, setProviderId] = useState('');
 
   useEffect(() => {
-    const fetchData = async () => {
-        setLoading(true);
-        const provs = await getServiceProviders();
-        setProviders(provs);
+    getServiceProviders().then(setProviders);
+    
+    // Filtrar directamente por el flag 'pending' que viene de la DB/Objeto Machine
+    // Ya que se calcula al abrir la app o al actualizar horas
+    const pending = machine.maintenanceDefs.filter(def => def.pending);
+    setPendingList(pending);
 
-        const calculatedStatuses: MaintenanceStatus[] = [];
-
-        for (const def of machine.maintenanceDefs) {
-            const lastLog = await getLastMaintenanceLog(machine.id, def.id);
-            const lastHours = lastLog ? lastLog.hoursAtExecution : 0; // Assuming 0 if never done
-            const nextDue = lastHours + def.intervalHours;
-            
-            // Logic:
-            // Warning start: nextDue - warningHours
-            // Show if currentHours >= (nextDue - warningHours)
-            const warningThreshold = nextDue - def.warningHours;
-            const isDue = machine.currentHours >= warningThreshold;
-            const isOverdue = machine.currentHours > nextDue;
-
-            calculatedStatuses.push({
-                def,
-                lastPerformedHours: lastHours,
-                nextDueHours: nextDue,
-                isDue,
-                isOverdue
-            });
-        }
-        setStatuses(calculatedStatuses);
-        setLoading(false);
-    };
-
-    fetchData();
   }, [machine]);
 
   const handleRegisterClick = (defId: string) => {
@@ -69,20 +41,26 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
   const handleConfirm = (e: React.FormEvent) => {
       e.preventDefault();
       if (!selectedDefId) return;
+      const def = machine.maintenanceDefs.find(d => d.id === selectedDefId);
 
       onSubmit({
           hoursAtExecution: Number(hours),
           repairerId: providerId,
           maintenanceDefId: selectedDefId,
-          maintenanceType: 'OTHER', // Defaulting for log structure
-          description: statuses.find(s => s.def.id === selectedDefId)?.def.name
+          maintenanceType: 'OTHER', 
+          description: def?.name
       });
   };
 
-  if (loading) return <div className="p-8 text-center text-slate-500">Calculando mantenimientos...</div>;
+  // Helper calculation purely for display purposes of "Next Due"
+  const getNextDue = (def: MaintenanceDefinition) => {
+      const hoursInCycle = machine.currentHours % def.intervalHours;
+      const remaining = def.intervalHours - hoursInCycle;
+      return machine.currentHours + remaining;
+  }
 
   if (selectedDefId) {
-      const def = statuses.find(s => s.def.id === selectedDefId)?.def;
+      const def = machine.maintenanceDefs.find(d => d.id === selectedDefId);
       return (
         <form onSubmit={handleConfirm} className="bg-white p-6 rounded-xl shadow-md space-y-4">
             <h3 className="text-xl font-bold text-slate-800 mb-2">Registrar {def?.name}</h3>
@@ -123,55 +101,64 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
       );
   }
 
-  const activeMaintenances = statuses.filter(s => s.isDue);
-
   return (
     <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
        <h3 className="text-xl font-bold text-slate-800 border-b pb-2 mb-4 bg-purple-50 p-2 rounded-t text-purple-700">Mantenimientos Programados</h3>
        
-       {activeMaintenances.length === 0 ? (
+       {pendingList.length === 0 ? (
            <div className="text-center py-8 text-slate-500 flex flex-col items-center">
                <CheckCircle className="w-12 h-12 text-green-500 mb-2" />
-               <p>No hay mantenimientos pendientes para las horas actuales ({machine.currentHours}h).</p>
+               <p>No hay mantenimientos pendientes.</p>
+               <p className="text-xs mt-2">Los mantenimientos aparecen automáticamente cuando se acercan las horas.</p>
            </div>
        ) : (
            <div className="space-y-4">
-               {activeMaintenances.map((status) => (
-                   <div key={status.def.id} className={`border rounded-lg p-4 ${status.isOverdue ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
+               {pendingList.map((def) => {
+                   const nextDue = getNextDue(def);
+                   const isOverdue = machine.currentHours > nextDue; 
+                   // Note: logic implies overdue if hours passed interval multiple, 
+                   // but strictly visually we use the calc.
+                   
+                   return (
+                   <div key={def.id} className={`border rounded-lg p-4 border-amber-300 bg-amber-50`}>
                        <div className="flex justify-between items-start mb-2">
                            <div>
-                               <h4 className="font-bold text-lg text-slate-800">{status.def.name}</h4>
-                               <p className="text-sm text-slate-600">{status.def.tasks}</p>
+                               <h4 className="font-bold text-lg text-slate-800">{def.name}</h4>
+                               <p className="text-sm text-slate-600">{def.tasks}</p>
                            </div>
-                           {status.isOverdue && <span className="bg-red-200 text-red-800 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><AlertTriangle size={12}/> Vencido</span>}
+                           <span className="bg-amber-200 text-amber-800 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><AlertTriangle size={12}/> Pendiente</span>
                        </div>
                        
                        <div className="flex justify-between items-center text-sm text-slate-500 mt-3 mb-3">
-                           <span>Intervalo: {status.def.intervalHours}h</span>
-                           <span>Toca a las: <strong>{status.nextDueHours}h</strong></span>
+                           <span>Intervalo: {def.intervalHours}h</span>
+                           <span>Previsto: <strong>{nextDue}h</strong></span>
                        </div>
 
                        <button 
-                         onClick={() => handleRegisterClick(status.def.id)}
+                         onClick={() => handleRegisterClick(def.id!)}
                          className="w-full bg-slate-800 text-white py-2 rounded-lg font-medium hover:bg-slate-900 transition-colors"
                        >
                            Registrar Ahora
                        </button>
                    </div>
-               ))}
+                   );
+                })}
            </div>
        )}
 
        {/* Debug / Info list of future */}
        <div className="mt-8 pt-4 border-t border-slate-100">
-           <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos</h4>
+           <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos (No pendientes)</h4>
            <ul className="text-xs text-slate-400 space-y-1">
-               {statuses.filter(s => !s.isDue).map(s => (
-                   <li key={s.def.id} className="flex justify-between">
-                       <span>{s.def.name}</span>
-                       <span>Previsto: {s.nextDueHours}h (en {s.nextDueHours - machine.currentHours}h)</span>
+               {machine.maintenanceDefs.filter(d => !d.pending).map(d => {
+                   const next = getNextDue(d);
+                   return (
+                   <li key={d.id} className="flex justify-between">
+                       <span>{d.name}</span>
+                       <span>Previsto: {next}h (en {next - machine.currentHours}h)</span>
                    </li>
-               ))}
+                   );
+               })}
            </ul>
        </div>
 
