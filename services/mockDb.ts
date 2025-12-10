@@ -82,6 +82,41 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
     return new Promise(resolve => setTimeout(() => resolve(newMachine), 300));
 };
 
+export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
+    const idx = MACHINES.findIndex(m => m.id === id);
+    if (idx !== -1) {
+        MACHINES[idx] = { ...MACHINES[idx], ...updates };
+    }
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
+    const newDef = { ...def, id: Math.random().toString(36).substr(2, 9) };
+    const machine = MACHINES.find(m => m.id === def.machineId);
+    if (machine) {
+        machine.maintenanceDefs.push(newDef);
+    }
+    return new Promise(resolve => setTimeout(() => resolve(newDef), 300));
+};
+
+export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
+    const machine = MACHINES.find(m => m.id === def.machineId);
+    if (machine) {
+        const idx = machine.maintenanceDefs.findIndex(d => d.id === def.id);
+        if (idx !== -1) {
+            machine.maintenanceDefs[idx] = def;
+        }
+    }
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
+    MACHINES.forEach(m => {
+        m.maintenanceDefs = m.maintenanceDefs.filter(d => d.id !== defId);
+    });
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
