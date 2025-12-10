@@ -134,7 +134,6 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
         if (machine.maintenanceDefs.length > 0) {
             const defsToInsert = machine.maintenanceDefs.map(def => {
-                // Calcular horas restantes iniciales
                 const hoursInCycle = machine.currentHours % def.intervalHours;
                 const remaining = def.intervalHours - hoursInCycle;
 
@@ -153,10 +152,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
                 .from('mant_mantenimientos_def')
                 .insert(defsToInsert);
 
-            if (defsError) {
-                console.error("Error inserting defs:", defsError);
-                throw defsError; // Throw so UI knows it failed
-            }
+            if (defsError) throw defsError;
         }
 
         return {
@@ -175,6 +171,108 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
         throw error;
     }
 };
+
+export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
+    if (!isConfigured) return mock.updateMachineAttributes(id, updates);
+    
+    try {
+        const { error } = await supabase
+            .from('mant_maquinas')
+            .update({
+                nombre: updates.name,
+                codigo_empresa: updates.companyCode,
+                horas_actuales: updates.currentHours,
+                requiere_horas: updates.requiresHours,
+                gastos_admin: updates.adminExpenses,
+                gastos_transporte: updates.transportExpenses,
+                centro_id: updates.costCenterId
+            })
+            .eq('id', id);
+        
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error updating machine", error);
+        throw error;
+    }
+}
+
+export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
+    if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
+
+    try {
+        const hoursInCycle = currentMachineHours % def.intervalHours;
+        const remaining = def.intervalHours - hoursInCycle;
+
+        const { data, error } = await supabase
+            .from('mant_mantenimientos_def')
+            .insert({
+                maquina_id: def.machineId,
+                nombre: def.name,
+                intervalo_horas: def.intervalHours,
+                tareas: def.tasks,
+                horas_preaviso: def.warningHours,
+                pendiente: false,
+                horas_restantes: remaining
+            })
+            .select()
+            .single();
+        
+        if (error) throw error;
+
+        return {
+            id: data.id,
+            machineId: data.maquina_id,
+            name: data.nombre,
+            intervalHours: Number(data.intervalo_horas),
+            tasks: data.tareas,
+            warningHours: Number(data.horas_preaviso),
+            pending: data.pendiente,
+            remainingHours: Number(data.horas_restantes)
+        };
+    } catch (error) {
+        console.error("Error adding def", error);
+        throw error;
+    }
+}
+
+export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
+    if (!isConfigured) return mock.updateMaintenanceDef(def);
+
+    try {
+        // No recalculamos remainingHours aquí para no resetear el ciclo si solo cambian el nombre o tareas.
+        // Si cambian el intervalo, sería complejo, asumimos edición básica.
+        const { error } = await supabase
+            .from('mant_mantenimientos_def')
+            .update({
+                nombre: def.name,
+                intervalo_horas: def.intervalHours,
+                tareas: def.tasks,
+                horas_preaviso: def.warningHours
+            })
+            .eq('id', def.id);
+        
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error updating def", error);
+        throw error;
+    }
+}
+
+export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
+    if (!isConfigured) return mock.deleteMaintenanceDef(defId);
+
+    try {
+        const { error } = await supabase
+            .from('mant_mantenimientos_def')
+            .delete()
+            .eq('id', defId);
+        
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error deleting def", error);
+        throw error;
+    }
+}
 
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   if (!isConfigured) return mock.getServiceProviders();
@@ -209,15 +307,10 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
   }
 };
 
-/**
- * LOGIC CORE: Updates the maintenance status for a machine.
- * Recalculates remaining hours and pending status.
- */
 export const updateMaintenanceStatus = async (machineId: string, currentHours: number, completedDefId?: string) => {
     if (!isConfigured) return;
 
     try {
-        // 1. Fetch current definitions
         const { data: defs, error } = await supabase
             .from('mant_mantenimientos_def')
             .select('*')
@@ -225,26 +318,20 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
         
         if (error || !defs) return;
 
-        // 2. Calculate updates
         const updates = defs.map(def => {
-            // Calculation: Remaining Hours
             const interval = Number(def.intervalo_horas);
             const hoursInCycle = currentHours % interval;
             const remaining = interval - hoursInCycle;
             
             const isWithinWarning = remaining <= Number(def.horas_preaviso);
-            let newPendingState = def.pendiente; // Sticky Logic
+            let newPendingState = def.pendiente; 
 
             if (completedDefId && def.id === completedDefId) {
-                // Explicit reset when completing a maintenance
                 newPendingState = false;
             } else if (isWithinWarning) {
-                // Mathematical Trigger
                 newPendingState = true;
             }
             
-            // Only return if there is a change to save DB writes, 
-            // BUT since we are recalculating remaining hours every time, we almost always write if hours changed.
             return { 
                 id: def.id, 
                 pendiente: newPendingState,
@@ -252,7 +339,6 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
             };
         });
 
-        // 3. Perform Updates
         for (const update of updates) {
             await supabase
                 .from('mant_mantenimientos_def')
@@ -288,10 +374,9 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
       descripcion: log.description,
       materiales: log.materials,
       mantenimiento_def_id: log.maintenanceDefId || null,
-      litros_combustible: log.fuelLitres // New field
+      litros_combustible: log.fuelLitres 
     };
 
-    // 1. Insert Log
     const { data: logData, error: logError } = await supabase
       .from('mant_registros')
       .insert(dbPayload)
@@ -300,7 +385,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     if (logError) throw logError;
 
-    // 2. Update Machine Hours & Maintenance Status
     if (log.hoursAtExecution) {
         await supabase
             .from('mant_maquinas')
@@ -308,7 +392,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
             .eq('id', log.machineId)
             .lt('horas_actuales', log.hoursAtExecution);
         
-        // 3. Update Maintenance Statuses (Centralized Logic)
         await updateMaintenanceStatus(log.machineId, log.hoursAtExecution, log.maintenanceDefId);
     }
 
@@ -319,20 +402,18 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
   }
 };
 
-// Helper used by MachineSelector to ensure data is fresh on open
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return mock.calculateAndSyncMachineStatus(machine);
     
     await updateMaintenanceStatus(machine.id, machine.currentHours);
     
-    // Re-fetch machine to get updated definitions
     const { data, error } = await supabase
       .from('mant_maquinas')
       .select(`*, mant_mantenimientos_def (*)`)
       .eq('id', machine.id)
       .single();
       
-    if (error || !data) return machine; // Fallback
+    if (error || !data) return machine; 
 
     return {
       id: data.id,
@@ -375,4 +456,3 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   maintenanceDefId: dbLog.mantenimiento_def_id,
   fuelLitres: dbLog.litros_combustible
 });
-
