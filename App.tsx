@@ -10,9 +10,10 @@ import { MaintenanceForm } from './components/forms/MaintenanceForm';
 import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
+import { EditMachineForm } from './components/admin/EditMachineForm'; // Importar
 import { saveOperationLog } from './services/db';
 import { isConfigured } from './services/client';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, PlusCircle, Factory, Truck } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, PlusCircle, Factory, Truck, Settings } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -20,7 +21,9 @@ enum ViewState {
   ACTION_MENU,
   FORM,
   ADMIN_CREATE_CENTER,
-  ADMIN_CREATE_MACHINE
+  ADMIN_CREATE_MACHINE,
+  ADMIN_SELECT_MACHINE_TO_EDIT, // Nuevo estado
+  ADMIN_EDIT_MACHINE // Nuevo estado
 }
 
 function App() {
@@ -29,6 +32,7 @@ function App() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
   const [selectedContext, setSelectedContext] = useState<{ machine: Machine, center: CostCenter } | null>(null);
+  const [machineToEdit, setMachineToEdit] = useState<Machine | null>(null); // Estado para la máquina a editar
   const [selectedAction, setSelectedAction] = useState<OperationType | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -44,6 +48,12 @@ function App() {
     setSelectedContext({ machine, center });
     setViewState(ViewState.ACTION_MENU);
   };
+
+  // Handler para seleccionar máquina a editar
+  const handleEditSelection = (machine: Machine, center: CostCenter) => {
+      setMachineToEdit(machine);
+      setViewState(ViewState.ADMIN_EDIT_MACHINE);
+  }
 
   const handleActionSelect = (type: OperationType) => {
     setSelectedAction(type);
@@ -70,9 +80,6 @@ function App() {
 
       await saveOperationLog(logData);
       
-      // Update local state hours for immediate feedback
-      // NOTE: With the new sync logic, it's safer to re-fetch, but for UI responsiveness we update basic hours here.
-      // The pending checks are handled DB side and will reflect next time the machine is loaded.
       if (logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours) {
         selectedContext.machine.currentHours = logData.hoursAtExecution;
       }
@@ -86,7 +93,6 @@ function App() {
 
     } catch (e) {
       console.error(e);
-      // Fallback alert handles in db service
     }
   };
 
@@ -150,9 +156,13 @@ function App() {
                       <Factory className="w-5 h-5 text-blue-500" />
                       Nueva Cantera / Grupo
                   </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <Truck className="w-5 h-5 text-blue-500" />
                       Nueva Máquina
+                  </button>
+                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
+                      <Settings className="w-5 h-5 text-blue-500" />
+                      Modificar Máquina
                   </button>
                   <div className="p-4 border-t border-slate-100 mt-2">
                        <button onClick={() => setViewState(ViewState.LOGIN)} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
@@ -173,12 +183,28 @@ function App() {
             </div>
           ) : (
             <>
+              {/* Flujo Normal: Selección de Contexto */}
               {viewState === ViewState.CONTEXT_SELECTION && (
                 <MachineSelector 
                   selectedDate={selectedDate}
                   onChangeDate={setSelectedDate}
                   onSelect={handleContextSelect} 
                 />
+              )}
+
+              {/* Flujo Admin: Selección de Máquina a Editar */}
+              {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && (
+                  <div className="space-y-4">
+                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-center mb-4">
+                          <p className="text-blue-800 font-bold">Modo Administrador: Selecciona la máquina a modificar</p>
+                      </div>
+                      <MachineSelector 
+                        selectedDate={new Date()} // Fecha irrelevante para editar
+                        onChangeDate={() => {}} 
+                        onSelect={handleEditSelection}
+                      />
+                      <button onClick={() => setViewState(ViewState.CONTEXT_SELECTION)} className="w-full py-3 text-slate-500 font-medium">Cancelar</button>
+                  </div>
               )}
 
               {viewState === ViewState.ADMIN_CREATE_CENTER && (
@@ -192,6 +218,14 @@ function App() {
                   <CreateMachineForm 
                     onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
                     onSuccess={() => handleAdminSuccess('Máquina creada correctamente')}
+                  />
+              )}
+
+              {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && (
+                  <EditMachineForm 
+                    machine={machineToEdit}
+                    onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)}
+                    onSuccess={() => handleAdminSuccess('Máquina actualizada correctamente')}
                   />
               )}
 
