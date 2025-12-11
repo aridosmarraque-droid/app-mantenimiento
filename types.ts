@@ -27,6 +27,7 @@ export interface MaintenanceDefinition {
   warningHours: number; // 50
   pending?: boolean; // Check "Mantenimiento Pendiente"
   remainingHours?: number; // Nuevo campo: Horas hasta el próximo
+  lastMaintenanceHours?: number | null; // Nuevo campo: Cuándo se hizo por última vez
 }
 
 export interface Machine {
