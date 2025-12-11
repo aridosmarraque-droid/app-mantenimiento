@@ -10,7 +10,7 @@ export interface Worker {
   dni: string; // We use this for auth (first 4 digits)
   phone: string;
   positionIds: string[];
-  role: 'admin' | 'worker';
+  role: 'admin' | 'worker' | 'cp'; // Añadido 'cp'
 }
 
 export interface CostCenter {
@@ -78,4 +78,27 @@ export interface OperationLog {
   
   // Refueling Specific
   fuelLitres?: number;
+}
+
+// --- CANTERA PURA TYPES ---
+
+export interface CPDailyReport {
+    id: string;
+    date: Date;
+    workerId: string;
+    crusherStart: number;
+    crusherEnd: number;
+    millsStart: number;
+    millsEnd: number;
+    comments?: string;
+}
+
+export interface CPWeeklyPlan {
+    id: string;
+    mondayDate: string; // YYYY-MM-DD
+    hoursMon: number;
+    hoursTue: number;
+    hoursWed: number;
+    hoursThu: number;
+    hoursFri: number;
 }
