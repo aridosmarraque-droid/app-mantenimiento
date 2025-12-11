@@ -1,5 +1,5 @@
 
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType } from '../types';
 
 // --- MOCK DATA ---
 
@@ -69,6 +69,10 @@ export const createCostCenter = async (name: string): Promise<CostCenter> => {
 
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
   return new Promise(resolve => setTimeout(() => resolve(MACHINES.filter(m => m.costCenterId === centerId)), 300));
+};
+
+export const getAllMachines = async (): Promise<Machine[]> => {
+    return new Promise(resolve => setTimeout(() => resolve(MACHINES), 300));
 };
 
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
@@ -173,4 +177,29 @@ export const getMachineDetails = async (machineId: string): Promise<Machine | un
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     updateMockMaintenanceStatus(machine.id, machine.currentHours);
     return machine;
+}
+
+export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            let filtered = logs.filter(l => l.machineId === machineId);
+            
+            if (startDate) {
+                filtered = filtered.filter(l => l.date >= startDate);
+            }
+            if (endDate) {
+                // Adjust end date to end of day
+                const e = new Date(endDate);
+                e.setHours(23, 59, 59, 999);
+                filtered = filtered.filter(l => l.date <= e);
+            }
+            if (types && types.length > 0) {
+                filtered = filtered.filter(l => types.includes(l.type));
+            }
+
+            // Sort desc
+            filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
+            resolve(filtered);
+        }, 500);
+    });
 }
