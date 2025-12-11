@@ -1,5 +1,5 @@
 
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
 
 // --- MOCK DATA ---
 
@@ -7,6 +7,7 @@ export const WORKERS: Worker[] = [
   { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin' },
   { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker' },
   { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker' },
+  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp' }, // Usuario CP
 ];
 
 export const COST_CENTERS: CostCenter[] = [
@@ -50,6 +51,8 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
 
 // In-memory store for the session
 let logs: OperationLog[] = [];
+let cpReports: CPDailyReport[] = [];
+let cpPlanning: CPWeeklyPlan[] = [];
 
 // --- SERVICE METHODS ---
 
@@ -134,22 +137,14 @@ const updateMockMaintenanceStatus = (machineId: string, currentHours: number) =>
         let remaining;
 
         if (def.lastMaintenanceHours !== undefined && def.lastMaintenanceHours !== null) {
-            // Logic based on last execution (Reset cycle)
-            // Example: Done at 5998. Interval 500. Next due = 5998 + 500 = 6498.
-            // Current = 5998. Remaining = 500.
             const nextDue = Number(def.lastMaintenanceHours) + Number(def.intervalHours);
             remaining = nextDue - currentHours;
         } else {
-            // Legacy/First Run logic (Modulo)
             const hoursInCycle = currentHours % def.intervalHours;
             remaining = def.intervalHours - hoursInCycle;
         }
 
         def.remainingHours = remaining;
-
-        // Sticky Pending Logic
-        // If remaining is less than warning, it becomes pending.
-        // It STAYS pending until the 'lastMaintenanceHours' is updated, which pushes 'remaining' back to 500.
         const shouldBePending = remaining <= def.warningHours;
         def.pending = shouldBePending;
     });
@@ -162,12 +157,10 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
   const machineIndex = MACHINES.findIndex(m => m.id === log.machineId);
   const machine = MACHINES[machineIndex];
 
-  // 1. Update Machine Hours if greater
   if (machineIndex >= 0 && log.hoursAtExecution && log.hoursAtExecution > machine.currentHours) {
     machine.currentHours = log.hoursAtExecution;
   }
 
-  // 2. If it's a scheduled maintenance, update the Definition's lastMaintenanceHours
   if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
       const def = machine.maintenanceDefs.find(d => d.id === log.maintenanceDefId);
       if (def) {
@@ -175,7 +168,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
       }
   }
 
-  // 3. Recalculate status for ALL defs (because hours changed)
   updateMockMaintenanceStatus(log.machineId, machine.currentHours);
 
   return new Promise(resolve => setTimeout(() => resolve(newLog), 500));
@@ -205,7 +197,6 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
                 filtered = filtered.filter(l => l.date >= startDate);
             }
             if (endDate) {
-                // Adjust end date to end of day
                 const e = new Date(endDate);
                 e.setHours(23, 59, 59, 999);
                 filtered = filtered.filter(l => l.date <= e);
@@ -213,10 +204,32 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
             if (types && types.length > 0) {
                 filtered = filtered.filter(l => types.includes(l.type));
             }
-
-            // Sort desc
             filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
             resolve(filtered);
         }, 500);
     });
+}
+
+// --- CP MOCK SERVICES ---
+
+export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
+    if (cpReports.length === 0) return null;
+    return cpReports.sort((a,b) => b.date.getTime() - a.date.getTime())[0];
+}
+
+export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
+    cpReports.push({ ...report, id: Math.random().toString() });
+}
+
+export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
+    return cpPlanning.find(p => p.mondayDate === mondayDate) || null;
+}
+
+export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
+    const idx = cpPlanning.findIndex(p => p.mondayDate === plan.mondayDate);
+    if (idx >= 0) {
+        cpPlanning[idx] = plan;
+    } else {
+        cpPlanning.push(plan);
+    }
 }
