@@ -104,7 +104,7 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
         warningHours: Number(def.horas_preaviso),
         pending: def.pendiente,
         remainingHours: Number(def.horas_restantes),
-        lastMaintenanceHours: def.ultimas_horas_realizadas ? Number(def.ultimas_horas_realizadas) : null
+        lastMaintenanceHours: def.ultimas_horas_realizadas !== null ? Number(def.ultimas_horas_realizadas) : null
       }))
     }));
   } catch (error) {
@@ -341,32 +341,57 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
     if (!isConfigured) return;
 
     try {
+        console.group("Maintenance Status Calc");
+        console.log("Updating for Machine:", machineId, "Current Hours:", currentHours);
+
         const { data: defs, error } = await supabase
             .from('mant_mantenimientos_def')
             .select('*')
             .eq('maquina_id', machineId);
         
-        if (error || !defs) return;
+        if (error || !defs) {
+            console.error("Could not fetch defs", error);
+            console.groupEnd();
+            return;
+        }
+
+        console.log("Found Definitions:", defs.length);
 
         const updates = defs.map(def => {
             let remaining;
             
-            if (def.ultimas_horas_realizadas !== null) {
-                // Cycle Reset Logic:
-                // Next Due = Last Performed + Interval
-                // Remaining = Next Due - Current
-                const nextDue = Number(def.ultimas_horas_realizadas) + Number(def.intervalo_horas);
+            // Debug each definition
+            console.log(`Checking Def: ${def.nombre} (${def.id})`);
+            console.log(`- Interval: ${def.intervalo_horas}`);
+            console.log(`- Last Performed (DB):`, def.ultimas_horas_realizadas);
+
+            if (def.ultimas_horas_realizadas !== null && def.ultimas_horas_realizadas !== undefined) {
+                // Cycle Reset Logic
+                const lastPerformed = Number(def.ultimas_horas_realizadas);
+                const interval = Number(def.intervalo_horas);
+                const nextDue = lastPerformed + interval;
+                
                 remaining = nextDue - currentHours;
+                console.log(`- Logic: Reset. Last (${lastPerformed}) + Interval (${interval}) = Due (${nextDue}). Remaining: ${remaining}`);
             } else {
-                // First Time / Legacy Logic:
-                // Based on mathematical modulo
+                // First Time / Legacy Logic
                 const interval = Number(def.intervalo_horas);
                 const hoursInCycle = currentHours % interval;
                 remaining = interval - hoursInCycle;
+                console.log(`- Logic: Modulo. Interval (${interval}) - Modulo (${hoursInCycle}) = Remaining: ${remaining}`);
             }
             
-            const isWithinWarning = remaining <= Number(def.horas_preaviso);
+            // Safety check for NaN
+            if (isNaN(remaining)) {
+                console.error(`!!! CRITICAL: Calculated remaining is NaN for ${def.nombre}. Defaulting to Interval.`);
+                remaining = Number(def.intervalo_horas);
+            }
+
+            const warning = Number(def.horas_preaviso);
+            const isWithinWarning = remaining <= warning;
             
+            console.log(`- Status: Warning Threshold (${warning}). Is Pending? ${isWithinWarning}`);
+
             return { 
                 id: def.id, 
                 pendiente: isWithinWarning,
@@ -383,9 +408,13 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
                 })
                 .eq('id', update.id);
         }
+        
+        console.log("Updates committed to DB");
+        console.groupEnd();
 
     } catch (e) {
         console.error("Error updating maintenance status:", e);
+        console.groupEnd();
     }
 };
 
@@ -425,7 +454,9 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     let hoursToUse = log.hoursAtExecution;
 
     // If it's a scheduled maintenance, we MUST update the definition to remember WHEN it was done
-    if (log.type === 'SCHEDULED' && log.maintenanceDefId && log.hoursAtExecution) {
+    // Check strict undefined to allow 0 hours (though unlikely)
+    if (log.type === 'SCHEDULED' && log.maintenanceDefId && log.hoursAtExecution !== undefined) {
+        console.log(`Saving Scheduled Maint: Updating last_performed to ${log.hoursAtExecution}`);
         await supabase
             .from('mant_mantenimientos_def')
             .update({ ultimas_horas_realizadas: log.hoursAtExecution })
@@ -433,7 +464,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     }
 
     // 3. Update Machine Hours (only if greater) & Recalc Status
-    if (hoursToUse) {
+    if (hoursToUse !== undefined) {
         await supabase
             .from('mant_maquinas')
             .update({ horas_actuales: hoursToUse })
@@ -465,7 +496,7 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
       
     if (error || !data) return machine; 
 
-    return {
+    const mappedMachine = {
       id: data.id,
       costCenterId: data.centro_id,
       name: data.nombre,
@@ -483,9 +514,13 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
         warningHours: Number(def.horas_preaviso),
         pending: def.pendiente,
         remainingHours: Number(def.horas_restantes),
-        lastMaintenanceHours: def.ultimas_horas_realizadas ? Number(def.ultimas_horas_realizadas) : null
+        lastMaintenanceHours: def.ultimas_horas_realizadas !== null ? Number(def.ultimas_horas_realizadas) : null
       }))
     };
+    
+    // Log for debug
+    console.log("Synced Machine State:", mappedMachine);
+    return mappedMachine;
 }
 
 export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
