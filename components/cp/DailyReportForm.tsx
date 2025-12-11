@@ -6,9 +6,12 @@ import { sendEmail } from '../../services/api';
 import { CPDailyReport, Worker } from '../../types';
 import { Save, ArrowLeft, Loader2, Calendar, Mail } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE CORREOS ---
-// Puedes añadir más correos separados por comas: ['oficina@marraque.es', 'jefe@marraque.es']
-const EMAILS_DESTINO = ['aridos@marraque.es']; 
+// ==========================================
+// CONFIGURACIÓN DE CORREOS DE DESTINO
+// ==========================================
+// Modifica este array para cambiar quién recibe los partes.
+const EMAILS_DESTINO = ['oficina@marraque.es']; 
+// ==========================================
 
 interface Props {
     workerId: string;
@@ -260,3 +263,4 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
         </form>
     );
 };
+
