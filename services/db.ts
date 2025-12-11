@@ -103,7 +103,8 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
         tasks: def.tareas,
         warningHours: Number(def.horas_preaviso),
         pending: def.pendiente,
-        remainingHours: Number(def.horas_restantes)
+        remainingHours: Number(def.horas_restantes),
+        lastMaintenanceHours: def.ultimas_horas_realizadas ? Number(def.ultimas_horas_realizadas) : null
       }))
     }));
   } catch (error) {
@@ -173,6 +174,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
                     horas_preaviso: def.warningHours,
                     pendiente: false,
                     horas_restantes: remaining
+                    // ultimas_horas_realizadas se deja null al crear
                 };
             });
 
@@ -255,7 +257,8 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
             tasks: data.tareas,
             warningHours: Number(data.horas_preaviso),
             pending: data.pendiente,
-            remainingHours: Number(data.horas_restantes)
+            remainingHours: Number(data.horas_restantes),
+            lastMaintenanceHours: null
         };
     } catch (error) {
         console.error("Error adding def", error);
@@ -267,8 +270,6 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
     if (!isConfigured) return mock.updateMaintenanceDef(def);
 
     try {
-        // No recalculamos remainingHours aquí para no resetear el ciclo si solo cambian el nombre o tareas.
-        // Si cambian el intervalo, sería complejo, asumimos edición básica.
         const { error } = await supabase
             .from('mant_mantenimientos_def')
             .update({
@@ -335,7 +336,8 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
   }
 };
 
-export const updateMaintenanceStatus = async (machineId: string, currentHours: number, completedDefId?: string) => {
+// CORE LOGIC: Recalculates remaining hours based on LAST performed hours (resetting cycle)
+export const updateMaintenanceStatus = async (machineId: string, currentHours: number) => {
     if (!isConfigured) return;
 
     try {
@@ -347,22 +349,27 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
         if (error || !defs) return;
 
         const updates = defs.map(def => {
-            const interval = Number(def.intervalo_horas);
-            const hoursInCycle = currentHours % interval;
-            const remaining = interval - hoursInCycle;
+            let remaining;
+            
+            if (def.ultimas_horas_realizadas !== null) {
+                // Cycle Reset Logic:
+                // Next Due = Last Performed + Interval
+                // Remaining = Next Due - Current
+                const nextDue = Number(def.ultimas_horas_realizadas) + Number(def.intervalo_horas);
+                remaining = nextDue - currentHours;
+            } else {
+                // First Time / Legacy Logic:
+                // Based on mathematical modulo
+                const interval = Number(def.intervalo_horas);
+                const hoursInCycle = currentHours % interval;
+                remaining = interval - hoursInCycle;
+            }
             
             const isWithinWarning = remaining <= Number(def.horas_preaviso);
-            let newPendingState = def.pendiente; 
-
-            if (completedDefId && def.id === completedDefId) {
-                newPendingState = false;
-            } else if (isWithinWarning) {
-                newPendingState = true;
-            }
             
             return { 
                 id: def.id, 
-                pendiente: newPendingState,
+                pendiente: isWithinWarning,
                 horas_restantes: remaining
             };
         });
@@ -405,6 +412,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
       litros_combustible: log.fuelLitres 
     };
 
+    // 1. Insert Log
     const { data: logData, error: logError } = await supabase
       .from('mant_registros')
       .insert(dbPayload)
@@ -413,14 +421,28 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     if (logError) throw logError;
 
-    if (log.hoursAtExecution) {
+    // 2. Actions that depend on Log Type
+    let hoursToUse = log.hoursAtExecution;
+
+    // If it's a scheduled maintenance, we MUST update the definition to remember WHEN it was done
+    if (log.type === 'SCHEDULED' && log.maintenanceDefId && log.hoursAtExecution) {
+        await supabase
+            .from('mant_mantenimientos_def')
+            .update({ ultimas_horas_realizadas: log.hoursAtExecution })
+            .eq('id', log.maintenanceDefId);
+    }
+
+    // 3. Update Machine Hours (only if greater) & Recalc Status
+    if (hoursToUse) {
         await supabase
             .from('mant_maquinas')
-            .update({ horas_actuales: log.hoursAtExecution })
+            .update({ horas_actuales: hoursToUse })
             .eq('id', log.machineId)
-            .lt('horas_actuales', log.hoursAtExecution);
+            .lt('horas_actuales', hoursToUse);
         
-        await updateMaintenanceStatus(log.machineId, log.hoursAtExecution, log.maintenanceDefId);
+        // Always recalc status using the NEW current hours
+        // The def update above ensures the recalc sees the new 'ultimas_horas_realizadas'
+        await updateMaintenanceStatus(log.machineId, hoursToUse);
     }
 
     return mapLogFromDb(logData);
@@ -460,7 +482,8 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
         tasks: def.tareas,
         warningHours: Number(def.horas_preaviso),
         pending: def.pendiente,
-        remainingHours: Number(def.horas_restantes)
+        remainingHours: Number(def.horas_restantes),
+        lastMaintenanceHours: def.ultimas_horas_realizadas ? Number(def.ultimas_horas_realizadas) : null
       }))
     };
 }
