@@ -12,7 +12,7 @@ import { CreateCenterForm } from './components/admin/CreateCenterForm';
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
 import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer'; // Importar
-import { saveOperationLog } from './services/db';
+import { saveOperationLog, calculateAndSyncMachineStatus } from './services/db';
 import { isConfigured } from './services/client';
 import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, PlusCircle, Factory, Truck, Settings, FileSearch } from 'lucide-react';
 
@@ -81,8 +81,27 @@ function App() {
 
       await saveOperationLog(logData);
       
-      if (logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours) {
-        selectedContext.machine.currentHours = logData.hoursAtExecution;
+      // Actualizar estado local inmediatamente para reflejar cambios (ej. horas, mantenimientos pendientes)
+      const newHours = logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours
+          ? logData.hoursAtExecution 
+          : selectedContext.machine.currentHours;
+
+      // Sincronizar con DB para obtener estado real de mantenimientos (pendientes, etc)
+      try {
+          // Creamos una copia optimista con las nuevas horas para que el cálculo sea correcto
+          const tempMachine = { ...selectedContext.machine, currentHours: newHours };
+          const updatedMachine = await calculateAndSyncMachineStatus(tempMachine);
+          
+          setSelectedContext({
+              ...selectedContext,
+              machine: updatedMachine
+          });
+      } catch (err) {
+          console.error("Error al sincronizar estado de máquina tras guardado", err);
+          // Fallback básico
+          if (logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours) {
+            selectedContext.machine.currentHours = logData.hoursAtExecution;
+          }
       }
 
       setSuccessMsg('Operación registrada correctamente');
