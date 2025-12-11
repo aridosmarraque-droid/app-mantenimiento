@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Worker, Machine, CostCenter, OperationType, OperationLog } from './types';
+import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport } from './types';
 import { Login } from './components/Login';
 import { MachineSelector } from './components/MachineSelector';
 import { MainMenu } from './components/MainMenu';
@@ -11,13 +11,18 @@ import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanc
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
 import { EditMachineForm } from './components/admin/EditMachineForm';
-import { MachineLogsViewer } from './components/admin/MachineLogsViewer'; // Importar
-import { saveOperationLog, calculateAndSyncMachineStatus } from './services/db';
+import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
+import { CPSelection } from './components/cp/CPSelection';
+import { DailyReportForm } from './components/cp/DailyReportForm';
+import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
+import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport } from './services/db';
 import { isConfigured } from './services/client';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, PlusCircle, Factory, Truck, Settings, FileSearch } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
+  CP_SELECTION, // Nuevo Estado
+  CP_DAILY_REPORT, // Nuevo Estado
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
@@ -25,7 +30,8 @@ enum ViewState {
   ADMIN_CREATE_MACHINE,
   ADMIN_SELECT_MACHINE_TO_EDIT,
   ADMIN_EDIT_MACHINE,
-  ADMIN_VIEW_LOGS // Nuevo estado
+  ADMIN_VIEW_LOGS,
+  ADMIN_CP_PLANNING // Nuevo Estado
 }
 
 function App() {
@@ -43,8 +49,20 @@ function App() {
 
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
-    setViewState(ViewState.CONTEXT_SELECTION);
+    // Logic: Si es CP, va a su pantalla de selección. Si es Admin o Worker normal, va al flujo estándar de maquinaria.
+    // Un admin también podría tener rol 'cp' si se configura, pero asumimos separación por ahora.
+    if (worker.role === 'cp') {
+        setViewState(ViewState.CP_SELECTION);
+    } else {
+        setViewState(ViewState.CONTEXT_SELECTION);
+    }
   };
+
+  const handleLogout = () => {
+      setCurrentUser(null);
+      setViewState(ViewState.LOGIN);
+      setIsMenuOpen(false);
+  }
 
   const handleContextSelect = (machine: Machine, center: CostCenter) => {
     setSelectedContext({ machine, center });
@@ -66,6 +84,20 @@ function App() {
       setIsMenuOpen(false);
   };
 
+  const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
+      try {
+          await saveCPReport(data);
+          setSuccessMsg('Parte de Cantera Guardado');
+          setTimeout(() => {
+              setSuccessMsg('');
+              // Volver a la selección CP
+              setViewState(ViewState.CP_SELECTION);
+          }, 2000);
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
   const handleFormSubmit = async (data: Partial<OperationLog>) => {
     if (!currentUser || !selectedContext || !selectedAction) return;
 
@@ -81,14 +113,11 @@ function App() {
 
       await saveOperationLog(logData);
       
-      // Actualizar estado local inmediatamente para reflejar cambios (ej. horas, mantenimientos pendientes)
       const newHours = logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours
           ? logData.hoursAtExecution 
           : selectedContext.machine.currentHours;
 
-      // Sincronizar con DB para obtener estado real de mantenimientos (pendientes, etc)
       try {
-          // Creamos una copia optimista con las nuevas horas para que el cálculo sea correcto
           const tempMachine = { ...selectedContext.machine, currentHours: newHours };
           const updatedMachine = await calculateAndSyncMachineStatus(tempMachine);
           
@@ -98,7 +127,6 @@ function App() {
           });
       } catch (err) {
           console.error("Error al sincronizar estado de máquina tras guardado", err);
-          // Fallback básico
           if (logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours) {
             selectedContext.machine.currentHours = logData.hoursAtExecution;
           }
@@ -124,8 +152,8 @@ function App() {
       }, 1500);
   };
 
-  const renderContent = () => {
-    if (viewState === ViewState.LOGIN) {
+  // Vistas "Standalone" que no usan el Layout Principal (Header normal)
+  if (viewState === ViewState.LOGIN) {
       return (
         <div className="flex flex-col min-h-screen">
             {!isConfigured && (
@@ -136,10 +164,31 @@ function App() {
             <Login onLogin={handleLogin} />
         </div>
       );
-    }
+  }
 
-    // Wrapped in Layout
-    return (
+  if (viewState === ViewState.CP_SELECTION && currentUser) {
+      return (
+          <CPSelection 
+            workerName={currentUser.name}
+            onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
+            onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)}
+            onLogout={handleLogout}
+          />
+      );
+  }
+
+  if (viewState === ViewState.CP_DAILY_REPORT && currentUser) {
+      return (
+          <DailyReportForm 
+            workerId={currentUser.id}
+            onBack={() => setViewState(ViewState.CP_SELECTION)}
+            onSubmit={handleCPReportSubmit}
+          />
+      );
+  }
+
+  // --- STANDARD LAYOUT (Admin & Maintenance Flow) ---
+  return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl overflow-hidden min-h-screen relative">
         {/* Header */}
         <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
@@ -158,9 +207,16 @@ function App() {
                     <p className="text-xs text-slate-300">Usuario</p>
                     <p className="text-sm font-semibold">{currentUser?.name}</p>
                 </div>
+                {/* Admin Menu Toggle */}
                 {currentUser?.role === 'admin' && (
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-1 hover:bg-slate-700 rounded transition-colors">
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                    </button>
+                )}
+                {/* Back to CP Home if CP Role */}
+                {currentUser?.role === 'cp' && viewState !== ViewState.CP_SELECTION && (
+                    <button onClick={() => setViewState(ViewState.CP_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded">
+                        Volver Inicio
                     </button>
                 )}
             </div>
@@ -184,12 +240,16 @@ function App() {
                       <Settings className="w-5 h-5 text-blue-500" />
                       Modificar Máquina
                   </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <CalendarDays className="w-5 h-5 text-amber-500" />
+                      Planificación Cantera
+                  </button>
                    <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
                       <FileSearch className="w-5 h-5 text-blue-500" />
                       Consultar Registros
                   </button>
                   <div className="p-4 border-t border-slate-100 mt-2">
-                       <button onClick={() => setViewState(ViewState.LOGIN)} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
+                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
                   </div>
               </div>
           )}
@@ -223,7 +283,7 @@ function App() {
                           <p className="text-blue-800 font-bold">Modo Administrador: Selecciona la máquina a modificar</p>
                       </div>
                       <MachineSelector 
-                        selectedDate={new Date()} // Fecha irrelevante para editar
+                        selectedDate={new Date()} 
                         onChangeDate={() => {}} 
                         onSelect={handleEditSelection}
                       />
@@ -250,6 +310,12 @@ function App() {
                     machine={machineToEdit}
                     onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)}
                     onSuccess={() => handleAdminSuccess('Máquina actualizada correctamente')}
+                  />
+              )}
+
+              {viewState === ViewState.ADMIN_CP_PLANNING && (
+                  <WeeklyPlanning 
+                    onBack={() => setViewState(ViewState.CONTEXT_SELECTION)}
                   />
               )}
               
@@ -329,9 +395,6 @@ function App() {
         </main>
       </div>
     );
-  };
-
-  return renderContent();
 }
 
 export default App;
