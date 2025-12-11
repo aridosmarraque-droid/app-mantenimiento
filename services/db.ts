@@ -1,7 +1,7 @@
 
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
 
 // --- MAPPING HELPERS ---
 
@@ -596,3 +596,95 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   maintenanceDefId: dbLog.mantenimiento_def_id,
   fuelLitres: dbLog.litros_combustible
 });
+
+// --- CP REAL SERVICES ---
+
+export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
+    if (!isConfigured) return mock.getLastCPReport();
+
+    try {
+        const { data, error } = await supabase
+            .from('cp_partes_diarios')
+            .select('*')
+            .order('fecha', { ascending: false })
+            .limit(1)
+            .single();
+        
+        if (error || !data) return null;
+
+        return {
+            id: data.id,
+            date: new Date(data.fecha),
+            workerId: data.trabajador_id,
+            crusherStart: data.machacadora_inicio,
+            crusherEnd: data.machacadora_fin,
+            millsStart: data.molinos_inicio,
+            millsEnd: data.molinos_fin,
+            comments: data.comentarios
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
+    if (!isConfigured) return mock.saveCPReport(report);
+
+    const { error } = await supabase
+        .from('cp_partes_diarios')
+        .insert({
+            fecha: report.date.toISOString(),
+            trabajador_id: report.workerId,
+            machacadora_inicio: report.crusherStart,
+            machacadora_fin: report.crusherEnd,
+            molinos_inicio: report.millsStart,
+            molinos_fin: report.millsEnd,
+            comentarios: report.comments
+        });
+    
+    if (error) throw error;
+}
+
+export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
+    if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
+
+    try {
+        const { data, error } = await supabase
+            .from('cp_planificacion')
+            .select('*')
+            .eq('fecha_lunes', mondayDate)
+            .single();
+        
+        if (error || !data) return null;
+
+        return {
+            id: data.id,
+            mondayDate: data.fecha_lunes,
+            hoursMon: data.horas_lunes,
+            hoursTue: data.horas_martes,
+            hoursWed: data.horas_miercoles,
+            hoursThu: data.horas_jueves,
+            hoursFri: data.horas_viernes
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
+    if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
+
+    // Upsert logic
+    const { error } = await supabase
+        .from('cp_planificacion')
+        .upsert({
+            fecha_lunes: plan.mondayDate,
+            horas_lunes: plan.hoursMon,
+            horas_martes: plan.hoursTue,
+            horas_miercoles: plan.hoursWed,
+            horas_jueves: plan.hoursThu,
+            horas_viernes: plan.hoursFri
+        }, { onConflict: 'fecha_lunes' });
+    
+    if (error) throw error;
+}
