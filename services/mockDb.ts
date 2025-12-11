@@ -16,9 +16,9 @@ export const COST_CENTERS: CostCenter[] = [
 ];
 
 const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
-  { id: 'md1', machineId: 'm1', name: 'Mantenimiento 250h', intervalHours: 250, tasks: 'Engrase general y revisión niveles', warningHours: 25, pending: false, remainingHours: 100 },
-  { id: 'md2', machineId: 'm1', name: 'Mantenimiento 500h', intervalHours: 500, tasks: 'Cambio aceite motor y filtros', warningHours: 50, pending: false, remainingHours: 350 },
-  { id: 'md3', machineId: 'm2', name: 'Mantenimiento 1000h', intervalHours: 1000, tasks: 'Cambio aceite hidráulico', warningHours: 100, pending: true, remainingHours: 50 },
+  { id: 'md1', machineId: 'm1', name: 'Mantenimiento 250h', intervalHours: 250, tasks: 'Engrase general y revisión niveles', warningHours: 25, pending: false, remainingHours: 100, lastMaintenanceHours: 4860 },
+  { id: 'md2', machineId: 'm1', name: 'Mantenimiento 500h', intervalHours: 500, tasks: 'Cambio aceite motor y filtros', warningHours: 50, pending: false, remainingHours: 350, lastMaintenanceHours: 4500 },
+  { id: 'md3', machineId: 'm2', name: 'Mantenimiento 1000h', intervalHours: 1000, tasks: 'Cambio aceite hidráulico', warningHours: 100, pending: true, remainingHours: 50, lastMaintenanceHours: 11000 },
 ];
 
 export const MACHINES: Machine[] = [
@@ -125,27 +125,33 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
 
-// Simplified Mock Logic for updating maintenance status
-const updateMockMaintenanceStatus = (machineId: string, currentHours: number, completedDefId?: string) => {
+// LOGIC CORE for MOCK
+const updateMockMaintenanceStatus = (machineId: string, currentHours: number) => {
     const machine = MACHINES.find(m => m.id === machineId);
     if (!machine) return;
 
     machine.maintenanceDefs.forEach(def => {
-        // Recalculate remaining
-        const hoursInCycle = currentHours % def.intervalHours;
-        const remaining = def.intervalHours - hoursInCycle;
+        let remaining;
+
+        if (def.lastMaintenanceHours !== undefined && def.lastMaintenanceHours !== null) {
+            // Logic based on last execution (Reset cycle)
+            // Example: Done at 5998. Interval 500. Next due = 5998 + 500 = 6498.
+            // Current = 5998. Remaining = 500.
+            const nextDue = Number(def.lastMaintenanceHours) + Number(def.intervalHours);
+            remaining = nextDue - currentHours;
+        } else {
+            // Legacy/First Run logic (Modulo)
+            const hoursInCycle = currentHours % def.intervalHours;
+            remaining = def.intervalHours - hoursInCycle;
+        }
+
         def.remainingHours = remaining;
 
-        // If this exact def was just completed, reset it
-        if (completedDefId && def.id === completedDefId) {
-            def.pending = false;
-        } else {
-            // Logic: Sticky pending. 
-            const shouldBePending = remaining <= def.warningHours;
-            if (shouldBePending) {
-                def.pending = true;
-            }
-        }
+        // Sticky Pending Logic
+        // If remaining is less than warning, it becomes pending.
+        // It STAYS pending until the 'lastMaintenanceHours' is updated, which pushes 'remaining' back to 500.
+        const shouldBePending = remaining <= def.warningHours;
+        def.pending = shouldBePending;
     });
 };
 
@@ -154,12 +160,23 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
   logs.push(newLog);
   
   const machineIndex = MACHINES.findIndex(m => m.id === log.machineId);
-  if (machineIndex >= 0 && log.hoursAtExecution && log.hoursAtExecution > MACHINES[machineIndex].currentHours) {
-    MACHINES[machineIndex].currentHours = log.hoursAtExecution;
-    updateMockMaintenanceStatus(log.machineId, log.hoursAtExecution, log.maintenanceDefId);
-  } else if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
-    updateMockMaintenanceStatus(log.machineId, MACHINES[machineIndex].currentHours, log.maintenanceDefId);
+  const machine = MACHINES[machineIndex];
+
+  // 1. Update Machine Hours if greater
+  if (machineIndex >= 0 && log.hoursAtExecution && log.hoursAtExecution > machine.currentHours) {
+    machine.currentHours = log.hoursAtExecution;
   }
+
+  // 2. If it's a scheduled maintenance, update the Definition's lastMaintenanceHours
+  if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
+      const def = machine.maintenanceDefs.find(d => d.id === log.maintenanceDefId);
+      if (def) {
+          def.lastMaintenanceHours = log.hoursAtExecution;
+      }
+  }
+
+  // 3. Recalculate status for ALL defs (because hours changed)
+  updateMockMaintenanceStatus(log.machineId, machine.currentHours);
 
   return new Promise(resolve => setTimeout(() => resolve(newLog), 500));
 };
