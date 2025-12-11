@@ -6,6 +6,10 @@ import { sendEmail } from '../../services/api';
 import { CPDailyReport, Worker } from '../../types';
 import { Save, ArrowLeft, Loader2, Calendar, Mail } from 'lucide-react';
 
+// --- CONFIGURACIÓN DE CORREOS ---
+// Puedes añadir más correos separados por comas: ['oficina@marraque.es', 'jefe@marraque.es']
+const EMAILS_DESTINO = ['aridos@marraque.es']; 
+
 interface Props {
     workerId: string;
     onSubmit: (data: Omit<CPDailyReport, 'id'>) => void;
@@ -97,7 +101,7 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
             return;
         }
 
-        if(!confirm("¿Deseas guardar el parte y enviarlo por correo a la oficina?")) return;
+        if(!confirm(`¿Deseas guardar el parte y enviarlo por correo a ${EMAILS_DESTINO.join(', ')}?`)) return;
 
         setSendingEmail(true);
         const data = getDataObject();
@@ -111,7 +115,7 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
             
             // 3. Enviar Email
             const { success, error } = await sendEmail(
-                ['oficina@marraque.es'], // Configura aquí el email de destino real o usa una variable de entorno en la edge function
+                EMAILS_DESTINO,
                 `Parte Cantera - ${date} - ${workerName}`,
                 `<p>Adjunto encontrarás el parte diario de producción de la planta de cantera pura.</p><p><strong>Fecha:</strong> ${date}</p><p><strong>Trabajador:</strong> ${workerName}</p>`,
                 pdfBase64,
