@@ -10,10 +10,11 @@ import { MaintenanceForm } from './components/forms/MaintenanceForm';
 import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
-import { EditMachineForm } from './components/admin/EditMachineForm'; // Importar
+import { EditMachineForm } from './components/admin/EditMachineForm';
+import { MachineLogsViewer } from './components/admin/MachineLogsViewer'; // Importar
 import { saveOperationLog } from './services/db';
 import { isConfigured } from './services/client';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, PlusCircle, Factory, Truck, Settings } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, PlusCircle, Factory, Truck, Settings, FileSearch } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -22,8 +23,9 @@ enum ViewState {
   FORM,
   ADMIN_CREATE_CENTER,
   ADMIN_CREATE_MACHINE,
-  ADMIN_SELECT_MACHINE_TO_EDIT, // Nuevo estado
-  ADMIN_EDIT_MACHINE // Nuevo estado
+  ADMIN_SELECT_MACHINE_TO_EDIT,
+  ADMIN_EDIT_MACHINE,
+  ADMIN_VIEW_LOGS // Nuevo estado
 }
 
 function App() {
@@ -32,7 +34,7 @@ function App() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
   const [selectedContext, setSelectedContext] = useState<{ machine: Machine, center: CostCenter } | null>(null);
-  const [machineToEdit, setMachineToEdit] = useState<Machine | null>(null); // Estado para la máquina a editar
+  const [machineToEdit, setMachineToEdit] = useState<Machine | null>(null);
   const [selectedAction, setSelectedAction] = useState<OperationType | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -49,7 +51,6 @@ function App() {
     setViewState(ViewState.ACTION_MENU);
   };
 
-  // Handler para seleccionar máquina a editar
   const handleEditSelection = (machine: Machine, center: CostCenter) => {
       setMachineToEdit(machine);
       setViewState(ViewState.ADMIN_EDIT_MACHINE);
@@ -160,9 +161,13 @@ function App() {
                       <Truck className="w-5 h-5 text-blue-500" />
                       Nueva Máquina
                   </button>
-                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
+                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <Settings className="w-5 h-5 text-blue-500" />
                       Modificar Máquina
+                  </button>
+                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
+                      <FileSearch className="w-5 h-5 text-blue-500" />
+                      Consultar Registros
                   </button>
                   <div className="p-4 border-t border-slate-100 mt-2">
                        <button onClick={() => setViewState(ViewState.LOGIN)} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
@@ -226,6 +231,12 @@ function App() {
                     machine={machineToEdit}
                     onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)}
                     onSuccess={() => handleAdminSuccess('Máquina actualizada correctamente')}
+                  />
+              )}
+              
+              {viewState === ViewState.ADMIN_VIEW_LOGS && (
+                  <MachineLogsViewer 
+                    onBack={() => setViewState(ViewState.CONTEXT_SELECTION)}
                   />
               )}
 
