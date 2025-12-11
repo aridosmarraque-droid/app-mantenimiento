@@ -123,12 +123,11 @@ export const getAllMachines = async (): Promise<Machine[]> => {
         
         if (error) throw error;
 
-        // Simplified mapping for dropdowns, other fields not strictly needed for just selecting
+        // Simplified mapping for dropdowns
         return data.map((m: any) => ({
             id: m.id,
             name: m.nombre,
             companyCode: m.codigo_empresa,
-            // Mock other fields as they aren't used in simple selection
             costCenterId: '',
             currentHours: 0,
             requiresHours: false,
@@ -174,7 +173,6 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
                     horas_preaviso: def.warningHours,
                     pendiente: false,
                     horas_restantes: remaining
-                    // ultimas_horas_realizadas se deja null al crear
                 };
             });
 
@@ -337,7 +335,12 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
 };
 
 // CORE LOGIC: Recalculates remaining hours based on LAST performed hours (resetting cycle)
-export const updateMaintenanceStatus = async (machineId: string, currentHours: number) => {
+// Accepts overrides to handle race conditions or failure of 'last_performed' updates
+export const updateMaintenanceStatus = async (
+    machineId: string, 
+    currentHours: number, 
+    overrides?: { [key: string]: number }
+) => {
     if (!isConfigured) return;
 
     try {
@@ -355,19 +358,21 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
             return;
         }
 
-        console.log("Found Definitions:", defs.length);
-
         const updates = defs.map(def => {
             let remaining;
             
-            // Debug each definition
-            console.log(`Checking Def: ${def.nombre} (${def.id})`);
-            console.log(`- Interval: ${def.intervalo_horas}`);
-            console.log(`- Last Performed (DB):`, def.ultimas_horas_realizadas);
+            // Determine last performed time: DB Value vs Override
+            let lastPerformed = def.ultimas_horas_realizadas !== null ? Number(def.ultimas_horas_realizadas) : null;
+            
+            if (overrides && overrides[def.id]) {
+                lastPerformed = overrides[def.id];
+                console.log(`[Override] Using memory value ${lastPerformed} for ${def.nombre}`);
+            }
 
-            if (def.ultimas_horas_realizadas !== null && def.ultimas_horas_realizadas !== undefined) {
+            console.log(`Checking Def: ${def.nombre}`);
+            
+            if (lastPerformed !== null && !isNaN(lastPerformed)) {
                 // Cycle Reset Logic
-                const lastPerformed = Number(def.ultimas_horas_realizadas);
                 const interval = Number(def.intervalo_horas);
                 const nextDue = lastPerformed + interval;
                 
@@ -378,20 +383,18 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
                 const interval = Number(def.intervalo_horas);
                 const hoursInCycle = currentHours % interval;
                 remaining = interval - hoursInCycle;
-                console.log(`- Logic: Modulo. Interval (${interval}) - Modulo (${hoursInCycle}) = Remaining: ${remaining}`);
+                console.log(`- Logic: Modulo. Remaining: ${remaining}`);
             }
             
             // Safety check for NaN
             if (isNaN(remaining)) {
-                console.error(`!!! CRITICAL: Calculated remaining is NaN for ${def.nombre}. Defaulting to Interval.`);
+                console.error(`!!! CRITICAL: Calculated remaining is NaN for ${def.nombre}.`);
                 remaining = Number(def.intervalo_horas);
             }
 
             const warning = Number(def.horas_preaviso);
             const isWithinWarning = remaining <= warning;
             
-            console.log(`- Status: Warning Threshold (${warning}). Is Pending? ${isWithinWarning}`);
-
             return { 
                 id: def.id, 
                 pendiente: isWithinWarning,
@@ -400,6 +403,7 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
         });
 
         for (const update of updates) {
+            // We update 'pendiente' and 'horas_restantes'. This usually works even if 'ultimas_horas_realizadas' fails due to schema issues.
             await supabase
                 .from('mant_mantenimientos_def')
                 .update({ 
@@ -409,7 +413,7 @@ export const updateMaintenanceStatus = async (machineId: string, currentHours: n
                 .eq('id', update.id);
         }
         
-        console.log("Updates committed to DB");
+        console.log("Status updates committed to DB");
         console.groupEnd();
 
     } catch (e) {
@@ -452,18 +456,33 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     // 2. Actions that depend on Log Type
     let hoursToUse = log.hoursAtExecution;
+    const overrides: { [key: string]: number } = {};
 
     // If it's a scheduled maintenance, we MUST update the definition to remember WHEN it was done
-    // Check strict undefined to allow 0 hours (though unlikely)
     if (log.type === 'SCHEDULED' && log.maintenanceDefId && log.hoursAtExecution !== undefined) {
         console.log(`Saving Scheduled Maint: Updating last_performed to ${log.hoursAtExecution}`);
-        await supabase
-            .from('mant_mantenimientos_def')
-            .update({ ultimas_horas_realizadas: log.hoursAtExecution })
-            .eq('id', log.maintenanceDefId);
+        
+        // Attempt to update DB 'ultimas_horas_realizadas'
+        // We use try/catch here because if the column is missing (Error 400), we don't want to crash the whole flow
+        // We want to proceed to updateMaintenanceStatus with the OVERRIDE value so the UI is correct.
+        try {
+            const { error } = await supabase
+                .from('mant_mantenimientos_def')
+                .update({ ultimas_horas_realizadas: log.hoursAtExecution })
+                .eq('id', log.maintenanceDefId);
+            
+            if (error) {
+                console.error("Supabase Error updating last_performed (Column missing?):", error);
+            }
+        } catch (e) {
+            console.error("Exception updating last_performed:", e);
+        }
+
+        // Set Override for immediate calculation
+        overrides[log.maintenanceDefId] = log.hoursAtExecution;
     }
 
-    // 3. Update Machine Hours (only if greater) & Recalc Status
+    // 3. Update Machine Hours & Recalc Status
     if (hoursToUse !== undefined) {
         await supabase
             .from('mant_maquinas')
@@ -471,9 +490,8 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
             .eq('id', log.machineId)
             .lt('horas_actuales', hoursToUse);
         
-        // Always recalc status using the NEW current hours
-        // The def update above ensures the recalc sees the new 'ultimas_horas_realizadas'
-        await updateMaintenanceStatus(log.machineId, hoursToUse);
+        // Always recalc status using the NEW current hours + OVERRIDES
+        await updateMaintenanceStatus(log.machineId, hoursToUse, overrides);
     }
 
     return mapLogFromDb(logData);
@@ -486,6 +504,8 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return mock.calculateAndSyncMachineStatus(machine);
     
+    // Note: When called from here (e.g. MachineSelector), we don't have overrides, 
+    // so it relies on what is in the DB.
     await updateMaintenanceStatus(machine.id, machine.currentHours);
     
     const { data, error } = await supabase
@@ -518,7 +538,6 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
       }))
     };
     
-    // Log for debug
     console.log("Synced Machine State:", mappedMachine);
     return mappedMachine;
 }
