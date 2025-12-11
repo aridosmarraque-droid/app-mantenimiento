@@ -1,7 +1,7 @@
 
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType } from '../types';
 
 // --- MAPPING HELPERS ---
 
@@ -111,6 +111,34 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
     return mock.getMachinesByCenter(centerId);
   }
 };
+
+export const getAllMachines = async (): Promise<Machine[]> => {
+    if (!isConfigured) return mock.getAllMachines();
+
+    try {
+        const { data, error } = await supabase
+            .from('mant_maquinas')
+            .select('id, nombre, codigo_empresa');
+        
+        if (error) throw error;
+
+        // Simplified mapping for dropdowns, other fields not strictly needed for just selecting
+        return data.map((m: any) => ({
+            id: m.id,
+            name: m.nombre,
+            companyCode: m.codigo_empresa,
+            // Mock other fields as they aren't used in simple selection
+            costCenterId: '',
+            currentHours: 0,
+            requiresHours: false,
+            adminExpenses: false,
+            transportExpenses: false,
+            maintenanceDefs: []
+        }));
+    } catch (error) {
+        return mock.getAllMachines();
+    }
+}
 
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
     if (!isConfigured) return mock.createMachine(machine);
@@ -435,6 +463,41 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
         remainingHours: Number(def.horas_restantes)
       }))
     };
+}
+
+export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
+    if (!isConfigured) return mock.getMachineLogs(machineId, startDate, endDate, types);
+
+    try {
+        let query = supabase
+            .from('mant_registros')
+            .select('*')
+            .eq('maquina_id', machineId);
+
+        if (startDate) {
+            query = query.gte('fecha', startDate.toISOString());
+        }
+        
+        if (endDate) {
+            // Set end date to end of the day
+            const e = new Date(endDate);
+            e.setHours(23, 59, 59, 999);
+            query = query.lte('fecha', e.toISOString());
+        }
+
+        if (types && types.length > 0) {
+            query = query.in('tipo_operacion', types);
+        }
+
+        const { data, error } = await query.order('fecha', { ascending: false });
+
+        if (error) throw error;
+
+        return data.map(mapLogFromDb);
+    } catch (error) {
+        console.error("Error fetching logs", error);
+        return [];
+    }
 }
 
 const mapLogFromDb = (dbLog: any): OperationLog => ({
