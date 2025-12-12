@@ -1,5 +1,5 @@
 
-import { getCPReportsByRange, getCPWeeklyPlan } from './db';
+import { getCPReportsByRange, getCPWeeklyPlan, getLastCPReport } from './db';
 import { CPDailyReport, CPWeeklyPlan } from '../types';
 
 export interface ProductionStat {
@@ -18,7 +18,7 @@ export interface ProductionComparison {
     diff: number;
 }
 
-// Helper seguro para obtener el string YYYY-MM-DD local sin que afecte la zona horaria UTC
+// Helper seguro para obtener el string YYYY-MM-DD local
 const getLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -26,7 +26,7 @@ const getLocalDateString = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
-// Helper para obtener el lunes de una fecha dada (respetando hora local)
+// Helper para obtener el lunes de una fecha dada
 const getMondayDate = (d: Date): Date => {
     const date = new Date(d);
     const day = date.getDay();
@@ -36,17 +36,8 @@ const getMondayDate = (d: Date): Date => {
     return date;
 };
 
-// Helper para comparar si dos fechas son el mismo día
-const isSameDay = (d1: Date, d2: Date) => {
-    return d1.getFullYear() === d2.getFullYear() &&
-           d1.getMonth() === d2.getMonth() &&
-           d1.getDate() === d2.getDate();
-};
-
 const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
-    // REGLA DE NEGOCIO:
-    // 1. Si NO hay plan en BD para esa semana -> Asumimos 9h (carga histórica/defecto).
-    // 2. Si SI hay plan -> Usamos el valor exacto de la tabla (aunque sea 0).
+    // Si no hay plan en BD, asumimos 9h por defecto para generar estadística
     if (!plan) return 9; 
     
     const day = date.getDay(); // 0 Sun, 1 Mon...
@@ -56,24 +47,22 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
         case 3: return plan.hoursWed;
         case 4: return plan.hoursThu;
         case 5: return plan.hoursFri;
-        default: return 0; // Fines de semana 0 por defecto si no están en el plan
+        default: return 0; // Fines de semana 0
     }
 };
 
 const calculateStats = async (start: Date, end: Date, label: string, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
-    // 1. Obtener los partes reales existentes en el rango
+    // 1. Obtener los partes reales en el rango
+    // IMPORTANTE: 'end' es la fecha del último reporte disponible (para el periodo actual),
+    // por lo que garantizamos comparar "Peras con Peras".
     const reports = await getCPReportsByRange(start, end);
     
-    // 2. Sumar horas reales (solo de los partes que existen)
+    // 2. Sumar horas reales
     const totalActual = reports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
 
     // 3. Calcular horas planificadas
     let totalPlanned = 0;
     
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    // Normalizar fechas para el bucle
     const loopCurrent = new Date(start);
     loopCurrent.setHours(0,0,0,0);
     
@@ -83,50 +72,27 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
     while (loopCurrent <= loopEnd) {
-        // Regla 1: No sumar planificación de días futuros estrictos.
-        if (loopCurrent > today) {
-            break; 
-        }
-
-        // Regla 2: Lógica de "Apples to Apples"
-        // - Si el día es PASADO (Ayer o antes): Sumamos la planificación SIEMPRE (se asume que debió trabajarse).
-        // - Si el día es HOY: Sumamos la planificación SOLO SI existe un parte registrado.
+        // Obtenemos la fecha del lunes correspondiente a 'loopCurrent' para buscar el plan semanal
+        const mondayDate = getMondayDate(loopCurrent);
+        const mondayStr = getLocalDateString(mondayDate);
         
-        const isToday = isSameDay(loopCurrent, today);
-        const hasReportForDay = reports.some(r => isSameDay(new Date(r.date), loopCurrent));
-
-        let shouldCountPlan = true;
+        if (planCache[mondayStr] === undefined) {
+            planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
+        }
         
-        if (isToday && !hasReportForDay) {
-            shouldCountPlan = false;
-        }
-
-        if (shouldCountPlan) {
-            // Obtenemos la fecha del lunes correspondiente a 'loopCurrent'
-            const mondayDate = getMondayDate(loopCurrent);
-            // Convertimos a string "YYYY-MM-DD" local para consultar la BD
-            const mondayStr = getLocalDateString(mondayDate);
-            
-            if (planCache[mondayStr] === undefined) {
-                // Buscamos en la tabla de planificación
-                planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
-            }
-            
-            // Sumar horas (Si existe plan en cache, usa ese. Si es null, usa 9h por defecto)
-            const plannedHoursForDay = getHoursFromPlan(planCache[mondayStr], loopCurrent);
-            totalPlanned += plannedHoursForDay;
-        }
+        // Sumar horas planificadas para este día
+        totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
 
         // Avanzar al siguiente día
         loopCurrent.setDate(loopCurrent.getDate() + 1);
     }
 
-    // Determine specific date label based on the start date
+    // Etiquetas de fecha
     let dateLabel = "";
     if (dateFormat === 'day') {
-        dateLabel = start.toLocaleDateString('es-ES'); // "12/05/2024"
+        dateLabel = start.toLocaleDateString('es-ES');
     } else if (dateFormat === 'month') {
-        dateLabel = start.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }); // "mayo 2024"
+        dateLabel = start.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
         dateLabel = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
     } else if (dateFormat === 'year') {
         dateLabel = start.getFullYear().toString();
@@ -150,48 +116,59 @@ export const getProductionEfficiencyStats = async (): Promise<{
     monthly: ProductionComparison,
     yearly: ProductionComparison
 }> => {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const endToday = new Date(today);
-    endToday.setHours(23,59,59,999);
-
-    // 1. Daily
-    const daily = await calculateStats(today, endToday, "Hoy", 'day');
-
-    // 2. Weekly (Current vs Last)
-    const startWeek = getMondayDate(today);
-    const endWeek = new Date(startWeek); endWeek.setDate(endWeek.getDate() + 6);
+    // 1. DETERMINAR FECHA ANCLA (Último reporte registrado)
+    const lastReport = await getLastCPReport();
     
-    const startLastWeek = new Date(startWeek); startLastWeek.setDate(startLastWeek.getDate() - 7);
-    const endLastWeek = new Date(endWeek); endLastWeek.setDate(endLastWeek.getDate() - 7);
+    // Si hay reportes, usamos la fecha del último. Si no, usamos hoy.
+    const anchorDate = lastReport ? new Date(lastReport.date) : new Date();
+    // Ajustar anchorDate al final del día para incluirlo completamente en rangos
+    anchorDate.setHours(23, 59, 59, 999);
+    
+    const anchorDateStart = new Date(anchorDate);
+    anchorDateStart.setHours(0,0,0,0);
 
-    // Note: We use 'day' format for weekly to show the monday, or could use a custom range string
-    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Actual", 'day');
-    // Override label to show range
+    // 1. Daily (Basado exclusivamente en el día del último reporte)
+    const daily = await calculateStats(anchorDateStart, anchorDate, "Último Día", 'day');
+
+    // 2. Weekly
+    // Current: Desde el Lunes de la semana del Anchor hasta el Anchor (inclusive)
+    const startWeek = getMondayDate(anchorDate);
+    const weeklyCurr = await calculateStats(startWeek, anchorDate, "Semana Actual", 'day');
     weeklyCurr.dateLabel = `Semana ${startWeek.getDate()}/${startWeek.getMonth()+1}`;
 
+    // Previous: Semana completa anterior a la del Anchor
+    const startLastWeek = new Date(startWeek); 
+    startLastWeek.setDate(startLastWeek.getDate() - 7);
+    const endLastWeek = new Date(startLastWeek); 
+    endLastWeek.setDate(endLastWeek.getDate() + 6);
+    endLastWeek.setHours(23,59,59,999);
+    
     const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", 'day');
     weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
 
 
     // 3. Monthly
-    const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    // Current: Desde el 1 del mes del Anchor hasta el Anchor
+    const startMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+    const monthlyCurr = await calculateStats(startMonth, anchorDate, "Mes Actual", 'month');
 
-    const startLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const endLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-
-    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Actual", 'month');
+    // Previous: Mes completo anterior
+    const startLastMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1);
+    const endLastMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 0);
+    endLastMonth.setHours(23,59,59,999);
+    
     const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", 'month');
 
     // 4. Yearly
-    const startYear = new Date(today.getFullYear(), 0, 1);
-    const endYear = new Date(today.getFullYear(), 11, 31);
+    // Current: Desde el 1 de Enero hasta el Anchor
+    const startYear = new Date(anchorDate.getFullYear(), 0, 1);
+    const yearlyCurr = await calculateStats(startYear, anchorDate, "Año Actual", 'year');
     
-    const startLastYear = new Date(today.getFullYear() - 1, 0, 1);
-    const endLastYear = new Date(today.getFullYear() - 1, 11, 31);
+    // Previous: Año completo anterior
+    const startLastYear = new Date(anchorDate.getFullYear() - 1, 0, 1);
+    const endLastYear = new Date(anchorDate.getFullYear() - 1, 11, 31);
+    endLastYear.setHours(23,59,59,999);
 
-    const yearlyCurr = await calculateStats(startYear, endYear, "Año Actual", 'year');
     const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior", 'year');
 
     const compare = (curr: ProductionStat, prev: ProductionStat): ProductionComparison => ({
