@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport } from './types';
 import { Login } from './components/Login';
 import { MachineSelector } from './components/MachineSelector';
@@ -16,9 +16,12 @@ import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
-import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport } from './services/db';
+import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData } from './services/db';
+import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp } from 'lucide-react';
+import { sendEmail } from './services/api'; 
+import { generateCPReportPDF } from './services/pdf'; 
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -33,7 +36,7 @@ enum ViewState {
   ADMIN_EDIT_MACHINE,
   ADMIN_VIEW_LOGS,
   ADMIN_CP_PLANNING,
-  ADMIN_PRODUCTION_DASHBOARD // Nuevo Estado
+  ADMIN_PRODUCTION_DASHBOARD
 }
 
 function App() {
@@ -46,13 +49,56 @@ function App() {
   const [selectedAction, setSelectedAction] = useState<OperationType | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Online/Offline State
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingItems, setPendingItems] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // Menu State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  useEffect(() => {
+      const handleStatusChange = () => {
+          setIsOnline(navigator.onLine);
+      };
+      
+      // Update pending items count periodically
+      const checkQueue = () => {
+          setPendingItems(getQueue().length);
+      };
+
+      window.addEventListener('online', handleStatusChange);
+      window.addEventListener('offline', handleStatusChange);
+      
+      const interval = setInterval(checkQueue, 2000);
+      checkQueue();
+
+      return () => {
+          window.removeEventListener('online', handleStatusChange);
+          window.removeEventListener('offline', handleStatusChange);
+          clearInterval(interval);
+      };
+  }, []);
+
+  const handleForceSync = async () => {
+      if (!isOnline) {
+          alert("No hay conexión a internet. Busca cobertura.");
+          return;
+      }
+      setIsSyncing(true);
+      const res = await syncPendingData();
+      setIsSyncing(false);
+      setPendingItems(getQueue().length);
+      if (res.synced > 0) {
+          setSuccessMsg(`${res.synced} datos sincronizados.`);
+          setTimeout(() => setSuccessMsg(''), 2000);
+      } else if (res.errors > 0) {
+          alert(`Hubo errores al sincronizar ${res.errors} elementos. Inténtalo de nuevo.`);
+      }
+  };
+
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
-    // Logic: Si es CP, va a su pantalla de selección. Si es Admin o Worker normal, va al flujo estándar de maquinaria.
-    // Un admin también podría tener rol 'cp' si se configura, pero asumimos separación por ahora.
     if (worker.role === 'cp') {
         setViewState(ViewState.CP_SELECTION);
     } else {
@@ -88,15 +134,52 @@ function App() {
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
       try {
+          // 1. Guardar en Base de Datos (o cola offline)
           await saveCPReport(data);
-          setSuccessMsg('Parte de Cantera Guardado');
+          
+          // 2. Intentar Email (Si offline, esto fallará silenciosamente en api.ts o se puede manejar)
+          // La generación de PDF es local, así que no hay problema
+          setSuccessMsg('Guardando...');
+          
+          if (currentUser && navigator.onLine) {
+              setSuccessMsg('Generando PDF y Enviando...');
+              const pdfBase64 = generateCPReportPDF(data, currentUser.name);
+              
+              const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
+              const emailHtml = `
+                <h2>Parte Diario de Producción</h2>
+                <p><strong>Fecha:</strong> ${data.date.toLocaleDateString()}</p>
+                <p><strong>Operario:</strong> ${currentUser.name}</p>
+                <p>Adjunto encontrarás el informe detallado en PDF.</p>
+                <br/>
+                <p><em>GMAO Aridos Marraque</em></p>
+              `;
+
+              const { success } = await sendEmail(
+                  ['aridos@marraque.es'], 
+                  emailSubject, 
+                  emailHtml, 
+                  pdfBase64, 
+                  `Parte_${data.date.toISOString().split('T')[0]}.pdf`
+              );
+
+              if (success) {
+                  setSuccessMsg('Guardado y Email Enviado ✅');
+              } else {
+                  setSuccessMsg('Guardado (Email falló) ⚠️');
+              }
+          } else {
+              setSuccessMsg(navigator.onLine ? 'Guardado ✅' : 'Guardado en cola (Offline) 📡');
+          }
+
           setTimeout(() => {
               setSuccessMsg('');
-              // Volver a la selección CP
               setViewState(ViewState.CP_SELECTION);
-          }, 2000);
+          }, 2500);
       } catch (e) {
           console.error(e);
+          setSuccessMsg('Error al guardar');
+          setTimeout(() => setSuccessMsg(''), 2000);
       }
   };
 
@@ -109,7 +192,7 @@ function App() {
         workerId: currentUser.id,
         machineId: selectedContext.machine.id,
         type: selectedAction,
-        hoursAtExecution: data.hoursAtExecution || selectedContext.machine.currentHours, // Fallback
+        hoursAtExecution: data.hoursAtExecution || selectedContext.machine.currentHours,
         ...data,
       };
 
@@ -119,6 +202,8 @@ function App() {
           ? logData.hoursAtExecution 
           : selectedContext.machine.currentHours;
 
+      // Optimistic update for UI if online, or local logic
+      // Note: calculateAndSyncMachineStatus checks online status internally now
       try {
           const tempMachine = { ...selectedContext.machine, currentHours: newHours };
           const updatedMachine = await calculateAndSyncMachineStatus(tempMachine);
@@ -128,13 +213,10 @@ function App() {
               machine: updatedMachine
           });
       } catch (err) {
-          console.error("Error al sincronizar estado de máquina tras guardado", err);
-          if (logData.hoursAtExecution && logData.hoursAtExecution > selectedContext.machine.currentHours) {
-            selectedContext.machine.currentHours = logData.hoursAtExecution;
-          }
+           // Ignore errors in optimistic UI update
       }
 
-      setSuccessMsg('Operación registrada correctamente');
+      setSuccessMsg(navigator.onLine ? 'Operación registrada' : 'Guardado en dispositivo (Sin Red)');
       setTimeout(() => {
         setSuccessMsg('');
         setViewState(ViewState.ACTION_MENU);
@@ -154,7 +236,6 @@ function App() {
       }, 1500);
   };
 
-  // Vistas "Standalone" que no usan el Layout Principal (Header normal)
   if (viewState === ViewState.LOGIN) {
       return (
         <div className="flex flex-col min-h-screen">
@@ -189,16 +270,29 @@ function App() {
       );
   }
 
-  // --- STANDARD LAYOUT (Admin & Maintenance Flow) ---
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl overflow-hidden min-h-screen relative">
-        {/* Header */}
         <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
-          {!isConfigured && (
-             <div className="bg-amber-500 text-white text-[10px] text-center p-1 font-bold">
-                MODO DEMO (Sin conexión DB)
-             </div>
+          {/* OFFLINE / SYNC BANNER */}
+          {(!isOnline || pendingItems > 0) && (
+              <div className={`text-white text-xs text-center p-2 font-bold flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
+                  <div className="flex items-center gap-2">
+                    {!isOnline ? <WifiOff size={14} /> : <DatabaseZap size={14} />}
+                    <span>{!isOnline ? 'Sin Conexión' : 'Datos Pendientes'}: {pendingItems}</span>
+                  </div>
+                  {isOnline && pendingItems > 0 && (
+                      <button 
+                        onClick={handleForceSync} 
+                        disabled={isSyncing}
+                        className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded flex items-center gap-1"
+                      >
+                          <RefreshCcw size={12} className={isSyncing ? 'animate-spin' : ''} />
+                          {isSyncing ? 'Sincronizando...' : 'Sincronizar'}
+                      </button>
+                  )}
+              </div>
           )}
+
           <div className="p-4 flex justify-between items-center relative">
             <h1 className="font-bold text-lg flex items-center gap-2 text-red-500">
               <LayoutDashboard className="w-5 h-5" />
@@ -209,13 +303,11 @@ function App() {
                     <p className="text-xs text-slate-300">Usuario</p>
                     <p className="text-sm font-semibold">{currentUser?.name}</p>
                 </div>
-                {/* Admin Menu Toggle */}
                 {currentUser?.role === 'admin' && (
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-1 hover:bg-slate-700 rounded transition-colors">
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
                 )}
-                {/* Back to CP Home if CP Role */}
                 {currentUser?.role === 'cp' && viewState !== ViewState.CP_SELECTION && (
                     <button onClick={() => setViewState(ViewState.CP_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded">
                         Volver Inicio
@@ -224,7 +316,6 @@ function App() {
             </div>
           </div>
           
-          {/* Admin Menu Dropdown */}
           {isMenuOpen && (
               <div className="absolute top-full right-0 w-64 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
                   <div className="p-4 border-b border-slate-100 bg-slate-50">
@@ -262,19 +353,20 @@ function App() {
           )}
         </header>
         
-        {/* Overlay when menu is open */}
         {isMenuOpen && <div className="fixed inset-0 bg-black/20 z-10" onClick={() => setIsMenuOpen(false)}></div>}
 
-        {/* Main Content */}
         <main className="flex-1 p-4 overflow-y-auto">
           {successMsg ? (
             <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in">
-              <CheckCircle2 className="w-20 h-20 mb-4" />
-              <h2 className="text-2xl font-bold text-center">{successMsg}</h2>
+              {successMsg.includes('Enviando') || successMsg.includes('Generando') ? (
+                  <Mail className="w-20 h-20 mb-4 animate-pulse text-blue-500" />
+              ) : (
+                  <CheckCircle2 className="w-20 h-20 mb-4" />
+              )}
+              <h2 className="text-xl font-bold text-center">{successMsg}</h2>
             </div>
           ) : (
             <>
-              {/* Flujo Normal: Selección de Contexto */}
               {viewState === ViewState.CONTEXT_SELECTION && (
                 <MachineSelector 
                   selectedDate={selectedDate}
@@ -283,7 +375,6 @@ function App() {
                 />
               )}
 
-              {/* Flujo Admin: Selección de Máquina a Editar */}
               {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && (
                   <div className="space-y-4">
                       <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-center mb-4">
