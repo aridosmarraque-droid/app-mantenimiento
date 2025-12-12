@@ -43,7 +43,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                     <ArrowLeft size={24} />
                 </button>
                 <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="text-amber-600" /> Informes de Producción
+                    <TrendingUp className="text-amber-600" /> Producción (Molinos)
                 </h2>
             </div>
 
@@ -68,7 +68,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="text-xs font-bold text-slate-600">{new Date(r.date).toLocaleDateString()}</span>
                                     <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                                        Efi: {r.millsEnd - r.millsStart}h Prod.
+                                        Molinos: {r.millsEnd - r.millsStart}h
                                     </span>
                                 </div>
                                 <p className="text-sm text-slate-700 italic">"{r.comments || 'Sin comentarios'}"</p>
@@ -98,7 +98,7 @@ const StatCard = ({ title, stat }: { title: string, stat: any }) => (
             <span className="ml-2 text-sm text-slate-400">Objetivo</span>
         </div>
         <div className="mt-2 text-xs text-slate-500">
-            Real: <strong>{stat.totalActualHours}h</strong> / Plan: <strong>{stat.totalPlannedHours}h</strong>
+            Real (Molinos): <strong>{stat.totalActualHours}h</strong> / Plan: <strong>{stat.totalPlannedHours}h</strong>
         </div>
     </div>
 );
@@ -138,7 +138,7 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
             </div>
             
             <div className="mt-2 text-xs text-slate-500 mb-2">
-                Real: <strong>{data.current.totalActualHours}h</strong> / Plan: <strong>{data.current.totalPlannedHours}h</strong>
+                Real (Molinos): <strong>{data.current.totalActualHours}h</strong> / Plan: <strong>{data.current.totalPlannedHours}h</strong>
             </div>
 
             <div className="w-full bg-slate-100 rounded-full h-1.5">
