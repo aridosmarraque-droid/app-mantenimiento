@@ -18,12 +18,22 @@ export interface ProductionComparison {
     diff: number;
 }
 
-// Helper para obtener el lunes de una fecha dada
-const getMonday = (d: Date) => {
+// Helper seguro para obtener el string YYYY-MM-DD local sin que afecte la zona horaria UTC
+const getLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+// Helper para obtener el lunes de una fecha dada (respetando hora local)
+const getMondayDate = (d: Date): Date => {
     const date = new Date(d);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(date.setDate(diff));
+    date.setDate(diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
 };
 
 // Helper para comparar si dos fechas son el mismo día
@@ -34,7 +44,11 @@ const isSameDay = (d1: Date, d2: Date) => {
 };
 
 const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
-    if (!plan) return 9; // Default to 9 hours as per user request
+    // REGLA DE NEGOCIO:
+    // 1. Si NO hay plan en BD para esa semana -> Asumimos 9h (carga histórica/defecto).
+    // 2. Si SI hay plan -> Usamos el valor exacto de la tabla (aunque sea 0).
+    if (!plan) return 9; 
+    
     const day = date.getDay(); // 0 Sun, 1 Mon...
     switch (day) {
         case 1: return plan.hoursMon;
@@ -42,7 +56,7 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
         case 3: return plan.hoursWed;
         case 4: return plan.hoursThu;
         case 5: return plan.hoursFri;
-        default: return 0; // Weekend usually 0
+        default: return 0; // Fines de semana 0 por defecto si no están en el plan
     }
 };
 
@@ -69,7 +83,7 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
     while (loopCurrent <= loopEnd) {
-        // Regla 1: No sumar planificación de días futuros.
+        // Regla 1: No sumar planificación de días futuros estrictos.
         if (loopCurrent > today) {
             break; 
         }
@@ -77,7 +91,6 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
         // Regla 2: Lógica de "Apples to Apples"
         // - Si el día es PASADO (Ayer o antes): Sumamos la planificación SIEMPRE (se asume que debió trabajarse).
         // - Si el día es HOY: Sumamos la planificación SOLO SI existe un parte registrado.
-        //   Esto evita que a las 8:00 AM del viernes, la eficiencia baje porque cuenta 9h de plan vs 0h reales.
         
         const isToday = isSameDay(loopCurrent, today);
         const hasReportForDay = reports.some(r => isSameDay(new Date(r.date), loopCurrent));
@@ -89,14 +102,19 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
         }
 
         if (shouldCountPlan) {
-            const mondayStr = getMonday(loopCurrent).toISOString().split('T')[0];
+            // Obtenemos la fecha del lunes correspondiente a 'loopCurrent'
+            const mondayDate = getMondayDate(loopCurrent);
+            // Convertimos a string "YYYY-MM-DD" local para consultar la BD
+            const mondayStr = getLocalDateString(mondayDate);
             
             if (planCache[mondayStr] === undefined) {
+                // Buscamos en la tabla de planificación
                 planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
             }
             
-            // Sumar horas de este día específico según el plan semanal
-            totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
+            // Sumar horas (Si existe plan en cache, usa ese. Si es null, usa 9h por defecto)
+            const plannedHoursForDay = getHoursFromPlan(planCache[mondayStr], loopCurrent);
+            totalPlanned += plannedHoursForDay;
         }
 
         // Avanzar al siguiente día
@@ -141,7 +159,7 @@ export const getProductionEfficiencyStats = async (): Promise<{
     const daily = await calculateStats(today, endToday, "Hoy", 'day');
 
     // 2. Weekly (Current vs Last)
-    const startWeek = getMonday(today);
+    const startWeek = getMondayDate(today);
     const endWeek = new Date(startWeek); endWeek.setDate(endWeek.getDate() + 6);
     
     const startLastWeek = new Date(startWeek); startLastWeek.setDate(startLastWeek.getDate() - 7);
