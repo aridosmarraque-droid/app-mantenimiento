@@ -52,6 +52,11 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
 // In-memory store for the session
 let logs: OperationLog[] = [];
 let cpReports: CPDailyReport[] = [];
+// Inicializar con algunos datos de ejemplo si está vacío para pruebas
+if (cpReports.length === 0) {
+    // No añadir datos automáticos para evitar confusión de "día 12"
+}
+
 let cpPlanning: CPWeeklyPlan[] = [];
 
 // --- SERVICE METHODS ---
@@ -215,6 +220,15 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (cpReports.length === 0) return null;
     return cpReports.sort((a,b) => b.date.getTime() - a.date.getTime())[0];
+}
+
+export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
+    return cpReports.filter(r => {
+        const d = new Date(r.date);
+        const s = new Date(startDate); s.setHours(0,0,0,0);
+        const e = new Date(endDate); e.setHours(23,59,59,999);
+        return d >= s && d <= e;
+    });
 }
 
 export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
