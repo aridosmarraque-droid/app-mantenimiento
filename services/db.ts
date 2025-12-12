@@ -200,18 +200,40 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     if (!isConfigured) return mock.updateMachineAttributes(id, updates);
     
+    // Preparar objeto base con campos comunes
     const dbUpdates: any = {};
     if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.companyCode !== undefined) dbUpdates.codigo_empresa = updates.companyCode;
-    // Usamos centro_id
-    if (updates.costCenterId !== undefined) dbUpdates.centro_id = updates.costCenterId;
     if (updates.currentHours !== undefined) dbUpdates.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) dbUpdates.requiere_control_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) dbUpdates.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) dbUpdates.gastos_transporte = updates.transportExpenses;
 
-    const { error } = await supabase.from('mant_maquinas').update(dbUpdates).eq('id', id);
-    if (error) throw error;
+    // Intento 1: Usar 'centro_id' (Estándar nuevo)
+    const firstAttempt = { ...dbUpdates };
+    if (updates.costCenterId !== undefined) {
+        firstAttempt.centro_id = updates.costCenterId;
+    }
+
+    const { error: firstError } = await supabase.from('mant_maquinas').update(firstAttempt).eq('id', id);
+
+    if (!firstError) return;
+
+    // Intento 2: Usar 'centro_coste_id' (Compatibilidad) si falló el primero y tenemos ID de centro
+    if (updates.costCenterId !== undefined) {
+         console.warn("Update failed with centro_id, retrying with centro_coste_id...", firstError);
+         const secondAttempt = { ...dbUpdates };
+         secondAttempt.centro_coste_id = updates.costCenterId;
+         
+         const { error: secondError } = await supabase.from('mant_maquinas').update(secondAttempt).eq('id', id);
+         if (secondError) {
+             console.error("Update failed again:", secondError);
+             throw secondError; 
+         }
+    } else {
+        // Si no es por el centro_id, lanzamos el error original
+        throw firstError;
+    }
 };
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
