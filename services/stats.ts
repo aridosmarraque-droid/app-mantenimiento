@@ -40,25 +40,48 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
 };
 
 const calculateStats = async (start: Date, end: Date, label: string, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
+    // 1. Obtener los partes reales existentes en el rango
     const reports = await getCPReportsByRange(start, end);
     
-    let totalActual = 0;
-    let totalPlanned = 0;
+    // 2. Sumar horas reales (solo de los partes que existen)
+    const totalActual = reports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
 
-    // Cache plans to avoid refetching for same week
+    // 3. Calcular horas planificadas
+    // IMPORTANTE: Recorremos día a día desde el inicio hasta el fin del rango (o hasta HOY si el rango es futuro)
+    // para sumar lo que SE DEBERÍA haber hecho hasta el momento del cálculo.
+    let totalPlanned = 0;
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    // Normalizar fechas para el bucle
+    const loopCurrent = new Date(start);
+    loopCurrent.setHours(0,0,0,0);
+    
+    const loopEnd = new Date(end);
+    loopEnd.setHours(0,0,0,0);
+
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
-    for (const report of reports) {
-        // 1. Sum Actual Hours (Mills only as requested)
-        const dailyActual = report.millsEnd - report.millsStart;
-        totalActual += dailyActual;
-
-        // 2. Sum Planned Hours
-        const monday = getMonday(report.date).toISOString().split('T')[0];
-        if (planCache[monday] === undefined) {
-            planCache[monday] = await getCPWeeklyPlan(monday);
+    while (loopCurrent <= loopEnd) {
+        // Regla: No sumar planificación de días futuros.
+        // Si estamos viendo la semana completa un viernes, sumamos planificación de Lunes a Viernes (incluido).
+        // No sumamos sábado ni domingo ni días futuros.
+        if (loopCurrent > today) {
+            break;
         }
-        totalPlanned += getHoursFromPlan(planCache[monday], report.date);
+
+        const mondayStr = getMonday(loopCurrent).toISOString().split('T')[0];
+        
+        if (planCache[mondayStr] === undefined) {
+            planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
+        }
+        
+        // Sumar horas de este día específico según el plan semanal
+        totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
+
+        // Avanzar al siguiente día
+        loopCurrent.setDate(loopCurrent.getDate() + 1);
     }
 
     // Determine specific date label based on the start date
