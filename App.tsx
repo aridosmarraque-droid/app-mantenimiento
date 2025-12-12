@@ -15,14 +15,15 @@ import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
+import { ProductionDashboard } from './components/admin/ProductionDashboard';
 import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport } from './services/db';
 import { isConfigured } from './services/client';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
-  CP_SELECTION, // Nuevo Estado
-  CP_DAILY_REPORT, // Nuevo Estado
+  CP_SELECTION,
+  CP_DAILY_REPORT,
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
@@ -31,7 +32,8 @@ enum ViewState {
   ADMIN_SELECT_MACHINE_TO_EDIT,
   ADMIN_EDIT_MACHINE,
   ADMIN_VIEW_LOGS,
-  ADMIN_CP_PLANNING // Nuevo Estado
+  ADMIN_CP_PLANNING,
+  ADMIN_PRODUCTION_DASHBOARD // Nuevo Estado
 }
 
 function App() {
@@ -240,9 +242,14 @@ function App() {
                       <Settings className="w-5 h-5 text-blue-500" />
                       Modificar Máquina
                   </button>
+                  <div className="p-2 border-b border-slate-50"></div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <CalendarDays className="w-5 h-5 text-amber-500" />
                       Planificación Cantera
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <TrendingUp className="w-5 h-5 text-amber-500" />
+                      Informes Producción
                   </button>
                    <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
                       <FileSearch className="w-5 h-5 text-blue-500" />
@@ -315,6 +322,12 @@ function App() {
 
               {viewState === ViewState.ADMIN_CP_PLANNING && (
                   <WeeklyPlanning 
+                    onBack={() => setViewState(ViewState.CONTEXT_SELECTION)}
+                  />
+              )}
+
+              {viewState === ViewState.ADMIN_PRODUCTION_DASHBOARD && (
+                  <ProductionDashboard 
                     onBack={() => setViewState(ViewState.CONTEXT_SELECTION)}
                   />
               )}
