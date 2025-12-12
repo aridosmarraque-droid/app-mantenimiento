@@ -57,8 +57,12 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     // por lo que garantizamos comparar "Peras con Peras".
     const reports = await getCPReportsByRange(start, end);
     
-    // 2. Sumar horas reales
-    const totalActual = reports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
+    // 2. Sumar horas reales (EXCLUSIVAMENTE MOLINOS)
+    // Se añade validación para evitar negativos si hubo error al meter el dato
+    const totalActual = reports.reduce((acc, r) => {
+        const molinosHoras = r.millsEnd - r.millsStart;
+        return acc + Math.max(0, molinosHoras);
+    }, 0);
 
     // 3. Calcular horas planificadas
     let totalPlanned = 0;
