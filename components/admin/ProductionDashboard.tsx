@@ -87,7 +87,11 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
 
 const StatCard = ({ title, stat }: { title: string, stat: any }) => (
     <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-        <h4 className="text-sm font-medium text-slate-500 uppercase">{title}</h4>
+        <div className="flex justify-between items-start">
+            <h4 className="text-sm font-medium text-slate-500 uppercase">{title}</h4>
+            <span className="text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">{stat.dateLabel}</span>
+        </div>
+        
         <div className="flex items-baseline mt-2">
             <span className={`text-3xl font-bold ${getColor(stat.efficiency)}`}>
                 {stat.efficiency.toFixed(1)}%
@@ -109,15 +113,20 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
                 {data.diff > 0 ? '+' : ''}{data.diff}%
             </div>
         </div>
+        <div className="text-xs font-bold text-slate-400 mt-1 mb-1">{data.current.dateLabel}</div>
         
-        <div className="flex items-baseline mt-2">
+        <div className="flex items-baseline mt-1">
             <span className={`text-3xl font-bold ${getColor(data.current.efficiency)}`}>
                 {data.current.efficiency.toFixed(1)}%
             </span>
-            <span className="ml-2 text-sm text-slate-400">vs {data.previous.efficiency.toFixed(1)}% ant.</span>
+            <span className="ml-2 text-sm text-slate-400">vs {data.previous.efficiency.toFixed(1)}%</span>
         </div>
         
-        <div className="mt-2 w-full bg-slate-100 rounded-full h-1.5">
+        <div className="mt-2 text-xs text-slate-500 mb-2">
+            Real: <strong>{data.current.totalActualHours}h</strong> / Plan: <strong>{data.current.totalPlannedHours}h</strong>
+        </div>
+
+        <div className="w-full bg-slate-100 rounded-full h-1.5">
             <div 
                 className={`h-1.5 rounded-full ${getColorBg(data.current.efficiency)}`} 
                 style={{ width: `${Math.min(data.current.efficiency, 100)}%` }}
