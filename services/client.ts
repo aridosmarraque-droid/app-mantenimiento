@@ -23,8 +23,8 @@ try {
 }
 
 // 2. Variables manuales (Edita esto si no usas .env)
-const HARDCODED_URL = ''; // Pega tu URL de Supabase aquí (ej: https://xyz.supabase.co)
-const HARDCODED_KEY = ''; // Pega tu ANON KEY aquí
+const HARDCODED_URL = 'https://tdgyqgrzjkafxwfkqtix.supabase.co'; // Pega tu URL de Supabase aquí (ej: https://xyz.supabase.co)
+const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkZ3lxZ3J6amthZnh3ZmtxdGl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5MjEyODQsImV4cCI6MjA4MDQ5NzI4NH0.qplUc1Dy1dUdQgijek-J0cA1aMOxwqia_8W7LhmbxiY'; // Pega tu ANON KEY aquí
 
 // Selección de credenciales
 const targetUrl = ENV_URL || HARDCODED_URL || '';
