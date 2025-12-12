@@ -4,6 +4,7 @@ import { CPDailyReport, CPWeeklyPlan } from '../types';
 
 export interface ProductionStat {
     period: string; // "Hoy", "Semana Actual", "Mes Actual", etc.
+    dateLabel: string; // "12/05/2024" or "Mayo 2024"
     totalActualHours: number;
     totalPlannedHours: number;
     efficiency: number; // Porcentaje
@@ -38,7 +39,7 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
     }
 };
 
-const calculateStats = async (start: Date, end: Date, label: string): Promise<ProductionStat> => {
+const calculateStats = async (start: Date, end: Date, label: string, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
     const reports = await getCPReportsByRange(start, end);
     
     let totalActual = 0;
@@ -60,16 +61,22 @@ const calculateStats = async (start: Date, end: Date, label: string): Promise<Pr
         totalPlanned += getHoursFromPlan(planCache[monday], report.date);
     }
 
-    // Adjust Planned Total logic: 
-    // If we have reports, we sum planned hours for THOSE days.
-    // However, if we are looking at a "Week" view, maybe we want Total Planned for the Week vs Total Actual so far?
-    // For simplicity in this efficiency metric, we compare Actuals vs Planned *for the days worked*.
-    
-    // If no reports found but we are in a range, efficiency is 0.
+    // Determine specific date label based on the start date
+    let dateLabel = "";
+    if (dateFormat === 'day') {
+        dateLabel = start.toLocaleDateString('es-ES'); // "12/05/2024"
+    } else if (dateFormat === 'month') {
+        dateLabel = start.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }); // "mayo 2024"
+        dateLabel = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+    } else if (dateFormat === 'year') {
+        dateLabel = start.getFullYear().toString();
+    }
+
     const efficiency = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
     return {
         period: label,
+        dateLabel,
         totalActualHours: totalActual,
         totalPlannedHours: totalPlanned,
         efficiency,
@@ -89,7 +96,7 @@ export const getProductionEfficiencyStats = async (): Promise<{
     endToday.setHours(23,59,59,999);
 
     // 1. Daily
-    const daily = await calculateStats(today, endToday, "Hoy");
+    const daily = await calculateStats(today, endToday, "Hoy", 'day');
 
     // 2. Weekly (Current vs Last)
     const startWeek = getMonday(today);
@@ -98,8 +105,14 @@ export const getProductionEfficiencyStats = async (): Promise<{
     const startLastWeek = new Date(startWeek); startLastWeek.setDate(startLastWeek.getDate() - 7);
     const endLastWeek = new Date(endWeek); endLastWeek.setDate(endLastWeek.getDate() - 7);
 
-    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Actual");
-    const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior");
+    // Note: We use 'day' format for weekly to show the monday, or could use a custom range string
+    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Actual", 'day');
+    // Override label to show range
+    weeklyCurr.dateLabel = `Semana ${startWeek.getDate()}/${startWeek.getMonth()+1}`;
+
+    const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", 'day');
+    weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
+
 
     // 3. Monthly
     const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -108,18 +121,18 @@ export const getProductionEfficiencyStats = async (): Promise<{
     const startLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const endLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
 
-    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Actual");
-    const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior");
+    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Actual", 'month');
+    const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", 'month');
 
-    // 4. Yearly (Current Year vs Last Year - simplificado)
+    // 4. Yearly
     const startYear = new Date(today.getFullYear(), 0, 1);
     const endYear = new Date(today.getFullYear(), 11, 31);
     
     const startLastYear = new Date(today.getFullYear() - 1, 0, 1);
     const endLastYear = new Date(today.getFullYear() - 1, 11, 31);
 
-    const yearlyCurr = await calculateStats(startYear, endYear, "Año Actual");
-    const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior");
+    const yearlyCurr = await calculateStats(startYear, endYear, "Año Actual", 'year');
+    const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior", 'year');
 
     const compare = (curr: ProductionStat, prev: ProductionStat): ProductionComparison => ({
         current: curr,
