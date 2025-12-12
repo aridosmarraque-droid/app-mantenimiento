@@ -367,11 +367,41 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
     if (!navigator.onLine) return [];
 
     try {
+        // CORRECCIÓN ZONA HORARIA:
+        // Las fechas 'startDate' y 'endDate' vienen configuradas a las 00:00 hora LOCAL.
+        // Al hacer .toISOString(), en zonas GMT+1, se convierten en "DíaAnterior T 23:00Z".
+        // La BD almacena los partes con fecha UTC 00:00 (por convención).
+        // Por tanto, la consulta falla y trae el día anterior.
+        
+        // SOLUCIÓN: Construir manualmente el string ISO UTC que represente el "Día Calendario" solicitado.
+        // Ejemplo: Si startDate es 12/12/2025 (Local), queremos "2025-12-12T00:00:00.000Z".
+        
+        const toUtcMidnightISO = (d: Date) => {
+            const year = d.getFullYear();
+            const month = d.getMonth();
+            const day = d.getDate();
+            // Creamos fecha en UTC puro 00:00:00
+            return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
+        };
+
+        const toUtcEndISO = (d: Date) => {
+            const year = d.getFullYear();
+            const month = d.getMonth();
+            const day = d.getDate();
+            // Creamos fecha en UTC puro 23:59:59
+            return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
+        };
+
+        const startIso = toUtcMidnightISO(startDate);
+        const endIso = toUtcEndISO(endDate);
+        
+        console.log(`🔎 Query Supabase: ${startIso} -> ${endIso}`);
+
         const { data, error } = await supabase
             .from('cp_partes_diarios')
             .select('*')
-            .gte('fecha', startDate.toISOString())
-            .lte('fecha', endDate.toISOString())
+            .gte('fecha', startIso)
+            .lte('fecha', endIso)
             .order('fecha', { ascending: true });
         
         if (error) throw error;
