@@ -120,7 +120,14 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
         return { color: 'bg-orange-100 text-orange-700', Icon };
     };
 
+    const getTrendColor = (diff: number) => {
+         if (diff >= 5) return 'text-green-600';
+         if (diff <= -5) return 'text-red-600';
+         return 'text-orange-600';
+    };
+
     const { color, Icon } = getBadgeStyle(data.diff);
+    const mainTextColor = getTrendColor(data.diff);
 
     return (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
@@ -134,7 +141,8 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
             <div className="text-xs font-bold text-slate-400 mt-1 mb-1">{data.current.dateLabel}</div>
             
             <div className="flex items-baseline mt-1">
-                <span className={`text-3xl font-bold ${getColor(data.current.efficiency)}`}>
+                {/* Usamos el color de tendencia para el número principal en comparativas */}
+                <span className={`text-3xl font-bold ${mainTextColor}`}>
                     {data.current.efficiency.toFixed(1)}%
                 </span>
                 <span className="ml-2 text-sm text-slate-400">vs {data.previous.efficiency.toFixed(1)}%</span>
@@ -145,6 +153,7 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
             </div>
 
             <div className="w-full bg-slate-100 rounded-full h-1.5">
+                {/* La barra de progreso mantiene el color absoluto para indicar cuánto falta para el objetivo 85% */}
                 <div 
                     className={`h-1.5 rounded-full ${getColorBg(data.current.efficiency)}`} 
                     style={{ width: `${Math.min(data.current.efficiency, 100)}%` }}
@@ -154,7 +163,7 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
     );
 };
 
-// Lógica de colores para el valor absoluto de eficiencia (Texto)
+// Lógica de colores para el valor absoluto de eficiencia (Texto) - Usado solo en StatCard (Diario)
 const getColor = (eff: number) => {
     // "Verde si es mayor que 85%" (Asumimos >= para incluir el objetivo)
     if (eff >= 85) return 'text-green-600';
