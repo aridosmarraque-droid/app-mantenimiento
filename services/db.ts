@@ -29,14 +29,15 @@ const mapDef = (d: any): MaintenanceDefinition => ({
 
 const mapMachine = (m: any): Machine => ({
     id: m.id,
-    costCenterId: m.centro_coste_id,
+    // Intentar leer ambos posibles nombres de columna
+    costCenterId: m.centro_id || m.centro_coste_id,
     name: m.nombre,
     companyCode: m.codigo_empresa,
     currentHours: m.horas_actuales,
     requiresHours: m.requiere_control_horas,
     adminExpenses: m.gastos_admin,
     transportExpenses: m.gastos_transporte,
-    // Relación con la tabla real 'mant_mantenimientos_def'
+    // Relación cargada manualmente o por join
     maintenanceDefs: m.mant_mantenimientos_def ? m.mant_mantenimientos_def.map(mapDef) : []
 });
 
@@ -77,7 +78,6 @@ export const getWorkers = async (): Promise<Worker[]> => {
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
-    // TABLA REAL: mant_centros
     const { data, error } = await supabase.from('mant_centros').select('*');
     if (error) { console.error("getCostCenters", error); return []; }
     return data.map((c: any) => ({ id: c.id, name: c.nombre }));
@@ -85,7 +85,6 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
     if (!isConfigured) return mock.createCostCenter(name);
-    // TABLA REAL: mant_centros
     const { data, error } = await supabase.from('mant_centros').insert({ nombre: name }).select().single();
     if (error) throw error;
     return { id: data.id, name: data.nombre };
@@ -93,41 +92,96 @@ export const createCostCenter = async (name: string): Promise<CostCenter> => {
 
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
-    // TABLA REAL: mant_maquinas y relación mant_mantenimientos_def
-    const { data, error } = await supabase
-        .from('mant_maquinas')
-        .select('*, mant_mantenimientos_def(*)')
-        .eq('centro_coste_id', centerId);
-    if (error) { console.error("getMachinesByCenter", error); return []; }
-    return data.map(mapMachine);
+    
+    // 1. Intentar obtener máquinas (Probamos primero 'centro_id')
+    let query = supabase.from('mant_maquinas').select('*').eq('centro_id', centerId);
+    let { data: machines, error } = await query;
+
+    // Si falla, probamos con 'centro_coste_id' por si acaso
+    if (error) {
+        console.warn("Reintentando con centro_coste_id...", error);
+        const retry = await supabase.from('mant_maquinas').select('*').eq('centro_coste_id', centerId);
+        machines = retry.data;
+        error = retry.error;
+    }
+
+    if (error || !machines) {
+        console.error("Error getMachinesByCenter:", error);
+        return [];
+    }
+
+    // 2. Obtener definiciones de mantenimiento manualmente (evita errores de Join si la FK no se llama igual)
+    const machineIds = machines.map((m: any) => m.id);
+    let defs: any[] = [];
+    
+    if (machineIds.length > 0) {
+        const { data: dData, error: dError } = await supabase
+            .from('mant_mantenimientos_def')
+            .select('*')
+            .in('maquina_id', machineIds);
+        
+        if (!dError && dData) {
+            defs = dData;
+        } else {
+            console.error("Error fetching definitions:", dError);
+        }
+    }
+
+    // 3. Combinar
+    return machines.map((m: any) => {
+        const myDefs = defs.filter(d => d.maquina_id === m.id);
+        return mapMachine({ ...m, mant_mantenimientos_def: myDefs });
+    });
 };
 
 export const getAllMachines = async (): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
-    const { data, error } = await supabase
-        .from('mant_maquinas')
-        .select('*, mant_mantenimientos_def(*)');
+    
+    // Fetch machines
+    const { data: machines, error } = await supabase.from('mant_maquinas').select('*');
     if (error) { console.error("getAllMachines", error); return []; }
-    return data.map(mapMachine);
+
+    // Fetch defs
+    const { data: defs } = await supabase.from('mant_mantenimientos_def').select('*');
+    
+    return machines.map((m: any) => {
+        const myDefs = defs ? defs.filter((d: any) => d.maquina_id === m.id) : [];
+        return mapMachine({ ...m, mant_mantenimientos_def: myDefs });
+    });
 };
 
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
     if (!isConfigured) return mock.createMachine(machine);
     
-    // 1. Insert Machine
-    const { data: mData, error: mError } = await supabase.from('mant_maquinas').insert({
-        centro_coste_id: machine.costCenterId,
+    // Intentamos insertar usando 'centro_id' por defecto
+    const machinePayload = {
+        centro_id: machine.costCenterId, // CAMBIO: Usar centro_id
         nombre: machine.name,
         codigo_empresa: machine.companyCode,
         horas_actuales: machine.currentHours,
         requiere_control_horas: machine.requiresHours,
         gastos_admin: machine.adminExpenses,
         gastos_transporte: machine.transportExpenses
-    }).select().single();
+    };
 
-    if (mError) throw mError;
+    let { data: mData, error: mError } = await supabase.from('mant_maquinas').insert(machinePayload).select().single();
 
-    // 2. Insert Defs (TABLA REAL: mant_mantenimientos_def)
+    // Si falla, intentamos con centro_coste_id
+    if (mError) {
+        console.warn("Insert failed, retrying with centro_coste_id", mError);
+        // @ts-ignore
+        machinePayload.centro_coste_id = machine.costCenterId;
+        // @ts-ignore
+        delete machinePayload.centro_id;
+        
+        const retry = await supabase.from('mant_maquinas').insert(machinePayload).select().single();
+        mData = retry.data;
+        mError = retry.error;
+    }
+
+    if (mError || !mData) throw mError;
+
+    // 2. Insert Defs
     if (machine.maintenanceDefs.length > 0) {
         const defsToInsert = machine.maintenanceDefs.map(d => ({
             maquina_id: mData.id,
@@ -149,7 +203,8 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     const dbUpdates: any = {};
     if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.companyCode !== undefined) dbUpdates.codigo_empresa = updates.companyCode;
-    if (updates.costCenterId !== undefined) dbUpdates.centro_coste_id = updates.costCenterId;
+    // Usamos centro_id
+    if (updates.costCenterId !== undefined) dbUpdates.centro_id = updates.costCenterId;
     if (updates.currentHours !== undefined) dbUpdates.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) dbUpdates.requiere_control_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) dbUpdates.gastos_admin = updates.adminExpenses;
@@ -162,7 +217,6 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
     
-    // TABLA REAL: mant_mantenimientos_def
     const { data, error } = await supabase.from('mant_mantenimientos_def').insert({
         maquina_id: def.machineId,
         nombre: def.name,
@@ -177,7 +231,6 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
 
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
     if (!isConfigured) return mock.updateMaintenanceDef(def);
-    // TABLA REAL: mant_mantenimientos_def
     const { error } = await supabase.from('mant_mantenimientos_def').update({
         nombre: def.name,
         intervalo_horas: def.intervalHours,
@@ -189,7 +242,6 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
 
 export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
     if (!isConfigured) return mock.deleteMaintenanceDef(defId);
-    // TABLA REAL: mant_mantenimientos_def
     const { error } = await supabase.from('mant_mantenimientos_def').delete().eq('id', defId);
     if (error) throw error;
 };
@@ -266,9 +318,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return mock.calculateAndSyncMachineStatus(machine);
-    
-    // If offline, we can't really query the DB for last logs.
-    // We just return the machine as is (maybe calculated locally in a future update)
     if (!navigator.onLine) return machine;
 
     try {
