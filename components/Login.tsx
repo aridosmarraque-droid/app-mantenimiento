@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Worker } from '../types';
 import { getWorkers } from '../services/db';
-import { Loader2, UserCircle } from 'lucide-react';
+import { Loader2, UserCircle, AlertTriangle, RefreshCcw } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (worker: Worker) => void;
@@ -15,11 +16,24 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getWorkers().then(data => {
-      setWorkers(data);
-      setLoading(false);
-    });
+    loadWorkers();
   }, []);
+
+  const loadWorkers = () => {
+    setLoading(true);
+    getWorkers()
+      .then(data => {
+        console.log("Trabajadores cargados:", data);
+        setWorkers(data);
+      })
+      .catch(err => {
+        console.error("Error cargando trabajadores:", err);
+        setError("Error al cargar la lista de trabajadores.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +54,38 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   if (loading) {
     return <div className="flex h-screen items-center justify-center bg-slate-100"><Loader2 className="animate-spin h-10 w-10 text-blue-600" /></div>;
+  }
+
+  // Si no hay trabajadores cargados, mostrar pantalla de diagnóstico
+  if (workers.length === 0) {
+      return (
+        <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
+            <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+                <div className="bg-amber-100 p-3 rounded-full mb-4 w-16 h-16 mx-auto flex items-center justify-center">
+                    <AlertTriangle className="w-8 h-8 text-amber-600" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">No se encontraron trabajadores</h2>
+                <p className="text-slate-600 mb-6 text-sm">
+                    La lista de trabajadores está vacía. Esto suele ocurrir por un problema de conexión o configuración.
+                </p>
+                
+                <div className="bg-slate-50 p-4 rounded-lg text-left text-xs text-slate-500 mb-6 space-y-2 border border-slate-200">
+                    <p><strong>Posibles soluciones:</strong></p>
+                    <ul className="list-disc pl-4 space-y-1">
+                        <li>Si usas <strong>Supabase</strong>: Verifica que la tabla <code>trabajadores</code> existe y tiene datos, y que las Policies (RLS) permiten la lectura.</li>
+                        <li>Si quieres usar el <strong>Modo Demo</strong>: Asegúrate de que las credenciales en <code>services/client.ts</code> son las de por defecto (cadenas de ejemplo).</li>
+                    </ul>
+                </div>
+
+                <button 
+                    onClick={loadWorkers}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2"
+                >
+                    <RefreshCcw size={18} /> Reintentar Carga
+                </button>
+            </div>
+        </div>
+      );
   }
 
   return (
