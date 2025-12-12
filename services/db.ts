@@ -1,6 +1,7 @@
 
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
+import * as offline from './offlineQueue';
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
 
 // --- MAPPERS ---
@@ -65,7 +66,6 @@ export const getWorkers = async (): Promise<Worker[]> => {
         console.log("DB: Usando MOCK para Trabajadores");
         return mock.getWorkers();
     }
-    console.log("DB: Usando SUPABASE para Trabajadores");
     // CORRECCIÓN: Usar nombre de tabla correcto 'mant_trabajadores'
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
     if (error) { 
@@ -209,66 +209,89 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
     return mapLogFromDb(data);
 };
 
+// --- WRAPPED SAVE FUNCTIONS FOR OFFLINE SUPPORT ---
+
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
 
-    const dbLog = {
-        fecha: log.date.toISOString(),
-        trabajador_id: log.workerId,
-        maquina_id: log.machineId,
-        horas_registro: log.hoursAtExecution,
-        tipo_operacion: log.type,
-        aceite_motor_l: log.motorOil,
-        aceite_hidraulico_l: log.hydraulicOil,
-        refrigerante_l: log.coolant,
-        causa_averia: log.breakdownCause,
-        solucion_averia: log.breakdownSolution,
-        reparador_id: log.repairerId,
-        tipo_mantenimiento: log.maintenanceType,
-        descripcion: log.description,
-        materiales: log.materials,
-        mantenimiento_def_id: log.maintenanceDefId,
-        litros_combustible: log.fuelLitres
-    };
-
-    const { data, error } = await supabase.from('mant_registros').insert(dbLog).select().single();
-    if (error) throw error;
-
-    // Update machine hours if greater
-    const { data: mData } = await supabase.from('maquinas').select('horas_actuales').eq('id', log.machineId).single();
-    if (mData && log.hoursAtExecution > mData.horas_actuales) {
-        await supabase.from('maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
+    // 1. Check offline status or optimistic queueing
+    if (!navigator.onLine) {
+        offline.addToQueue('LOG', log);
+        // Return a fake log so the UI continues
+        return { ...log, id: 'OFFLINE_' + Date.now() };
     }
 
-    return mapLogFromDb(data);
+    try {
+        const dbLog = {
+            fecha: log.date.toISOString(),
+            trabajador_id: log.workerId,
+            maquina_id: log.machineId,
+            horas_registro: log.hoursAtExecution,
+            tipo_operacion: log.type,
+            aceite_motor_l: log.motorOil,
+            aceite_hidraulico_l: log.hydraulicOil,
+            refrigerante_l: log.coolant,
+            causa_averia: log.breakdownCause,
+            solucion_averia: log.breakdownSolution,
+            reparador_id: log.repairerId,
+            tipo_mantenimiento: log.maintenanceType,
+            descripcion: log.description,
+            materiales: log.materials,
+            mantenimiento_def_id: log.maintenanceDefId,
+            litros_combustible: log.fuelLitres
+        };
+
+        const { data, error } = await supabase.from('mant_registros').insert(dbLog).select().single();
+        if (error) throw error;
+
+        // Update machine hours if greater
+        const { data: mData } = await supabase.from('maquinas').select('horas_actuales').eq('id', log.machineId).single();
+        if (mData && log.hoursAtExecution > mData.horas_actuales) {
+            await supabase.from('maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
+        }
+
+        return mapLogFromDb(data);
+    } catch (error) {
+        console.warn("Error saving log, adding to offline queue", error);
+        offline.addToQueue('LOG', log);
+        return { ...log, id: 'OFFLINE_ERR_' + Date.now() };
+    }
 };
 
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return mock.calculateAndSyncMachineStatus(machine);
     
-    const updatedDefs = await Promise.all(machine.maintenanceDefs.map(async (def) => {
-        const lastLog = await getLastMaintenanceLog(machine.id, def.id!);
-        let remaining;
+    // If offline, we can't really query the DB for last logs.
+    // We just return the machine as is (maybe calculated locally in a future update)
+    if (!navigator.onLine) return machine;
 
-        if (lastLog) {
-            const nextDue = Number(lastLog.hoursAtExecution) + Number(def.intervalHours);
-            remaining = nextDue - machine.currentHours;
-        } else {
-             const hoursInCycle = machine.currentHours % def.intervalHours;
-             remaining = def.intervalHours - hoursInCycle;
-        }
+    try {
+        const updatedDefs = await Promise.all(machine.maintenanceDefs.map(async (def) => {
+            const lastLog = await getLastMaintenanceLog(machine.id, def.id!);
+            let remaining;
 
-        const pending = remaining <= def.warningHours;
+            if (lastLog) {
+                const nextDue = Number(lastLog.hoursAtExecution) + Number(def.intervalHours);
+                remaining = nextDue - machine.currentHours;
+            } else {
+                const hoursInCycle = machine.currentHours % def.intervalHours;
+                remaining = def.intervalHours - hoursInCycle;
+            }
+
+            const pending = remaining <= def.warningHours;
+            
+            return {
+                ...def,
+                lastMaintenanceHours: lastLog ? lastLog.hoursAtExecution : undefined,
+                remainingHours: remaining,
+                pending
+            };
+        }));
         
-        return {
-            ...def,
-            lastMaintenanceHours: lastLog ? lastLog.hoursAtExecution : undefined,
-            remainingHours: remaining,
-            pending
-        };
-    }));
-    
-    return { ...machine, maintenanceDefs: updatedDefs };
+        return { ...machine, maintenanceDefs: updatedDefs };
+    } catch (e) {
+        return machine;
+    }
 };
 
 export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
@@ -309,6 +332,7 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
 
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (!isConfigured) return mock.getLastCPReport();
+    if (!navigator.onLine) return null; // Can't fetch if offline
 
     try {
         const { data, error } = await supabase
@@ -339,6 +363,7 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
     if (!isConfigured) {
          return (await Promise.all([mock.getLastCPReport()])).filter((r): r is CPDailyReport => r !== null);
     }
+    if (!navigator.onLine) return [];
 
     try {
         const { data, error } = await supabase
@@ -369,23 +394,34 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
 export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
     if (!isConfigured) return mock.saveCPReport(report);
 
-    const { error } = await supabase
-        .from('cp_partes_diarios')
-        .insert({
-            fecha: report.date.toISOString(),
-            trabajador_id: report.workerId,
-            machacadora_inicio: report.crusherStart,
-            machacadora_fin: report.crusherEnd,
-            molinos_inicio: report.millsStart,
-            molinos_fin: report.millsEnd,
-            comentarios: report.comments
-        });
-    
-    if (error) throw error;
+    if (!navigator.onLine) {
+        offline.addToQueue('CP_REPORT', report);
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('cp_partes_diarios')
+            .insert({
+                fecha: report.date.toISOString(),
+                trabajador_id: report.workerId,
+                machacadora_inicio: report.crusherStart,
+                machacadora_fin: report.crusherEnd,
+                molinos_inicio: report.millsStart,
+                molinos_fin: report.millsEnd,
+                comentarios: report.comments
+            });
+        
+        if (error) throw error;
+    } catch (e) {
+         console.warn("Error saving CP Report, adding to queue", e);
+         offline.addToQueue('CP_REPORT', report);
+    }
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
+    if (!navigator.onLine) return null;
 
     try {
         const { data, error } = await supabase
@@ -412,17 +448,114 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
-
-    const { error } = await supabase
-        .from('cp_planificacion')
-        .upsert({
-            fecha_lunes: plan.mondayDate,
-            horas_lunes: plan.hoursMon,
-            horas_martes: plan.hoursTue,
-            horas_miercoles: plan.hoursWed,
-            horas_jueves: plan.hoursThu,
-            horas_viernes: plan.hoursFri
-        }, { onConflict: 'fecha_lunes' });
     
-    if (error) throw error;
+    if (!navigator.onLine) {
+        offline.addToQueue('CP_PLAN', plan);
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('cp_planificacion')
+            .upsert({
+                fecha_lunes: plan.mondayDate,
+                horas_lunes: plan.hoursMon,
+                horas_martes: plan.hoursTue,
+                horas_miercoles: plan.hoursWed,
+                horas_jueves: plan.hoursThu,
+                horas_viernes: plan.hoursFri
+            }, { onConflict: 'fecha_lunes' });
+        
+        if (error) throw error;
+    } catch (e) {
+        console.warn("Error saving Plan, adding to queue", e);
+        offline.addToQueue('CP_PLAN', plan);
+    }
+};
+
+// --- SYNC MANAGER ---
+
+export const syncPendingData = async (): Promise<{ synced: number, errors: number }> => {
+    if (!isConfigured) return { synced: 0, errors: 0 };
+    if (!navigator.onLine) return { synced: 0, errors: 0 };
+
+    const queue = offline.getQueue();
+    let synced = 0;
+    let errors = 0;
+
+    console.log(`[Sync] Iniciando sincronización de ${queue.length} elementos...`);
+
+    for (const item of queue) {
+        try {
+            // Re-use existing save functions but force execution (we know we are online)
+            // But we must be careful not to re-queue if they fail again inside the function.
+            // So we implement specific direct calls here to avoid the recursion of "catch -> addToQueue"
+            
+            if (item.type === 'LOG') {
+                const log = item.payload;
+                const dbLog = {
+                    fecha: log.date, // JSON stringifies dates, need to check if format is kept
+                    trabajador_id: log.workerId,
+                    maquina_id: log.machineId,
+                    horas_registro: log.hoursAtExecution,
+                    tipo_operacion: log.type,
+                    aceite_motor_l: log.motorOil,
+                    aceite_hidraulico_l: log.hydraulicOil,
+                    refrigerante_l: log.coolant,
+                    causa_averia: log.breakdownCause,
+                    solucion_averia: log.breakdownSolution,
+                    reparador_id: log.repairerId,
+                    tipo_mantenimiento: log.maintenanceType,
+                    descripcion: log.description,
+                    materiales: log.materials,
+                    mantenimiento_def_id: log.maintenanceDefId,
+                    litros_combustible: log.fuelLitres
+                };
+                 const { error } = await supabase.from('mant_registros').insert(dbLog);
+                 if (error) throw error;
+                 
+                 // Update machine hours logic duplicated for sync
+                 const { data: mData } = await supabase.from('maquinas').select('horas_actuales').eq('id', log.machineId).single();
+                 if (mData && log.hoursAtExecution > mData.horas_actuales) {
+                    await supabase.from('maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
+                 }
+
+            } else if (item.type === 'CP_REPORT') {
+                const report = item.payload;
+                const { error } = await supabase.from('cp_partes_diarios').insert({
+                    fecha: report.date,
+                    trabajador_id: report.workerId,
+                    machacadora_inicio: report.crusherStart,
+                    machacadora_fin: report.crusherEnd,
+                    molinos_inicio: report.millsStart,
+                    molinos_fin: report.millsEnd,
+                    comentarios: report.comments
+                });
+                if (error) throw error;
+
+            } else if (item.type === 'CP_PLAN') {
+                const plan = item.payload;
+                 const { error } = await supabase.from('cp_planificacion').upsert({
+                    fecha_lunes: plan.mondayDate,
+                    horas_lunes: plan.hoursMon,
+                    horas_martes: plan.hoursTue,
+                    horas_miercoles: plan.hoursWed,
+                    horas_jueves: plan.hoursThu,
+                    horas_viernes: plan.hoursFri
+                }, { onConflict: 'fecha_lunes' });
+                if (error) throw error;
+            }
+
+            // If success, remove
+            offline.removeFromQueue(item.id);
+            synced++;
+
+        } catch (e) {
+            console.error(`[Sync] Error syncing item ${item.id}`, e);
+            errors++;
+            // We leave it in queue for next time
+        }
+    }
+
+    return { synced, errors };
 };
