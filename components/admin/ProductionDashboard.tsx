@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -30,6 +30,12 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     if (loading) return <div className="p-10 flex items-center justify-center"><RefreshCw className="animate-spin text-slate-400" /></div>;
     if (!stats) return <div>Error cargando estadísticas</div>;
 
+    // Get last 5 comments from all reports (using monthly current reports as source)
+    const recentReports = stats.monthly.current.reports
+        .slice()
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 5);
+
     return (
         <div className="flex flex-col h-full bg-slate-50 min-h-screen">
             <div className="bg-white p-4 shadow-sm border-b flex items-center gap-2 sticky top-0 z-10">
@@ -43,28 +49,21 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
                 
-                {/* Intro Card */}
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg text-sm text-blue-800 flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                    <p>Estos informes calculan la eficiencia basándose exclusivamente en las horas de <strong>Molienda</strong> vs Planificación. Se envían automáticamente a <em>aridos@marraque.es</em> según la frecuencia programada.</p>
-                </div>
-
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <StatCard title="Eficiencia Diaria" stat={stats.daily} />
-                    <ComparisonCard title="Semanal" data={stats.weekly} />
-                    <ComparisonCard title="Mensual" data={stats.monthly} />
-                    <ComparisonCard title="Anual" data={stats.yearly} />
+                    <StatCard title="Eficiencia Último Parte" stat={stats.daily} />
+                    <ComparisonCard title="Semanal (Acumulado)" data={stats.weekly} />
+                    <ComparisonCard title="Mensual (Acumulado)" data={stats.monthly} />
+                    <ComparisonCard title="Anual (Acumulado)" data={stats.yearly} />
                 </div>
 
                 {/* Recent Comments Section */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
                     <h3 className="font-bold text-slate-700 mb-4 border-b pb-2 flex items-center gap-2">
-                        <Calendar className="w-5 h-5" /> Comentarios Recientes
+                        <Calendar className="w-5 h-5" /> Últimos Comentarios
                     </h3>
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                        {/* Combine reports from monthly view for comments list */}
-                        {stats.monthly.current.reports.slice().reverse().map((r: any) => (
+                    <div className="space-y-4">
+                        {recentReports.map((r: any) => (
                             <div key={r.id} className="p-3 bg-slate-50 rounded border border-slate-100">
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="text-xs font-bold text-slate-600">{new Date(r.date).toLocaleDateString()}</span>
@@ -75,8 +74,8 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                 <p className="text-sm text-slate-700 italic">"{r.comments || 'Sin comentarios'}"</p>
                             </div>
                         ))}
-                        {stats.monthly.current.reports.length === 0 && (
-                            <p className="text-center text-slate-400 text-sm">No hay registros este mes.</p>
+                        {recentReports.length === 0 && (
+                            <p className="text-center text-slate-400 text-sm">No hay registros recientes.</p>
                         )}
                     </div>
                 </div>
