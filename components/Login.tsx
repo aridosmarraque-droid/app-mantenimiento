@@ -24,6 +24,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     getWorkers()
       .then(data => {
         console.log("Trabajadores cargados:", data);
+        if (data.length > 0) {
+            console.log("Ejemplo trabajador:", data[0]);
+        }
         setWorkers(data);
       })
       .catch(err => {
@@ -44,7 +47,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
-    const firstFour = worker.dni.substring(0, 4);
+    // Auth simple: 4 primeros dígitos del DNI
+    const firstFour = worker.dni ? worker.dni.substring(0, 4) : '0000';
     if (password === firstFour) {
       onLogin(worker);
     } else {
@@ -66,17 +70,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
                 <h2 className="text-xl font-bold text-slate-800 mb-2">No se encontraron trabajadores</h2>
                 <p className="text-slate-600 mb-6 text-sm">
-                    La lista de trabajadores está vacía. Esto suele ocurrir por un problema de conexión o configuración.
+                    La lista de trabajadores está vacía. Verifica la consola para más detalles.
                 </p>
-                
-                <div className="bg-slate-50 p-4 rounded-lg text-left text-xs text-slate-500 mb-6 space-y-2 border border-slate-200">
-                    <p><strong>Posibles soluciones:</strong></p>
-                    <ul className="list-disc pl-4 space-y-1">
-                        <li>Si usas <strong>Supabase</strong>: Verifica que la tabla <code>trabajadores</code> existe y tiene datos, y que las Policies (RLS) permiten la lectura.</li>
-                        <li>Si quieres usar el <strong>Modo Demo</strong>: Asegúrate de que las credenciales en <code>services/client.ts</code> son las de por defecto (cadenas de ejemplo).</li>
-                    </ul>
-                </div>
-
                 <button 
                     onClick={loadWorkers}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2"
@@ -104,16 +99,24 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Trabajador
             </label>
-            <select
-              value={selectedWorkerId}
-              onChange={(e) => setSelectedWorkerId(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            >
-              <option value="">-- Seleccionar --</option>
-              {workers.map(w => (
-                <option key={w.id} value={w.id}>{w.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+                <select
+                value={selectedWorkerId}
+                onChange={(e) => setSelectedWorkerId(e.target.value)}
+                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white text-slate-900 appearance-none"
+                >
+                <option value="" className="text-slate-500">-- Seleccionar Trabajador --</option>
+                {workers.map(w => (
+                    <option key={w.id} value={w.id} className="text-slate-900 font-medium py-2">
+                        {w.name} ({w.role === 'admin' ? 'Admin' : w.role === 'cp' ? 'Cantera' : 'Operario'})
+                    </option>
+                ))}
+                </select>
+                {/* Custom arrow to ensure visibility */}
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
           </div>
 
           <div>
@@ -125,21 +128,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               inputMode="numeric"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-slate-900"
               placeholder="****"
               maxLength={4}
             />
           </div>
 
           {error && (
-            <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded">
+            <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded border border-red-100">
               {error}
             </div>
           )}
 
           <button
             type="submit"
-            className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
+            className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-md active:transform active:scale-95"
           >
             Entrar
           </button>
