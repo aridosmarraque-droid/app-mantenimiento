@@ -1,16 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { getLastCPReport, getWorkers } from '../../services/db';
-import { generateCPReportPDF } from '../../services/pdf';
-import { sendEmail } from '../../services/api';
-import { CPDailyReport, Worker } from '../../types';
-import { Save, ArrowLeft, Loader2, Calendar, Mail } from 'lucide-react';
+import { CPDailyReport } from '../../types';
+import { Save, ArrowLeft, Loader2, Calendar } from 'lucide-react';
 
 // ==========================================
 // CONFIGURACIÓN DE CORREOS DE DESTINO
 // ==========================================
-// Modifica este array para cambiar quién recibe los partes.
-const EMAILS_DESTINO = ['oficina@marraque.es']; 
+// El envío se realizará automáticamente desde el servidor (Edge Function / Cron)
+const EMAILS_DESTINO = ['aridos@marraque.es']; 
 // ==========================================
 
 interface Props {
@@ -21,7 +19,7 @@ interface Props {
 
 export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack }) => {
     const [loading, setLoading] = useState(true);
-    const [sendingEmail, setSendingEmail] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [workerName, setWorkerName] = useState('');
     const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
     
@@ -94,49 +92,15 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validate()) return;
-        onSubmit(getDataObject());
-    };
-
-    const handleSaveAndSend = async () => {
         if (!validate() || crusherEnd === '' || millsEnd === '') {
-            alert("Por favor rellena todos los campos obligatorios antes de enviar.");
+            alert("Por favor rellena todos los campos obligatorios.");
             return;
         }
 
-        if(!confirm(`¿Deseas guardar el parte y enviarlo por correo a ${EMAILS_DESTINO.join(', ')}?`)) return;
-
-        setSendingEmail(true);
-        const data = getDataObject();
-        
-        // 1. Guardar primero
-        onSubmit(data);
-
-        // 2. Generar PDF
-        try {
-            const pdfBase64 = generateCPReportPDF(data, workerName);
-            
-            // 3. Enviar Email
-            const { success, error } = await sendEmail(
-                EMAILS_DESTINO,
-                `Parte Cantera - ${date} - ${workerName}`,
-                `<p>Adjunto encontrarás el parte diario de producción de la planta de cantera pura.</p><p><strong>Fecha:</strong> ${date}</p><p><strong>Trabajador:</strong> ${workerName}</p>`,
-                pdfBase64,
-                `Parte_Cantera_${date}.pdf`
-            );
-
-            if (success) {
-                alert("Parte guardado y enviado correctamente.");
-            } else {
-                alert("El parte se guardó, pero hubo un error enviando el email: " + error);
-            }
-
-        } catch (e) {
-            console.error(e);
-            alert("Error generando el reporte PDF.");
-        } finally {
-            setSendingEmail(false);
-        }
+        setIsSaving(true);
+        // Solo guardamos, el envío de email es automático en segundo plano por el servidor
+        onSubmit(getDataObject());
+        setIsSaving(false);
     };
 
     if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-amber-600" /></div>;
@@ -240,27 +204,20 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
                     />
                 </div>
 
-                <div className="flex flex-col gap-3">
-                    <button 
-                        type="button"
-                        onClick={handleSaveAndSend}
-                        disabled={sendingEmail}
-                        className="w-full py-4 bg-slate-800 rounded-xl text-white font-bold text-lg shadow-lg flex justify-center items-center gap-2 hover:bg-slate-900 active:transform active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        {sendingEmail ? <Loader2 className="animate-spin" /> : <Mail size={24} />}
-                        {sendingEmail ? "Generando y Enviando..." : "Guardar y Enviar Email"}
-                    </button>
-                    
+                <div className="mt-4">
                     <button 
                         type="submit" 
-                        disabled={sendingEmail}
-                        className="w-full py-3 bg-amber-100 text-amber-800 border-2 border-amber-200 rounded-xl font-bold text-lg flex justify-center items-center gap-2 hover:bg-amber-200"
+                        disabled={isSaving}
+                        className="w-full py-4 bg-slate-800 rounded-xl text-white font-bold text-lg shadow-lg flex justify-center items-center gap-2 hover:bg-slate-900 active:transform active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                        <Save size={20} /> Solo Guardar
+                        {isSaving ? <Loader2 className="animate-spin" /> : <Save size={24} />}
+                        {isSaving ? "Guardando..." : "Guardar Parte"}
                     </button>
+                    <p className="text-center text-xs text-slate-400 mt-2">
+                        El informe se enviará automáticamente a {EMAILS_DESTINO[0]} a las 20:30.
+                    </p>
                 </div>
             </div>
         </form>
     );
 };
-
