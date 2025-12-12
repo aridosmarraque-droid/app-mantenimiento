@@ -66,7 +66,8 @@ export const getWorkers = async (): Promise<Worker[]> => {
         return mock.getWorkers();
     }
     console.log("DB: Usando SUPABASE para Trabajadores");
-    const { data, error } = await supabase.from('trabajadores').select('*');
+    // CORRECCIÓN: Usar nombre de tabla correcto 'mant_trabajadores'
+    const { data, error } = await supabase.from('mant_trabajadores').select('*');
     if (error) { 
         console.error("DB Error getWorkers:", error); 
         return []; 
@@ -80,10 +81,6 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (error) { console.error("getCostCenters", error); return []; }
     return data.map((c: any) => ({ id: c.id, name: c.nombre }));
 };
-
-// ... resto de las funciones sin cambios significativos, solo exportaciones estándar ...
-// Para abreviar en el XML, solo incluyo getWorkers modificado y el resto igual que antes.
-// Aseguro que el archivo termine correctamente.
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
     if (!isConfigured) return mock.createCostCenter(name);
