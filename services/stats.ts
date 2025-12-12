@@ -52,17 +52,29 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
 };
 
 const calculateStats = async (start: Date, end: Date, label: string, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
+    console.groupCollapsed(`📊 CÁLCULO ESTADÍSTICAS: ${label}`);
+    console.log(`📅 Rango Fechas: ${start.toLocaleString()} -> ${end.toLocaleString()}`);
+
     // 1. Obtener los partes reales en el rango
     // IMPORTANTE: 'end' es la fecha del último reporte disponible (para el periodo actual),
     // por lo que garantizamos comparar "Peras con Peras".
     const reports = await getCPReportsByRange(start, end);
+    console.log(`📝 Partes encontrados: ${reports.length}`, reports);
     
     // 2. Sumar horas reales (EXCLUSIVAMENTE MOLINOS)
     // Se añade validación para evitar negativos si hubo error al meter el dato
     const totalActual = reports.reduce((acc, r) => {
         const molinosHoras = r.millsEnd - r.millsStart;
+        const machacadoraHoras = r.crusherEnd - r.crusherStart;
+        
+        console.log(`   🔹 Parte ${new Date(r.date).toLocaleDateString()}:`);
+        console.log(`      - Molinos: ${r.millsEnd} (Fin) - ${r.millsStart} (Inicio) = ${molinosHoras}h`);
+        console.log(`      - Machacadora (Ref): ${r.crusherEnd} (Fin) - ${r.crusherStart} (Inicio) = ${machacadoraHoras}h`);
+
         return acc + Math.max(0, molinosHoras);
     }, 0);
+    
+    console.log(`✅ TOTAL REAL (Molinos): ${totalActual}h`);
 
     // 3. Calcular horas planificadas
     let totalPlanned = 0;
@@ -85,11 +97,18 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
         }
         
         // Sumar horas planificadas para este día
-        totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
+        const plannedToday = getHoursFromPlan(planCache[mondayStr], loopCurrent);
+        if (plannedToday > 0) {
+             // console.log(`      📅 Plan ${loopCurrent.toLocaleDateString()}: ${plannedToday}h`);
+        }
+        totalPlanned += plannedToday;
 
         // Avanzar al siguiente día
         loopCurrent.setDate(loopCurrent.getDate() + 1);
     }
+    
+    console.log(`🎯 TOTAL PLANIFICADO: ${totalPlanned}h`);
+    console.groupEnd();
 
     // Etiquetas de fecha
     let dateLabel = "";
@@ -130,6 +149,8 @@ export const getProductionEfficiencyStats = async (): Promise<{
     
     const anchorDateStart = new Date(anchorDate);
     anchorDateStart.setHours(0,0,0,0);
+
+    console.log("⚓ FECHA ANCLA CÁLCULO:", anchorDate.toLocaleDateString());
 
     // 1. Daily (Basado exclusivamente en el día del último reporte)
     const daily = await calculateStats(anchorDateStart, anchorDate, "Último Día", 'day');
@@ -189,3 +210,4 @@ export const getProductionEfficiencyStats = async (): Promise<{
         yearly: compare(yearlyCurr, yearlyPrev)
     };
 };
+
