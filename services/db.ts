@@ -36,7 +36,8 @@ const mapMachine = (m: any): Machine => ({
     requiresHours: m.requiere_control_horas,
     adminExpenses: m.gastos_admin,
     transportExpenses: m.gastos_transporte,
-    maintenanceDefs: m.mantenimiento_defs ? m.mantenimiento_defs.map(mapDef) : []
+    // Relación con la tabla real 'mant_mantenimientos_def'
+    maintenanceDefs: m.mant_mantenimientos_def ? m.mant_mantenimientos_def.map(mapDef) : []
 });
 
 const mapLogFromDb = (dbLog: any): OperationLog => ({
@@ -66,7 +67,6 @@ export const getWorkers = async (): Promise<Worker[]> => {
         console.log("DB: Usando MOCK para Trabajadores");
         return mock.getWorkers();
     }
-    // CORRECCIÓN: Usar nombre de tabla correcto 'mant_trabajadores'
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
     if (error) { 
         console.error("DB Error getWorkers:", error); 
@@ -77,23 +77,26 @@ export const getWorkers = async (): Promise<Worker[]> => {
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
-    const { data, error } = await supabase.from('centros_coste').select('*');
+    // TABLA REAL: mant_centros
+    const { data, error } = await supabase.from('mant_centros').select('*');
     if (error) { console.error("getCostCenters", error); return []; }
     return data.map((c: any) => ({ id: c.id, name: c.nombre }));
 };
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
     if (!isConfigured) return mock.createCostCenter(name);
-    const { data, error } = await supabase.from('centros_coste').insert({ nombre: name }).select().single();
+    // TABLA REAL: mant_centros
+    const { data, error } = await supabase.from('mant_centros').insert({ nombre: name }).select().single();
     if (error) throw error;
     return { id: data.id, name: data.nombre };
 };
 
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
+    // TABLA REAL: mant_maquinas y relación mant_mantenimientos_def
     const { data, error } = await supabase
-        .from('maquinas')
-        .select('*, mantenimiento_defs(*)')
+        .from('mant_maquinas')
+        .select('*, mant_mantenimientos_def(*)')
         .eq('centro_coste_id', centerId);
     if (error) { console.error("getMachinesByCenter", error); return []; }
     return data.map(mapMachine);
@@ -102,8 +105,8 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
 export const getAllMachines = async (): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
     const { data, error } = await supabase
-        .from('maquinas')
-        .select('*, mantenimiento_defs(*)');
+        .from('mant_maquinas')
+        .select('*, mant_mantenimientos_def(*)');
     if (error) { console.error("getAllMachines", error); return []; }
     return data.map(mapMachine);
 };
@@ -112,7 +115,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
     if (!isConfigured) return mock.createMachine(machine);
     
     // 1. Insert Machine
-    const { data: mData, error: mError } = await supabase.from('maquinas').insert({
+    const { data: mData, error: mError } = await supabase.from('mant_maquinas').insert({
         centro_coste_id: machine.costCenterId,
         nombre: machine.name,
         codigo_empresa: machine.companyCode,
@@ -124,7 +127,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
     if (mError) throw mError;
 
-    // 2. Insert Defs
+    // 2. Insert Defs (TABLA REAL: mant_mantenimientos_def)
     if (machine.maintenanceDefs.length > 0) {
         const defsToInsert = machine.maintenanceDefs.map(d => ({
             maquina_id: mData.id,
@@ -133,7 +136,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
             tareas: d.tasks,
             aviso_horas: d.warningHours
         }));
-        const { error: dError } = await supabase.from('mantenimiento_defs').insert(defsToInsert);
+        const { error: dError } = await supabase.from('mant_mantenimientos_def').insert(defsToInsert);
         if (dError) console.error("Error creating defs", dError);
     }
 
@@ -152,14 +155,15 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.adminExpenses !== undefined) dbUpdates.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) dbUpdates.gastos_transporte = updates.transportExpenses;
 
-    const { error } = await supabase.from('maquinas').update(dbUpdates).eq('id', id);
+    const { error } = await supabase.from('mant_maquinas').update(dbUpdates).eq('id', id);
     if (error) throw error;
 };
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
     
-    const { data, error } = await supabase.from('mantenimiento_defs').insert({
+    // TABLA REAL: mant_mantenimientos_def
+    const { data, error } = await supabase.from('mant_mantenimientos_def').insert({
         maquina_id: def.machineId,
         nombre: def.name,
         intervalo_horas: def.intervalHours,
@@ -173,7 +177,8 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
 
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
     if (!isConfigured) return mock.updateMaintenanceDef(def);
-    const { error } = await supabase.from('mantenimiento_defs').update({
+    // TABLA REAL: mant_mantenimientos_def
+    const { error } = await supabase.from('mant_mantenimientos_def').update({
         nombre: def.name,
         intervalo_horas: def.intervalHours,
         tareas: def.tasks,
@@ -184,13 +189,14 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
 
 export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
     if (!isConfigured) return mock.deleteMaintenanceDef(defId);
-    const { error } = await supabase.from('mantenimiento_defs').delete().eq('id', defId);
+    // TABLA REAL: mant_mantenimientos_def
+    const { error } = await supabase.from('mant_mantenimientos_def').delete().eq('id', defId);
     if (error) throw error;
 };
 
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
     if (!isConfigured) return mock.getServiceProviders();
-    const { data, error } = await supabase.from('proveedores_servicio').select('*');
+    const { data, error } = await supabase.from('mant_proveedores').select('*');
     if (error) { console.error("getServiceProviders", error); return []; }
     return data.map((p: any) => ({ id: p.id, name: p.nombre }));
 };
@@ -245,9 +251,9 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         if (error) throw error;
 
         // Update machine hours if greater
-        const { data: mData } = await supabase.from('maquinas').select('horas_actuales').eq('id', log.machineId).single();
+        const { data: mData } = await supabase.from('mant_maquinas').select('horas_actuales').eq('id', log.machineId).single();
         if (mData && log.hoursAtExecution > mData.horas_actuales) {
-            await supabase.from('maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
+            await supabase.from('mant_maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
         }
 
         return mapLogFromDb(data);
@@ -361,26 +367,15 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
 
 export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
     if (!isConfigured) {
-         // Usar la nueva función mock que sí filtra por fechas
          return mock.getCPReportsByRange(startDate, endDate);
     }
     if (!navigator.onLine) return [];
 
     try {
-        // CORRECCIÓN ZONA HORARIA:
-        // Las fechas 'startDate' y 'endDate' vienen configuradas a las 00:00 hora LOCAL.
-        // Al hacer .toISOString(), en zonas GMT+1, se convierten en "DíaAnterior T 23:00Z".
-        // La BD almacena los partes con fecha UTC 00:00 (por convención).
-        // Por tanto, la consulta falla y trae el día anterior.
-        
-        // SOLUCIÓN: Construir manualmente el string ISO UTC que represente el "Día Calendario" solicitado.
-        // Ejemplo: Si startDate es 12/12/2025 (Local), queremos "2025-12-12T00:00:00.000Z".
-        
         const toUtcMidnightISO = (d: Date) => {
             const year = d.getFullYear();
             const month = d.getMonth();
             const day = d.getDate();
-            // Creamos fecha en UTC puro 00:00:00
             return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
         };
 
@@ -388,7 +383,6 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
             const year = d.getFullYear();
             const month = d.getMonth();
             const day = d.getDate();
-            // Creamos fecha en UTC puro 23:59:59
             return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
         };
 
@@ -518,14 +512,10 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
 
     for (const item of queue) {
         try {
-            // Re-use existing save functions but force execution (we know we are online)
-            // But we must be careful not to re-queue if they fail again inside the function.
-            // So we implement specific direct calls here to avoid the recursion of "catch -> addToQueue"
-            
             if (item.type === 'LOG') {
                 const log = item.payload;
                 const dbLog = {
-                    fecha: log.date, // JSON stringifies dates, need to check if format is kept
+                    fecha: log.date, 
                     trabajador_id: log.workerId,
                     maquina_id: log.machineId,
                     horas_registro: log.hoursAtExecution,
@@ -545,10 +535,9 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
                  const { error } = await supabase.from('mant_registros').insert(dbLog);
                  if (error) throw error;
                  
-                 // Update machine hours logic duplicated for sync
-                 const { data: mData } = await supabase.from('maquinas').select('horas_actuales').eq('id', log.machineId).single();
+                 const { data: mData } = await supabase.from('mant_maquinas').select('horas_actuales').eq('id', log.machineId).single();
                  if (mData && log.hoursAtExecution > mData.horas_actuales) {
-                    await supabase.from('maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
+                    await supabase.from('mant_maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
                  }
 
             } else if (item.type === 'CP_REPORT') {
@@ -577,14 +566,12 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
                 if (error) throw error;
             }
 
-            // If success, remove
             offline.removeFromQueue(item.id);
             synced++;
 
         } catch (e) {
             console.error(`[Sync] Error syncing item ${item.id}`, e);
             errors++;
-            // We leave it in queue for next time
         }
     }
 
