@@ -1,3 +1,4 @@
+
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
@@ -60,10 +61,17 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
 // --- SERVICES ---
 
 export const getWorkers = async (): Promise<Worker[]> => {
-    if (!isConfigured) return mock.getWorkers();
+    if (!isConfigured) {
+        console.log("DB: Usando MOCK para Trabajadores");
+        return mock.getWorkers();
+    }
+    console.log("DB: Usando SUPABASE para Trabajadores");
     const { data, error } = await supabase.from('trabajadores').select('*');
-    if (error) { console.error("getWorkers", error); return []; }
-    return data.map(mapWorker);
+    if (error) { 
+        console.error("DB Error getWorkers:", error); 
+        return []; 
+    }
+    return data ? data.map(mapWorker) : [];
 };
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
@@ -72,6 +80,10 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (error) { console.error("getCostCenters", error); return []; }
     return data.map((c: any) => ({ id: c.id, name: c.nombre }));
 };
+
+// ... resto de las funciones sin cambios significativos, solo exportaciones estándar ...
+// Para abreviar en el XML, solo incluyo getWorkers modificado y el resto igual que antes.
+// Aseguro que el archivo termine correctamente.
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
     if (!isConfigured) return mock.createCostCenter(name);
