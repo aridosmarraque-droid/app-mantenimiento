@@ -21,20 +21,22 @@ const mapDef = (d: any): MaintenanceDefinition => ({
     name: d.nombre,
     intervalHours: d.intervalo_horas,
     tasks: d.tareas,
-    warningHours: d.aviso_horas,
-    // Calculated fields defaults
-    pending: false,
-    remainingHours: 0
+    warningHours: d.horas_preaviso, // Corregido según esquema SQL
+    // Mapeo directo de columnas de estado de la BD
+    pending: d.pendiente ?? false,
+    remainingHours: d.horas_restantes ?? 0,
+    lastMaintenanceHours: d.ultimas_horas_realizadas ?? null
 });
 
 const mapMachine = (m: any): Machine => ({
     id: m.id,
-    // Intentar leer ambos posibles nombres de columna
+    // Intentar leer ambos posibles nombres de columna para ID de centro
     costCenterId: m.centro_id || m.centro_coste_id,
     name: m.nombre,
     companyCode: m.codigo_empresa,
     currentHours: m.horas_actuales,
-    requiresHours: m.requiere_control_horas,
+    // Intentar leer ambos posibles nombres para control de horas
+    requiresHours: m.requiere_control_horas ?? m.control_horas ?? false,
     adminExpenses: m.gastos_admin,
     transportExpenses: m.gastos_transporte,
     // Relación cargada manualmente o por join
@@ -99,7 +101,6 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
 
     // Si falla, probamos con 'centro_coste_id' por si acaso
     if (error) {
-        console.warn("Reintentando con centro_coste_id...", error);
         const retry = await supabase.from('mant_maquinas').select('*').eq('centro_coste_id', centerId);
         machines = retry.data;
         error = retry.error;
@@ -110,7 +111,7 @@ export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> 
         return [];
     }
 
-    // 2. Obtener definiciones de mantenimiento manualmente (evita errores de Join si la FK no se llama igual)
+    // 2. Obtener definiciones de mantenimiento manualmente
     const machineIds = machines.map((m: any) => m.id);
     let defs: any[] = [];
     
@@ -153,9 +154,9 @@ export const getAllMachines = async (): Promise<Machine[]> => {
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
     if (!isConfigured) return mock.createMachine(machine);
     
-    // Intentamos insertar usando 'centro_id' por defecto
-    const machinePayload = {
-        centro_id: machine.costCenterId, // CAMBIO: Usar centro_id
+    // Intentamos insertar usando 'centro_id' y 'requiere_control_horas' por defecto
+    const machinePayload: any = {
+        centro_id: machine.costCenterId, 
         nombre: machine.name,
         codigo_empresa: machine.companyCode,
         horas_actuales: machine.currentHours,
@@ -166,17 +167,24 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
     let { data: mData, error: mError } = await supabase.from('mant_maquinas').insert(machinePayload).select().single();
 
-    // Si falla, intentamos con centro_coste_id
-    if (mError) {
-        console.warn("Insert failed, retrying with centro_coste_id", mError);
-        // @ts-ignore
-        machinePayload.centro_coste_id = machine.costCenterId;
-        // @ts-ignore
-        delete machinePayload.centro_id;
-        
+    // Fallback 1: Si falla 'requiere_control_horas', probamos 'control_horas'
+    if (mError && mError.message?.includes('requiere_control_horas')) {
+        console.warn("Retrying create with control_horas");
+        delete machinePayload.requiere_control_horas;
+        machinePayload.control_horas = machine.requiresHours;
         const retry = await supabase.from('mant_maquinas').insert(machinePayload).select().single();
         mData = retry.data;
         mError = retry.error;
+    }
+
+    // Fallback 2: Si falla 'centro_id', probamos 'centro_coste_id'
+    if (mError && mError.message?.includes('centro_id')) {
+         console.warn("Retrying create with centro_coste_id");
+         delete machinePayload.centro_id;
+         machinePayload.centro_coste_id = machine.costCenterId;
+         const retry = await supabase.from('mant_maquinas').insert(machinePayload).select().single();
+         mData = retry.data;
+         mError = retry.error;
     }
 
     if (mError || !mData) throw mError;
@@ -188,7 +196,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
             nombre: d.name,
             intervalo_horas: d.intervalHours,
             tareas: d.tasks,
-            aviso_horas: d.warningHours
+            horas_preaviso: d.warningHours // Corregido: horas_preaviso
         }));
         const { error: dError } = await supabase.from('mant_mantenimientos_def').insert(defsToInsert);
         if (dError) console.error("Error creating defs", dError);
@@ -200,39 +208,62 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     if (!isConfigured) return mock.updateMachineAttributes(id, updates);
     
-    // Preparar objeto base con campos comunes
-    const dbUpdates: any = {};
-    if (updates.name !== undefined) dbUpdates.nombre = updates.name;
-    if (updates.companyCode !== undefined) dbUpdates.codigo_empresa = updates.companyCode;
-    if (updates.currentHours !== undefined) dbUpdates.horas_actuales = updates.currentHours;
-    if (updates.requiresHours !== undefined) dbUpdates.requiere_control_horas = updates.requiresHours;
-    if (updates.adminExpenses !== undefined) dbUpdates.gastos_admin = updates.adminExpenses;
-    if (updates.transportExpenses !== undefined) dbUpdates.gastos_transporte = updates.transportExpenses;
-
-    // Intento 1: Usar 'centro_id' (Estándar nuevo)
-    const firstAttempt = { ...dbUpdates };
-    if (updates.costCenterId !== undefined) {
-        firstAttempt.centro_id = updates.costCenterId;
+    // Función auxiliar para intentar actualizar y devolver error si falla
+    const tryUpdate = async (payload: any) => {
+        const { error } = await supabase.from('mant_maquinas').update(payload).eq('id', id);
+        return error;
     }
 
-    const { error: firstError } = await supabase.from('mant_maquinas').update(firstAttempt).eq('id', id);
+    // Payload base con campos seguros
+    const basePayload: any = {};
+    if (updates.name !== undefined) basePayload.nombre = updates.name;
+    if (updates.companyCode !== undefined) basePayload.codigo_empresa = updates.companyCode;
+    if (updates.currentHours !== undefined) basePayload.horas_actuales = updates.currentHours;
+    if (updates.adminExpenses !== undefined) basePayload.gastos_admin = updates.adminExpenses;
+    if (updates.transportExpenses !== undefined) basePayload.gastos_transporte = updates.transportExpenses;
 
-    if (!firstError) return;
+    // Construir primer intento con nombres de columnas estándar
+    let payload = { ...basePayload };
+    if (updates.costCenterId !== undefined) payload.centro_id = updates.costCenterId;
+    if (updates.requiresHours !== undefined) payload.requiere_control_horas = updates.requiresHours;
 
-    // Intento 2: Usar 'centro_coste_id' (Compatibilidad) si falló el primero y tenemos ID de centro
-    if (updates.costCenterId !== undefined) {
-         console.warn("Update failed with centro_id, retrying with centro_coste_id...", firstError);
-         const secondAttempt = { ...dbUpdates };
-         secondAttempt.centro_coste_id = updates.costCenterId;
-         
-         const { error: secondError } = await supabase.from('mant_maquinas').update(secondAttempt).eq('id', id);
-         if (secondError) {
-             console.error("Update failed again:", secondError);
-             throw secondError; 
-         }
-    } else {
-        // Si no es por el centro_id, lanzamos el error original
-        throw firstError;
+    // Intento 1
+    let error = await tryUpdate(payload);
+
+    if (!error) return; // Éxito
+
+    // --- LÓGICA DE RECUPERACIÓN (Fallback) ---
+    const msg = error.message || '';
+    console.warn(`Update attempt failed: ${msg}. Retrying...`);
+
+    // Problema 1: 'requiere_control_horas' no existe
+    if (msg.includes('requiere_control_horas')) {
+        delete payload.requiere_control_horas;
+        // Probar nombre alternativo
+        if (updates.requiresHours !== undefined) payload.control_horas = updates.requiresHours;
+        
+        error = await tryUpdate(payload);
+        if (!error) return;
+
+        // Si también falla, quitamos el campo para salvar al menos los otros datos
+        if (error.message?.includes('control_horas')) {
+            console.warn("Skipping control_horas field update");
+            delete payload.control_horas;
+            error = await tryUpdate(payload);
+            if (!error) return;
+        }
+    }
+
+    // Problema 2: 'centro_id' no existe
+    if (error && error.message?.includes('centro_id')) {
+        delete payload.centro_id;
+        if (updates.costCenterId !== undefined) payload.centro_coste_id = updates.costCenterId;
+        error = await tryUpdate(payload);
+    }
+
+    if (error) {
+        console.error("Final update failure", error);
+        throw error;
     }
 };
 
@@ -244,7 +275,7 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
         nombre: def.name,
         intervalo_horas: def.intervalHours,
         tareas: def.tasks,
-        aviso_horas: def.warningHours
+        horas_preaviso: def.warningHours // Corregido
     }).select().single();
 
     if (error) throw error;
@@ -257,7 +288,7 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
         nombre: def.name,
         intervalo_horas: def.intervalHours,
         tareas: def.tasks,
-        aviso_horas: def.warningHours
+        horas_preaviso: def.warningHours // Corregido
     }).eq('id', def.id);
     if (error) throw error;
 };
@@ -340,7 +371,15 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return mock.calculateAndSyncMachineStatus(machine);
-    if (!navigator.onLine) return machine;
+    // Nota: Si la BD ya tiene los cálculos, aquí podríamos simplificar y solo leer,
+    // pero mantenemos la lógica local como fallback para offline o inmediatez UI.
+    
+    // Si la BD tiene valores cacheados, usarlos
+    if (machine.maintenanceDefs.some(d => d.lastMaintenanceHours !== undefined)) {
+         // Si los datos vinieron de DB (mapDef ya los leyó), devolvemos la máquina tal cual
+         // (o podríamos refrescar si quisieramos recalcular en cliente)
+         return machine; 
+    }
 
     try {
         const updatedDefs = await Promise.all(machine.maintenanceDefs.map(async (def) => {
