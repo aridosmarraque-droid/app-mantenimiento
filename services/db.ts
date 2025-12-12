@@ -361,7 +361,8 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
 
 export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
     if (!isConfigured) {
-         return (await Promise.all([mock.getLastCPReport()])).filter((r): r is CPDailyReport => r !== null);
+         // Usar la nueva función mock que sí filtra por fechas
+         return mock.getCPReportsByRange(startDate, endDate);
     }
     if (!navigator.onLine) return [];
 
