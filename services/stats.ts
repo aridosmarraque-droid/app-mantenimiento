@@ -26,8 +26,15 @@ const getMonday = (d: Date) => {
     return new Date(date.setDate(diff));
 };
 
+// Helper para comparar si dos fechas son el mismo día
+const isSameDay = (d1: Date, d2: Date) => {
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+};
+
 const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
-    if (!plan) return 8; // Default to 8 if no plan
+    if (!plan) return 9; // Default to 9 hours as per user request
     const day = date.getDay(); // 0 Sun, 1 Mon...
     switch (day) {
         case 1: return plan.hoursMon;
@@ -47,8 +54,6 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     const totalActual = reports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
 
     // 3. Calcular horas planificadas
-    // IMPORTANTE: Recorremos día a día desde el inicio hasta el fin del rango (o hasta HOY si el rango es futuro)
-    // para sumar lo que SE DEBERÍA haber hecho hasta el momento del cálculo.
     let totalPlanned = 0;
     
     const today = new Date();
@@ -64,21 +69,35 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
     while (loopCurrent <= loopEnd) {
-        // Regla: No sumar planificación de días futuros.
-        // Si estamos viendo la semana completa un viernes, sumamos planificación de Lunes a Viernes (incluido).
-        // No sumamos sábado ni domingo ni días futuros.
+        // Regla 1: No sumar planificación de días futuros.
         if (loopCurrent > today) {
-            break;
+            break; 
         }
 
-        const mondayStr = getMonday(loopCurrent).toISOString().split('T')[0];
+        // Regla 2: Lógica de "Apples to Apples"
+        // - Si el día es PASADO (Ayer o antes): Sumamos la planificación SIEMPRE (se asume que debió trabajarse).
+        // - Si el día es HOY: Sumamos la planificación SOLO SI existe un parte registrado.
+        //   Esto evita que a las 8:00 AM del viernes, la eficiencia baje porque cuenta 9h de plan vs 0h reales.
         
-        if (planCache[mondayStr] === undefined) {
-            planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
+        const isToday = isSameDay(loopCurrent, today);
+        const hasReportForDay = reports.some(r => isSameDay(new Date(r.date), loopCurrent));
+
+        let shouldCountPlan = true;
+        
+        if (isToday && !hasReportForDay) {
+            shouldCountPlan = false;
         }
-        
-        // Sumar horas de este día específico según el plan semanal
-        totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
+
+        if (shouldCountPlan) {
+            const mondayStr = getMonday(loopCurrent).toISOString().split('T')[0];
+            
+            if (planCache[mondayStr] === undefined) {
+                planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
+            }
+            
+            // Sumar horas de este día específico según el plan semanal
+            totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
+        }
 
         // Avanzar al siguiente día
         loopCurrent.setDate(loopCurrent.getDate() + 1);
