@@ -223,54 +223,98 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     if (!isConfigured) return mock.updateMachineAttributes(id, updates);
     
-    const tryUpdate = async (payload: any) => {
-        const { error } = await supabase.from('mant_maquinas').update(payload).eq('id', id);
+    // --- BUILD PAYLOAD ---
+    const payload: any = {};
+    if (updates.name !== undefined) payload.nombre = updates.name;
+    if (updates.companyCode !== undefined) payload.codigo_empresa = sanitizeValue(updates.companyCode);
+    if (updates.currentHours !== undefined) payload.horas_actuales = updates.currentHours;
+    if (updates.adminExpenses !== undefined) payload.gastos_admin = updates.adminExpenses;
+    if (updates.transportExpenses !== undefined) payload.gastos_transporte = updates.transportExpenses;
+    
+    // Potentially problematic columns (new or renamed)
+    if (updates.isForWorkReport !== undefined) payload.es_parte_trabajo = updates.isForWorkReport;
+    if (updates.subCenterId !== undefined) payload.subcentro_id = sanitizeValue(updates.subCenterId);
+    if (updates.costCenterId !== undefined) payload.centro_id = sanitizeValue(updates.costCenterId);
+    if (updates.requiresHours !== undefined) payload.requiere_control_horas = updates.requiresHours;
+
+    console.log("🚀 [UpdateMachine] Payload inicial:", payload);
+
+    const tryRequest = async (p: any) => {
+        const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
         return error;
     }
 
-    const basePayload: any = {};
-    if (updates.name !== undefined) basePayload.nombre = updates.name;
-    // Sanitize to null if empty string
-    if (updates.companyCode !== undefined) basePayload.codigo_empresa = sanitizeValue(updates.companyCode);
-    if (updates.currentHours !== undefined) basePayload.horas_actuales = updates.currentHours;
-    if (updates.adminExpenses !== undefined) basePayload.gastos_admin = updates.adminExpenses;
-    if (updates.transportExpenses !== undefined) basePayload.gastos_transporte = updates.transportExpenses;
-    if (updates.isForWorkReport !== undefined) basePayload.es_parte_trabajo = updates.isForWorkReport;
-    
-    // FIX: Manejar subcenterId vacío como NULL para evitar error 400 en columna UUID
-    if (updates.subCenterId !== undefined) {
-        basePayload.subcentro_id = sanitizeValue(updates.subCenterId);
-    }
+    let error = await tryRequest(payload);
 
-    let payload = { ...basePayload };
-    if (updates.costCenterId !== undefined) {
-        const cid = sanitizeValue(updates.costCenterId);
-        if (cid) payload.centro_id = cid; // Only update if valid, don't clear cost center usually
-    }
-    if (updates.requiresHours !== undefined) payload.requiere_control_horas = updates.requiresHours;
+    if (error) {
+        console.warn("⚠️ [UpdateMachine] Fallo intento 1:", error.message, error.details);
+        
+        // Estrategia de recuperación:
+        // 1. Si falla 'centro_id', probar 'centro_coste_id'
+        // 2. Si falla 'es_parte_trabajo' (columna no existe), quitarla
+        // 3. Si falla 'subcentro_id' (columna no existe), quitarla
+        // 4. Si falla 'requiere_control_horas', probar 'control_horas'
 
-    let error = await tryUpdate(payload);
-    if (!error) return;
+        let retryPayload = { ...payload };
+        let modified = false;
 
-    // --- RECOVERY FOR OLD SCHEMA ---
-    if (error && error.message?.includes('centro_id')) {
-        delete payload.centro_id;
-        if (updates.costCenterId !== undefined) {
-            const cid = sanitizeValue(updates.costCenterId);
-            if (cid) payload.centro_coste_id = cid;
+        // Check for common column errors based on message or just try variations
+        const msg = error.message ? error.message.toLowerCase() : '';
+
+        // Intento 1: Nombres de columnas legacy
+        if (msg.includes('centro_id') || msg.includes('field centro_id') || retryPayload.centro_id) {
+            if (retryPayload.centro_id) {
+                delete retryPayload.centro_id;
+                if (updates.costCenterId) retryPayload.centro_coste_id = sanitizeValue(updates.costCenterId);
+                modified = true;
+                console.log("🔄 Reintentando con centro_coste_id...");
+            }
         }
-        error = await tryUpdate(payload);
-    }
+        
+        if (msg.includes('requiere_control_horas') || retryPayload.requiere_control_horas !== undefined) {
+             if (retryPayload.requiere_control_horas !== undefined) {
+                 delete retryPayload.requiere_control_horas;
+                 if (updates.requiresHours !== undefined) retryPayload.control_horas = updates.requiresHours;
+                 modified = true;
+                 console.log("🔄 Cambiando requiere_control_horas a control_horas...");
+             }
+        }
 
-    if (error && (error.message?.includes('es_parte_trabajo') || error.message?.includes('subcentro_id'))) {
-        delete payload.es_parte_trabajo;
-        delete payload.subcentro_id;
-        error = await tryUpdate(payload);
+        // Intento 2: Eliminar columnas nuevas si fallan
+        if (msg.includes('es_parte_trabajo')) {
+            delete retryPayload.es_parte_trabajo;
+            modified = true;
+            console.log("🔄 Eliminando es_parte_trabajo del payload (columna faltante)...");
+        }
+
+        if (msg.includes('subcentro_id')) {
+            delete retryPayload.subcentro_id;
+            modified = true;
+            console.log("🔄 Eliminando subcentro_id del payload (columna faltante)...");
+        }
+
+        if (modified) {
+             error = await tryRequest(retryPayload);
+        }
+        
+        // Último intento: Payload mínimo seguro (sin campos nuevos)
+        if (error) {
+             console.warn("⚠️ [UpdateMachine] Fallo intento 2:", error.message);
+             const safePayload = { ...retryPayload };
+             // Quitar sospechosos habituales de fallo
+             delete safePayload.es_parte_trabajo;
+             delete safePayload.subcentro_id;
+             
+             console.log("🔄 Intentando payload seguro (sin campos nuevos)...", safePayload);
+             error = await tryRequest(safePayload);
+        }
     }
 
     if (error) {
-        console.error("Error updating machine:", error);
+        console.error("❌ [UpdateMachine] Error fatal:", error);
         throw error;
+    } else {
+        console.log("✅ [UpdateMachine] Actualización exitosa");
     }
 };
 
@@ -488,4 +532,3 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
     if (!isConfigured) return { synced: 0, errors: 0 };
     return { synced: 0, errors: 0 }; 
 };
-
