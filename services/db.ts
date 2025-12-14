@@ -277,9 +277,23 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
 export const deleteMachine = async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    // First delete related defs (logs are usually kept or cascade deleted depending on DB config, assuming cascade or we leave logs orphan)
-    // To be safe, let's try to delete defs first
-    await supabase.from('mant_mantenimientos_def').delete().eq('maquina_id', id);
+    
+    // 1. Logs (Operation Logs) - Must be deleted first due to FK constraint
+    const { error: logsError } = await supabase.from('mant_registros').delete().eq('maquina_id', id);
+    if (logsError) throw logsError;
+
+    // 2. Maintenance Definitions
+    const { error: defsError } = await supabase.from('mant_mantenimientos_def').delete().eq('maquina_id', id);
+    if (defsError) throw defsError;
+
+    // 3. Personal Work Reports
+    // Try delete but be lenient if table missing or issues (not strict FK usually in some schemas)
+    const { error: personalError } = await supabase.from('partes_trabajo').delete().eq('maquina_id', id);
+    if (personalError && personalError.code !== '42P01') { 
+         console.warn("Error cleaning up partes_trabajo", personalError);
+    }
+
+    // 4. Finally delete the machine
     const { error } = await supabase.from('mant_maquinas').delete().eq('id', id);
     if (error) throw error;
 }
