@@ -61,6 +61,15 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   fuelLitres: dbLog.litros_combustible
 });
 
+// --- HELPERS ---
+
+// Convierte cadenas vacías a null para evitar errores 400 en columnas UUID/Int/Date
+const sanitizeValue = (value: any) => {
+    if (value === '') return null;
+    if (value === undefined) return null;
+    return value;
+};
+
 // --- SERVICES ---
 
 export const getWorkers = async (): Promise<Worker[]> => {
@@ -92,7 +101,7 @@ export const createCostCenter = async (name: string, code?: string): Promise<Cos
     if (!isConfigured) return mock.createCostCenter(name, code);
     const { data, error } = await supabase.from('mant_centros').insert({ 
         nombre: name,
-        codigo_interno: code 
+        codigo_interno: sanitizeValue(code) 
     }).select().single();
     if (error) throw error;
     return { id: data.id, name: data.nombre, code: data.codigo_interno };
@@ -159,10 +168,10 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
     
     // Convertir empty strings a null para evitar 400 Bad Request en UUIDs
     const machinePayload: any = {
-        centro_id: machine.costCenterId, 
-        subcentro_id: machine.subCenterId || null,
+        centro_id: sanitizeValue(machine.costCenterId), 
+        subcentro_id: sanitizeValue(machine.subCenterId),
         nombre: machine.name,
-        codigo_empresa: machine.companyCode,
+        codigo_empresa: sanitizeValue(machine.companyCode),
         horas_actuales: machine.currentHours,
         requiere_control_horas: machine.requiresHours,
         gastos_admin: machine.adminExpenses,
@@ -174,13 +183,14 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
     if (mError) {
         console.warn("Create machine error, trying recovery...", mError.message);
+        // Fallback for older schema column names if needed
         if (mError.message?.includes('requiere_control_horas')) {
             delete machinePayload.requiere_control_horas;
             machinePayload.control_horas = machine.requiresHours;
         }
         if (mError.message?.includes('centro_id')) {
              delete machinePayload.centro_id;
-             machinePayload.centro_coste_id = machine.costCenterId;
+             machinePayload.centro_coste_id = sanitizeValue(machine.costCenterId);
         }
         if (mError.message?.includes('es_parte_trabajo')) {
              delete machinePayload.es_parte_trabajo;
@@ -220,7 +230,8 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
 
     const basePayload: any = {};
     if (updates.name !== undefined) basePayload.nombre = updates.name;
-    if (updates.companyCode !== undefined) basePayload.codigo_empresa = updates.companyCode;
+    // Sanitize to null if empty string
+    if (updates.companyCode !== undefined) basePayload.codigo_empresa = sanitizeValue(updates.companyCode);
     if (updates.currentHours !== undefined) basePayload.horas_actuales = updates.currentHours;
     if (updates.adminExpenses !== undefined) basePayload.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) basePayload.gastos_transporte = updates.transportExpenses;
@@ -228,19 +239,26 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     
     // FIX: Manejar subcenterId vacío como NULL para evitar error 400 en columna UUID
     if (updates.subCenterId !== undefined) {
-        basePayload.subcentro_id = updates.subCenterId || null;
+        basePayload.subcentro_id = sanitizeValue(updates.subCenterId);
     }
 
     let payload = { ...basePayload };
-    if (updates.costCenterId !== undefined) payload.centro_id = updates.costCenterId;
+    if (updates.costCenterId !== undefined) {
+        const cid = sanitizeValue(updates.costCenterId);
+        if (cid) payload.centro_id = cid; // Only update if valid, don't clear cost center usually
+    }
     if (updates.requiresHours !== undefined) payload.requiere_control_horas = updates.requiresHours;
 
     let error = await tryUpdate(payload);
     if (!error) return;
 
+    // --- RECOVERY FOR OLD SCHEMA ---
     if (error && error.message?.includes('centro_id')) {
         delete payload.centro_id;
-        if (updates.costCenterId !== undefined) payload.centro_coste_id = updates.costCenterId;
+        if (updates.costCenterId !== undefined) {
+            const cid = sanitizeValue(updates.costCenterId);
+            if (cid) payload.centro_coste_id = cid;
+        }
         error = await tryUpdate(payload);
     }
 
@@ -250,7 +268,10 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
         error = await tryUpdate(payload);
     }
 
-    if (error) throw error;
+    if (error) {
+        console.error("Error updating machine:", error);
+        throw error;
+    }
 };
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
@@ -467,3 +488,4 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
     if (!isConfigured) return { synced: 0, errors: 0 };
     return { synced: 0, errors: 0 }; 
 };
+
