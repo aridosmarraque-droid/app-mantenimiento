@@ -16,6 +16,8 @@ import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
+import { WorkerDashboard } from './components/WorkerDashboard'; // Nuevo
+import { PersonalReportForm } from './components/personal/PersonalReportForm'; // Nuevo
 import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData } from './services/db';
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
@@ -27,6 +29,8 @@ enum ViewState {
   LOGIN,
   CP_SELECTION,
   CP_DAILY_REPORT,
+  WORKER_SELECTION, // Nuevo menú para trabajador estándar
+  PERSONAL_REPORT_FORM, // Nuevo form
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
@@ -62,7 +66,6 @@ function App() {
           setIsOnline(navigator.onLine);
       };
       
-      // Update pending items count periodically
       const checkQueue = () => {
           setPendingItems(getQueue().length);
       };
@@ -99,10 +102,14 @@ function App() {
 
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
-    if (worker.role === 'cp') {
+    if (worker.role === 'admin') {
+        // Admins go straight to context selection or can open menu
+        setViewState(ViewState.CONTEXT_SELECTION);
+    } else if (worker.role === 'cp') {
         setViewState(ViewState.CP_SELECTION);
     } else {
-        setViewState(ViewState.CONTEXT_SELECTION);
+        // Standard workers now have a dashboard too
+        setViewState(ViewState.WORKER_SELECTION);
     }
   };
 
@@ -134,17 +141,12 @@ function App() {
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
       try {
-          // 1. Guardar en Base de Datos (o cola offline)
           await saveCPReport(data);
-          
-          // 2. Intentar Email (Si offline, esto fallará silenciosamente en api.ts o se puede manejar)
-          // La generación de PDF es local, así que no hay problema
           setSuccessMsg('Guardando...');
           
           if (currentUser && navigator.onLine) {
               setSuccessMsg('Generando PDF y Enviando...');
               const pdfBase64 = generateCPReportPDF(data, currentUser.name);
-              
               const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
               const emailHtml = `
                 <h2>Parte Diario de Producción</h2>
@@ -202,8 +204,6 @@ function App() {
           ? logData.hoursAtExecution 
           : selectedContext.machine.currentHours;
 
-      // Optimistic update for UI if online, or local logic
-      // Note: calculateAndSyncMachineStatus checks online status internally now
       try {
           const tempMachine = { ...selectedContext.machine, currentHours: newHours };
           const updatedMachine = await calculateAndSyncMachineStatus(tempMachine);
@@ -212,9 +212,7 @@ function App() {
               ...selectedContext,
               machine: updatedMachine
           });
-      } catch (err) {
-           // Ignore errors in optimistic UI update
-      }
+      } catch (err) {}
 
       setSuccessMsg(navigator.onLine ? 'Operación registrada' : 'Guardado en dispositivo (Sin Red)');
       setTimeout(() => {
@@ -249,13 +247,44 @@ function App() {
       );
   }
 
+  // Selección Menú: Cantera Pura
   if (viewState === ViewState.CP_SELECTION && currentUser) {
       return (
           <CPSelection 
             workerName={currentUser.name}
             onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
             onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)}
+            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT_FORM)}
             onLogout={handleLogout}
+          />
+      );
+  }
+
+  // Selección Menú: Trabajador Estándar
+  if (viewState === ViewState.WORKER_SELECTION && currentUser) {
+      return (
+          <WorkerDashboard 
+            workerName={currentUser.name}
+            onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
+            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT_FORM)}
+            onLogout={handleLogout}
+          />
+      );
+  }
+
+  // Formulario Parte Trabajo Personal
+  if (viewState === ViewState.PERSONAL_REPORT_FORM && currentUser) {
+      return (
+          <PersonalReportForm 
+              workerId={currentUser.id}
+              onBack={() => setViewState(currentUser.role === 'cp' ? ViewState.CP_SELECTION : ViewState.WORKER_SELECTION)}
+              onSuccess={() => {
+                  setSuccessMsg("Parte registrado correctamente");
+                  setTimeout(() => {
+                      setSuccessMsg("");
+                      setViewState(currentUser.role === 'cp' ? ViewState.CP_SELECTION : ViewState.WORKER_SELECTION);
+                  }, 1500);
+              }}
           />
       );
   }
@@ -273,7 +302,6 @@ function App() {
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl overflow-hidden min-h-screen relative">
         <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
-          {/* OFFLINE / SYNC BANNER */}
           {(!isOnline || pendingItems > 0) && (
               <div className={`text-white text-xs text-center p-2 font-bold flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
                   <div className="flex items-center gap-2">
@@ -308,9 +336,10 @@ function App() {
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
                 )}
-                {currentUser?.role === 'cp' && viewState !== ViewState.CP_SELECTION && (
-                    <button onClick={() => setViewState(ViewState.CP_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded">
-                        Volver Inicio
+                {/* Botón Volver al Menú Principal si no eres admin */}
+                {currentUser && currentUser.role !== 'admin' && (viewState === ViewState.CONTEXT_SELECTION || viewState === ViewState.ACTION_MENU || viewState === ViewState.FORM) && (
+                    <button onClick={() => setViewState(currentUser.role === 'cp' ? ViewState.CP_SELECTION : ViewState.WORKER_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">
+                        Volver Menú
                     </button>
                 )}
             </div>
