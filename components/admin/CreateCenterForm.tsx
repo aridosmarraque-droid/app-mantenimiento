@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
-import { createCostCenter } from '../../services/db';
-import { Save, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { createCostCenter, getCostCenters } from '../../services/db';
+import { CostCenter } from '../../types';
+import { Save, ArrowLeft, Loader2, Factory } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -12,6 +13,11 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
+    const [centers, setCenters] = useState<CostCenter[]>([]);
+
+    useEffect(() => {
+        getCostCenters().then(setCenters);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -28,45 +34,80 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-md space-y-4">
-            <div className="flex items-center gap-2 mb-4 border-b pb-2">
-                <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
-                    <ArrowLeft className="w-5 h-5" />
-                </button>
-                <h3 className="text-xl font-bold text-slate-800">Nueva Cantera / Grupo</h3>
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <div className="flex items-center gap-2 mb-4 border-b pb-2">
+                    <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
+                        <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <h3 className="text-xl font-bold text-slate-800">Nueva Cantera / Grupo</h3>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Cantera / Grupo *</label>
+                        <input
+                            type="text"
+                            required
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder="Ej. Cantera Machacadora"
+                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno (Opcional)</label>
+                        <input
+                            type="text"
+                            value={code}
+                            onChange={e => setCode(e.target.value)}
+                            placeholder="Ej. CP, MM, TALLER..."
+                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">Código corto para identificar el centro.</p>
+                    </div>
+
+                    <button 
+                        type="submit" 
+                        disabled={loading}
+                        className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400"
+                    >
+                        {loading ? <Loader2 className="animate-spin" /> : <Save className="w-5 h-5" />}
+                        {loading ? 'Guardando...' : 'Crear'}
+                    </button>
+                </form>
             </div>
 
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Cantera / Grupo *</label>
-                <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Ej. Cantera Machacadora"
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+            {/* Listado de Centros Existentes */}
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <Factory className="w-4 h-4 text-slate-500"/> Canteras Existentes
+                </h4>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-slate-500">
+                        <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+                            <tr>
+                                <th className="px-4 py-3">Código</th>
+                                <th className="px-4 py-3">Nombre</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {centers.map((center, idx) => (
+                                <tr key={center.id} className="bg-white border-b hover:bg-slate-50">
+                                    <td className="px-4 py-3 font-medium text-blue-600">{center.code || '-'}</td>
+                                    <td className="px-4 py-3 text-slate-900">{center.name}</td>
+                                </tr>
+                            ))}
+                            {centers.length === 0 && (
+                                <tr>
+                                    <td colSpan={2} className="px-4 py-3 text-center text-slate-400">No hay centros registrados</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno (Opcional)</label>
-                <input
-                    type="text"
-                    value={code}
-                    onChange={e => setCode(e.target.value)}
-                    placeholder="Ej. CP, MM, TALLER..."
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-slate-400 mt-1">Código corto para identificar el centro.</p>
-            </div>
-
-            <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400"
-            >
-                <Save className="w-5 h-5" /> {loading ? 'Guardando...' : 'Crear'}
-            </button>
-        </form>
+        </div>
     );
 };
