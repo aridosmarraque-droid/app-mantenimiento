@@ -224,14 +224,13 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (!isConfigured) return mock.updateMachineAttributes(id, updates);
     
     // --- BUILD PAYLOAD ---
-    const payload: any = {};
+    let payload: any = {};
     if (updates.name !== undefined) payload.nombre = updates.name;
     if (updates.companyCode !== undefined) payload.codigo_empresa = sanitizeValue(updates.companyCode);
     if (updates.currentHours !== undefined) payload.horas_actuales = updates.currentHours;
     if (updates.adminExpenses !== undefined) payload.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) payload.gastos_transporte = updates.transportExpenses;
     
-    // Potentially problematic columns (new or renamed)
     if (updates.isForWorkReport !== undefined) payload.es_parte_trabajo = updates.isForWorkReport;
     if (updates.subCenterId !== undefined) payload.subcentro_id = sanitizeValue(updates.subCenterId);
     if (updates.costCenterId !== undefined) payload.centro_id = sanitizeValue(updates.costCenterId);
@@ -245,68 +244,53 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     }
 
     let error = await tryRequest(payload);
+    let attempts = 0;
+    const maxAttempts = 3;
 
-    if (error) {
-        console.warn("⚠️ [UpdateMachine] Fallo intento 1:", error.message, error.details);
+    // Bucle de reintento inteligente
+    while (error && attempts < maxAttempts) {
+        attempts++;
+        console.warn(`⚠️ [UpdateMachine] Fallo intento ${attempts}:`, error.message);
         
-        // Estrategia de recuperación:
-        // 1. Si falla 'centro_id', probar 'centro_coste_id'
-        // 2. Si falla 'es_parte_trabajo' (columna no existe), quitarla
-        // 3. Si falla 'subcentro_id' (columna no existe), quitarla
-        // 4. Si falla 'requiere_control_horas', probar 'control_horas'
-
-        let retryPayload = { ...payload };
+        const msg = error.message ? error.message.toLowerCase() : '';
         let modified = false;
 
-        // Check for common column errors based on message or just try variations
-        const msg = error.message ? error.message.toLowerCase() : '';
+        // Estrategia: Solo modificar lo que el error dice explícitamente que falta
 
-        // Intento 1: Nombres de columnas legacy
-        if (msg.includes('centro_id') || msg.includes('field centro_id') || retryPayload.centro_id) {
-            if (retryPayload.centro_id) {
-                delete retryPayload.centro_id;
-                if (updates.costCenterId) retryPayload.centro_coste_id = sanitizeValue(updates.costCenterId);
-                modified = true;
-                console.log("🔄 Reintentando con centro_coste_id...");
-            }
+        // 1. Column renames based on error
+        if (msg.includes('centro_id')) {
+             delete payload.centro_id;
+             if (updates.costCenterId !== undefined) payload.centro_coste_id = sanitizeValue(updates.costCenterId);
+             modified = true;
+             console.log("🔄 Fix: Usando centro_coste_id");
         }
         
-        if (msg.includes('requiere_control_horas') || retryPayload.requiere_control_horas !== undefined) {
-             if (retryPayload.requiere_control_horas !== undefined) {
-                 delete retryPayload.requiere_control_horas;
-                 if (updates.requiresHours !== undefined) retryPayload.control_horas = updates.requiresHours;
-                 modified = true;
-                 console.log("🔄 Cambiando requiere_control_horas a control_horas...");
-             }
+        if (msg.includes('requiere_control_horas')) {
+             delete payload.requiere_control_horas;
+             if (updates.requiresHours !== undefined) payload.control_horas = updates.requiresHours;
+             modified = true;
+             console.log("🔄 Fix: Usando control_horas");
         }
 
-        // Intento 2: Eliminar columnas nuevas si fallan
+        // 2. Missing new columns - remove them if DB complains
         if (msg.includes('es_parte_trabajo')) {
-            delete retryPayload.es_parte_trabajo;
+            delete payload.es_parte_trabajo;
             modified = true;
-            console.log("🔄 Eliminando es_parte_trabajo del payload (columna faltante)...");
+            console.log("🔄 Fix: Eliminando es_parte_trabajo");
         }
 
         if (msg.includes('subcentro_id')) {
-            delete retryPayload.subcentro_id;
+            delete payload.subcentro_id;
             modified = true;
-            console.log("🔄 Eliminando subcentro_id del payload (columna faltante)...");
+            console.log("🔄 Fix: Eliminando subcentro_id");
         }
 
         if (modified) {
-             error = await tryRequest(retryPayload);
-        }
-        
-        // Último intento: Payload mínimo seguro (sin campos nuevos)
-        if (error) {
-             console.warn("⚠️ [UpdateMachine] Fallo intento 2:", error.message);
-             const safePayload = { ...retryPayload };
-             // Quitar sospechosos habituales de fallo
-             delete safePayload.es_parte_trabajo;
-             delete safePayload.subcentro_id;
-             
-             console.log("🔄 Intentando payload seguro (sin campos nuevos)...", safePayload);
-             error = await tryRequest(safePayload);
+            error = await tryRequest(payload);
+        } else {
+            // Si el error es otro y no sabemos arreglarlo, salimos del bucle para lanzar el error
+            console.error("No se pudo determinar una corrección automática para el error.");
+            break;
         }
     }
 
