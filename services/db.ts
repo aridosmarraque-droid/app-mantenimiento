@@ -107,6 +107,43 @@ export const createCostCenter = async (name: string, code?: string): Promise<Cos
     return { id: data.id, name: data.nombre, code: data.codigo_interno };
 };
 
+export const deleteCostCenter = async (id: string): Promise<void> => {
+    if (!isConfigured) return; // Mock implementation needed if strictly required
+    
+    // 1. Check Subcenters
+    const { count: subCount, error: subError } = await supabase
+        .from('mant_subcentros')
+        .select('*', { count: 'exact', head: true })
+        .eq('centro_id', id);
+    
+    if (subError) throw subError;
+    if (subCount && subCount > 0) {
+        throw new Error("No se puede eliminar: El centro tiene subcentros asignados.");
+    }
+
+    // 2. Check Machines (check both column names to be safe)
+    let { count: machCount, error: machError } = await supabase
+        .from('mant_maquinas')
+        .select('*', { count: 'exact', head: true })
+        .eq('centro_id', id);
+    
+    // Fallback check for older column name if first query failed or returned 0 (just to be safe against schema mismatch)
+    if (machError || machCount === 0) {
+         const { count: machCountLegacy } = await supabase
+            .from('mant_maquinas')
+            .select('*', { count: 'exact', head: true })
+            .eq('centro_coste_id', id);
+         if (machCountLegacy && machCountLegacy > 0) machCount = machCountLegacy;
+    }
+
+    if (machCount && machCount > 0) {
+        throw new Error("No se puede eliminar: El centro tiene máquinas asignadas.");
+    }
+
+    const { error } = await supabase.from('mant_centros').delete().eq('id', id);
+    if (error) throw error;
+};
+
 export const createSubCenter = async (centerId: string, name: string): Promise<SubCenter> => {
     if (!isConfigured) return mock.createSubCenter(centerId, name);
     const { data, error } = await supabase.from('mant_subcentros').insert({
@@ -115,6 +152,24 @@ export const createSubCenter = async (centerId: string, name: string): Promise<S
     }).select().single();
     if (error) throw error;
     return { id: data.id, centerId: data.centro_id, name: data.nombre };
+};
+
+export const deleteSubCenter = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+
+    // Check Machines
+    const { count: machCount, error: machError } = await supabase
+        .from('mant_maquinas')
+        .select('*', { count: 'exact', head: true })
+        .eq('subcentro_id', id);
+    
+    if (machError) throw machError;
+    if (machCount && machCount > 0) {
+        throw new Error("No se puede eliminar: El subcentro tiene máquinas asignadas.");
+    }
+
+    const { error } = await supabase.from('mant_subcentros').delete().eq('id', id);
+    if (error) throw error;
 };
 
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
@@ -220,6 +275,15 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
     return { ...machine, id: mData.id };
 };
 
+export const deleteMachine = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    // First delete related defs (logs are usually kept or cascade deleted depending on DB config, assuming cascade or we leave logs orphan)
+    // To be safe, let's try to delete defs first
+    await supabase.from('mant_mantenimientos_def').delete().eq('maquina_id', id);
+    const { error } = await supabase.from('mant_maquinas').delete().eq('id', id);
+    if (error) throw error;
+}
+
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     if (!isConfigured) return mock.updateMachineAttributes(id, updates);
     
@@ -245,7 +309,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
 
     let error = await tryRequest(payload);
     let attempts = 0;
-    const maxAttempts = 5; // Allow enough attempts to fix multiple column issues one by one
+    const maxAttempts = 6; 
 
     while (error && attempts < maxAttempts) {
         attempts++;
@@ -255,15 +319,23 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
         let modified = false;
 
         // 1. Rename 'requiere_control_horas' -> 'control_horas'
-        if (msg.includes('requiere_control_horas')) {
+        if (msg.includes('requiere_control_horas') && payload.requiere_control_horas !== undefined) {
              delete payload.requiere_control_horas;
              if (updates.requiresHours !== undefined) payload.control_horas = updates.requiresHours;
              modified = true;
              console.log("🔄 Fix: Usando control_horas");
         }
         
-        // 2. Rename 'centro_id' -> 'centro_coste_id' (Solo si el error lo pide)
-        if (msg.includes('centro_id')) {
+        // 1.b IF 'control_horas' ALSO fails (column missing completely), remove it
+        if (msg.includes('control_horas') && payload.control_horas !== undefined) {
+             delete payload.control_horas;
+             // Do NOT set requiere_control_horas back. Just drop it.
+             modified = true;
+             console.log("🔄 Fix: Eliminando control de horas (columna no existe)");
+        }
+        
+        // 2. Rename 'centro_id' -> 'centro_coste_id'
+        if (msg.includes('centro_id') && payload.centro_id !== undefined) {
              delete payload.centro_id;
              if (updates.costCenterId !== undefined) payload.centro_coste_id = sanitizeValue(updates.costCenterId);
              modified = true;
@@ -288,14 +360,15 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
             error = await tryRequest(payload);
         } else {
             console.error("No se pudo determinar una corrección automática para el error:", msg);
-            // Fallback: If generic error and we haven't stripped optional new columns, try that.
-            if (attempts === 1 && (payload.es_parte_trabajo !== undefined || payload.subcentro_id !== undefined)) {
-                 console.log("🔄 Fallback: Eliminando columnas nuevas (es_parte_trabajo, subcentro_id) por si acaso.");
-                 delete payload.es_parte_trabajo;
-                 delete payload.subcentro_id;
-                 error = await tryRequest(payload);
+            // Last resort: If we still have suspect fields, nuke them
+            if (payload.es_parte_trabajo !== undefined) { delete payload.es_parte_trabajo; modified = true; }
+            if (payload.subcentro_id !== undefined) { delete payload.subcentro_id; modified = true; }
+            
+            if(modified) {
+                console.log("🔄 Intento desesperado: quitando campos nuevos opcionales");
+                error = await tryRequest(payload);
             } else {
-                 break;
+                break;
             }
         }
     }
