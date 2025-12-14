@@ -147,7 +147,9 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         >
                             <option value="">-- Seleccionar --</option>
                             {centers.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
+                                <option key={c.id} value={c.id}>
+                                    {c.name} {c.code ? `(${c.code})` : ''}
+                                </option>
                             ))}
                         </select>
                     </div>
