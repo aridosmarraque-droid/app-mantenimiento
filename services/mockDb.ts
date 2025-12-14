@@ -11,9 +11,9 @@ export const WORKERS: Worker[] = [
 ];
 
 export const COST_CENTERS: CostCenter[] = [
-  { id: 'c1', name: 'Maquinaria Móvil' },
-  { id: 'c2', name: 'Cantera Pura' },
-  { id: 'c3', name: 'Cantera Canto Rodado' },
+  { id: 'c1', name: 'Maquinaria Móvil', code: 'MM' },
+  { id: 'c2', name: 'Cantera Pura', code: 'CP' },
+  { id: 'c3', name: 'Cantera Canto Rodado', code: 'CCR' },
 ];
 
 export const SUB_CENTERS: SubCenter[] = [
@@ -96,10 +96,16 @@ export const getSubCenters = async (): Promise<SubCenter[]> => {
     return new Promise(resolve => setTimeout(() => resolve(SUB_CENTERS), 300));
 };
 
-export const createCostCenter = async (name: string): Promise<CostCenter> => {
-    const newCenter = { id: Math.random().toString(36).substr(2, 9), name };
+export const createCostCenter = async (name: string, code?: string): Promise<CostCenter> => {
+    const newCenter = { id: Math.random().toString(36).substr(2, 9), name, code };
     COST_CENTERS.push(newCenter);
     return new Promise(resolve => setTimeout(() => resolve(newCenter), 300));
+};
+
+export const createSubCenter = async (centerId: string, name: string): Promise<SubCenter> => {
+    const newSub = { id: Math.random().toString(36).substr(2, 9), centerId, name };
+    SUB_CENTERS.push(newSub);
+    return new Promise(resolve => setTimeout(() => resolve(newSub), 300));
 };
 
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
