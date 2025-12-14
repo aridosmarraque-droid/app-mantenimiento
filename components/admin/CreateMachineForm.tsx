@@ -18,12 +18,12 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [name, setName] = useState('');
     const [companyCode, setCompanyCode] = useState('');
     const [centerId, setCenterId] = useState('');
-    const [subCenterId, setSubCenterId] = useState(''); // Nuevo
+    const [subCenterId, setSubCenterId] = useState(''); 
     const [currentHours, setCurrentHours] = useState(0);
     const [requiresHours, setRequiresHours] = useState(true);
     const [adminExpenses, setAdminExpenses] = useState(false);
     const [transportExpenses, setTransportExpenses] = useState(false);
-    const [isForWorkReport, setIsForWorkReport] = useState(false); // Nuevo
+    const [isForWorkReport, setIsForWorkReport] = useState(false); 
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
@@ -83,7 +83,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 name,
                 companyCode,
                 costCenterId: centerId,
-                subCenterId: subCenterId || undefined,
+                subCenterId: subCenterId, // db.ts manejará vacío como null
                 currentHours,
                 requiresHours,
                 adminExpenses,
