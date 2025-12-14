@@ -157,9 +157,10 @@ export const getAllMachines = async (): Promise<Machine[]> => {
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
     if (!isConfigured) return mock.createMachine(machine);
     
+    // Convertir empty strings a null para evitar 400 Bad Request en UUIDs
     const machinePayload: any = {
         centro_id: machine.costCenterId, 
-        subcentro_id: machine.subCenterId,
+        subcentro_id: machine.subCenterId || null,
         nombre: machine.name,
         codigo_empresa: machine.companyCode,
         horas_actuales: machine.currentHours,
@@ -224,7 +225,11 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.adminExpenses !== undefined) basePayload.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) basePayload.gastos_transporte = updates.transportExpenses;
     if (updates.isForWorkReport !== undefined) basePayload.es_parte_trabajo = updates.isForWorkReport;
-    if (updates.subCenterId !== undefined) basePayload.subcentro_id = updates.subCenterId;
+    
+    // FIX: Manejar subcenterId vacío como NULL para evitar error 400 en columna UUID
+    if (updates.subCenterId !== undefined) {
+        basePayload.subcentro_id = updates.subCenterId || null;
+    }
 
     let payload = { ...basePayload };
     if (updates.costCenterId !== undefined) payload.centro_id = updates.costCenterId;
