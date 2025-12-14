@@ -245,9 +245,8 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
 
     let error = await tryRequest(payload);
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5; // Allow enough attempts to fix multiple column issues one by one
 
-    // Bucle de reintento inteligente
     while (error && attempts < maxAttempts) {
         attempts++;
         console.warn(`⚠️ [UpdateMachine] Fallo intento ${attempts}:`, error.message);
@@ -255,30 +254,30 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
         const msg = error.message ? error.message.toLowerCase() : '';
         let modified = false;
 
-        // Estrategia: Solo modificar lo que el error dice explícitamente que falta
-
-        // 1. Column renames based on error
-        if (msg.includes('centro_id')) {
-             delete payload.centro_id;
-             if (updates.costCenterId !== undefined) payload.centro_coste_id = sanitizeValue(updates.costCenterId);
-             modified = true;
-             console.log("🔄 Fix: Usando centro_coste_id");
-        }
-        
+        // 1. Rename 'requiere_control_horas' -> 'control_horas'
         if (msg.includes('requiere_control_horas')) {
              delete payload.requiere_control_horas;
              if (updates.requiresHours !== undefined) payload.control_horas = updates.requiresHours;
              modified = true;
              console.log("🔄 Fix: Usando control_horas");
         }
+        
+        // 2. Rename 'centro_id' -> 'centro_coste_id' (Solo si el error lo pide)
+        if (msg.includes('centro_id')) {
+             delete payload.centro_id;
+             if (updates.costCenterId !== undefined) payload.centro_coste_id = sanitizeValue(updates.costCenterId);
+             modified = true;
+             console.log("🔄 Fix: Usando centro_coste_id");
+        }
 
-        // 2. Missing new columns - remove them if DB complains
+        // 3. Remove 'es_parte_trabajo' if missing
         if (msg.includes('es_parte_trabajo')) {
             delete payload.es_parte_trabajo;
             modified = true;
             console.log("🔄 Fix: Eliminando es_parte_trabajo");
         }
 
+        // 4. Remove 'subcentro_id' if missing
         if (msg.includes('subcentro_id')) {
             delete payload.subcentro_id;
             modified = true;
@@ -288,9 +287,16 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
         if (modified) {
             error = await tryRequest(payload);
         } else {
-            // Si el error es otro y no sabemos arreglarlo, salimos del bucle para lanzar el error
-            console.error("No se pudo determinar una corrección automática para el error.");
-            break;
+            console.error("No se pudo determinar una corrección automática para el error:", msg);
+            // Fallback: If generic error and we haven't stripped optional new columns, try that.
+            if (attempts === 1 && (payload.es_parte_trabajo !== undefined || payload.subcentro_id !== undefined)) {
+                 console.log("🔄 Fallback: Eliminando columnas nuevas (es_parte_trabajo, subcentro_id) por si acaso.");
+                 delete payload.es_parte_trabajo;
+                 delete payload.subcentro_id;
+                 error = await tryRequest(payload);
+            } else {
+                 break;
+            }
         }
     }
 
