@@ -24,7 +24,7 @@ import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, GitBranch } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, GitBranch, ChevronDown } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -62,6 +62,7 @@ function App() {
 
   // Menu State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [adminMenuSection, setAdminMenuSection] = useState<string | null>(null);
 
   useEffect(() => {
       const handleStatusChange = () => {
@@ -236,6 +237,11 @@ function App() {
       }, 1500);
   };
 
+  const toggleAdminSection = (section: string) => {
+      if (adminMenuSection === section) setAdminMenuSection(null);
+      else setAdminMenuSection(section);
+  };
+
   if (viewState === ViewState.LOGIN) {
       return (
         <div className="flex flex-col min-h-screen">
@@ -348,41 +354,70 @@ function App() {
           </div>
           
           {isMenuOpen && (
-              <div className="absolute top-full right-0 w-64 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
+              <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-y-auto border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5 max-h-[80vh]">
                   <div className="p-4 border-b border-slate-100 bg-slate-50">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Administración</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Menú Administración</p>
                   </div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <Factory className="w-5 h-5 text-blue-500" />
-                      Nueva Cantera / Grupo
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_SUBCENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <GitBranch className="w-5 h-5 text-blue-500" />
-                      Nuevo Subcentro
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <Truck className="w-5 h-5 text-blue-500" />
-                      Nueva Máquina
-                  </button>
-                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <Settings className="w-5 h-5 text-blue-500" />
-                      Modificar Máquina
-                  </button>
-                  <div className="p-2 border-b border-slate-50"></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <CalendarDays className="w-5 h-5 text-amber-500" />
-                      Planificación Cantera
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <TrendingUp className="w-5 h-5 text-amber-500" />
-                      Informes Producción
-                  </button>
-                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
-                      <FileSearch className="w-5 h-5 text-blue-500" />
-                      Consultar Registros
-                  </button>
-                  <div className="p-4 border-t border-slate-100 mt-2">
-                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
+                  
+                  {/* CENTROS Y GRUPOS */}
+                  <div className="border-b border-slate-100">
+                      <button onClick={() => toggleAdminSection('CENTERS')} className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 font-medium">
+                          <span className="flex items-center gap-2"><Factory className="w-4 h-4 text-slate-500"/> Centros de Coste</span>
+                          <ChevronDown size={16} className={`transition-transform ${adminMenuSection === 'CENTERS' ? 'rotate-180' : ''}`} />
+                      </button>
+                      {adminMenuSection === 'CENTERS' && (
+                          <div className="bg-slate-50 pb-2">
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Gestión Canteras / Grupos
+                             </button>
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_SUBCENTER)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Gestión Subcentros
+                             </button>
+                          </div>
+                      )}
+                  </div>
+
+                  {/* MAQUINARIA */}
+                  <div className="border-b border-slate-100">
+                      <button onClick={() => toggleAdminSection('MACHINES')} className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 font-medium">
+                          <span className="flex items-center gap-2"><Truck className="w-4 h-4 text-slate-500"/> Maquinaria</span>
+                          <ChevronDown size={16} className={`transition-transform ${adminMenuSection === 'MACHINES' ? 'rotate-180' : ''}`} />
+                      </button>
+                      {adminMenuSection === 'MACHINES' && (
+                          <div className="bg-slate-50 pb-2">
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Crear Nueva Máquina
+                             </button>
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Modificar / Eliminar Máquina
+                             </button>
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Consultar Registros Mantenimiento
+                             </button>
+                          </div>
+                      )}
+                  </div>
+
+                   {/* PRODUCCIÓN */}
+                   <div className="border-b border-slate-100">
+                      <button onClick={() => toggleAdminSection('PRODUCTION')} className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 font-medium">
+                          <span className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-slate-500"/> Cantera Pura</span>
+                          <ChevronDown size={16} className={`transition-transform ${adminMenuSection === 'PRODUCTION' ? 'rotate-180' : ''}`} />
+                      </button>
+                      {adminMenuSection === 'PRODUCTION' && (
+                          <div className="bg-slate-50 pb-2">
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Planificación Semanal
+                             </button>
+                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
+                                Dashboard Producción
+                             </button>
+                          </div>
+                      )}
+                  </div>
+
+                  <div className="p-4 mt-2">
+                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left px-2 py-2 hover:bg-red-50 rounded">Cerrar Sesión</button>
                   </div>
               </div>
           )}
