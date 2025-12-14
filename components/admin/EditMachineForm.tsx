@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus, getSubCenters } from '../../services/db';
+import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus, getSubCenters, deleteMachine } from '../../services/db';
 import { CostCenter, Machine, MaintenanceDefinition, SubCenter } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, Edit2, Check, X, AlertTriangle } from 'lucide-react';
 
 interface Props {
     machine: Machine;
@@ -49,7 +49,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 name,
                 companyCode,
                 costCenterId: centerId,
-                subCenterId: subCenterId, // Pasar directamente, db.ts sanitizará
+                subCenterId: subCenterId, // Pasar directamente, db.ts manejará vacío como null
                 currentHours,
                 requiresHours,
                 adminExpenses,
@@ -60,6 +60,22 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
         } catch (e) {
             alert("Error al actualizar datos.");
             console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteMachine = async () => {
+        const confirmStr = prompt(`Para eliminar la máquina "${machine.name}", escribe "ELIMINAR" abajo. Esto borrará también sus definiciones de mantenimiento.`);
+        if (confirmStr !== "ELIMINAR") return;
+
+        setLoading(true);
+        try {
+            await deleteMachine(machine.id);
+            onSuccess(); // Redirect back
+        } catch (e) {
+            console.error(e);
+            alert("Error al eliminar la máquina.");
         } finally {
             setLoading(false);
         }
@@ -126,7 +142,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     };
 
     return (
-        <div className="space-y-6 pb-10">
+        <div className="space-y-6 pb-20">
             {/* Header */}
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
@@ -278,7 +294,22 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                 </div>
             </div>
+
+            {/* DANGER ZONE */}
+            <div className="bg-red-50 p-6 rounded-xl border border-red-200 mt-8">
+                <h4 className="font-bold text-red-700 mb-2 flex items-center gap-2">
+                    <AlertTriangle size={20}/> Zona de Peligro
+                </h4>
+                <p className="text-sm text-red-600 mb-4">
+                    Eliminar la máquina borrará también su historial de mantenimientos programados (definiciones). Los registros de operaciones pasadas permanecerán pero sin vínculo a la máquina.
+                </p>
+                <button 
+                    onClick={handleDeleteMachine} 
+                    className="w-full py-3 bg-red-600 text-white font-bold rounded hover:bg-red-700 transition-colors flex justify-center items-center gap-2"
+                >
+                    <Trash2 size={18}/> Eliminar Máquina Definitivamente
+                </button>
+            </div>
         </div>
     );
 };
-
