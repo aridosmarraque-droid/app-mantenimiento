@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { createMachine, getCostCenters } from '../../services/db';
-import { CostCenter, MaintenanceDefinition } from '../../types';
+import { createMachine, getCostCenters, getSubCenters } from '../../services/db';
+import { CostCenter, MaintenanceDefinition, SubCenter } from '../../types';
 import { Save, ArrowLeft, Plus, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -11,16 +11,19 @@ interface Props {
 
 export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [subCenters, setSubCenters] = useState<SubCenter[]>([]);
     const [loading, setLoading] = useState(false);
     
     // Main Form State
     const [name, setName] = useState('');
     const [companyCode, setCompanyCode] = useState('');
     const [centerId, setCenterId] = useState('');
+    const [subCenterId, setSubCenterId] = useState(''); // Nuevo
     const [currentHours, setCurrentHours] = useState(0);
     const [requiresHours, setRequiresHours] = useState(true);
     const [adminExpenses, setAdminExpenses] = useState(false);
     const [transportExpenses, setTransportExpenses] = useState(false);
+    const [isForWorkReport, setIsForWorkReport] = useState(false); // Nuevo
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
@@ -33,7 +36,10 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
 
     useEffect(() => {
         getCostCenters().then(setCenters);
+        getSubCenters().then(setSubCenters);
     }, []);
+
+    const filteredSubCenters = subCenters.filter(sc => sc.centerId === centerId);
 
     const handleExpenseChange = (type: 'admin' | 'transport') => {
         if (type === 'admin') {
@@ -57,7 +63,6 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         
         setDefs([...defs, newDef]);
         
-        // Reset inputs
         setNewDefName('');
         setNewDefInterval('');
         setNewDefWarning('');
@@ -78,10 +83,12 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 name,
                 companyCode,
                 costCenterId: centerId,
+                subCenterId: subCenterId || undefined,
                 currentHours,
                 requiresHours,
                 adminExpenses,
                 transportExpenses,
+                isForWorkReport,
                 maintenanceDefs: defs
             });
             onSuccess();
@@ -126,19 +133,38 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                     />
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Cantera / Grupo *</label>
-                    <select
-                        required
-                        value={centerId}
-                        onChange={e => setCenterId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="">-- Seleccionar --</option>
-                        {centers.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                    </select>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Cantera / Grupo *</label>
+                        <select
+                            required
+                            value={centerId}
+                            onChange={e => {
+                                setCenterId(e.target.value);
+                                setSubCenterId('');
+                            }}
+                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="">-- Seleccionar --</option>
+                            {centers.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Subcentro (Opcional)</label>
+                        <select
+                            value={subCenterId}
+                            onChange={e => setSubCenterId(e.target.value)}
+                            disabled={!centerId}
+                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                        >
+                            <option value="">-- Ninguno --</option>
+                            {filteredSubCenters.map(sc => (
+                                <option key={sc.id} value={sc.id}>{sc.name}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <div>
@@ -156,6 +182,17 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
                 <h4 className="font-semibold text-sm text-slate-500 uppercase">Configuración</h4>
                 
+                <div className="flex items-center gap-3 bg-white p-2 rounded border border-slate-200">
+                    <input 
+                        type="checkbox" 
+                        id="workReport"
+                        checked={isForWorkReport}
+                        onChange={e => setIsForWorkReport(e.target.checked)}
+                        className="w-5 h-5 text-green-600 rounded"
+                    />
+                    <label htmlFor="workReport" className="text-slate-800 font-bold">Seleccionable para Parte de Trabajo</label>
+                </div>
+
                 <div className="flex items-center gap-3">
                     <input 
                         type="checkbox" 
@@ -197,7 +234,6 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 <div className="flex justify-between items-center border-b pb-1">
                     <h4 className="font-bold text-slate-700">Mantenimientos Programados</h4>
                 </div>
-
                 {/* List of added defs */}
                 {defs.length > 0 && (
                     <div className="space-y-2 mb-4">
@@ -267,4 +303,3 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         </form>
     );
 };
-
