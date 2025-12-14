@@ -84,7 +84,9 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onBack, onSucces
                     >
                         <option value="">-- Seleccione Centro --</option>
                         {centers.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.id}>
+                                {c.name} {c.code ? `(${c.code})` : ''}
+                            </option>
                         ))}
                     </select>
                 </div>
