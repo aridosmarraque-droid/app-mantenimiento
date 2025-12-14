@@ -157,7 +157,11 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                                 setSubCenterId('');
                             }}
                         >
-                            {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {centers.map(c => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name} {c.code ? `(${c.code})` : ''}
+                                </option>
+                            ))}
                         </select>
                     </div>
                     <div>
@@ -276,3 +280,4 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
         </div>
     );
 };
+
