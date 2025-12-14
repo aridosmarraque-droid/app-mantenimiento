@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { CostCenter, Machine } from '../types';
 import { getCostCenters, getMachinesByCenter, calculateAndSyncMachineStatus } from '../services/db'; // Importar nueva función
@@ -76,7 +77,9 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
         >
           <option value="">-- Seleccione Cantera --</option>
           {centers.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>
+              {c.name} {c.code ? `(${c.code})` : ''}
+            </option>
           ))}
         </select>
       </div>
