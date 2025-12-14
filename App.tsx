@@ -9,7 +9,7 @@ import { BreakdownForm } from './components/forms/BreakdownForm';
 import { MaintenanceForm } from './components/forms/MaintenanceForm';
 import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
-import { CreateSubCenterForm } from './components/admin/CreateSubCenterForm'; // Nuevo import
+import { CreateSubCenterForm } from './components/admin/CreateSubCenterForm'; 
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
 import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
@@ -36,7 +36,7 @@ enum ViewState {
   ACTION_MENU,
   FORM,
   ADMIN_CREATE_CENTER,
-  ADMIN_CREATE_SUBCENTER, // Nuevo estado
+  ADMIN_CREATE_SUBCENTER, 
   ADMIN_CREATE_MACHINE,
   ADMIN_SELECT_MACHINE_TO_EDIT,
   ADMIN_EDIT_MACHINE,
@@ -418,6 +418,7 @@ function App() {
                       <MachineSelector 
                         selectedDate={new Date()} 
                         onChangeDate={() => {}} 
+                        hideDate={true}
                         onSelect={handleEditSelection}
                       />
                       <button onClick={() => setViewState(ViewState.CONTEXT_SELECTION)} className="w-full py-3 text-slate-500 font-medium">Cancelar</button>
