@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { createCostCenter, getCostCenters } from '../../services/db';
+import { createCostCenter, getCostCenters, deleteCostCenter } from '../../services/db';
 import { CostCenter } from '../../types';
-import { Save, ArrowLeft, Loader2, Factory } from 'lucide-react';
+import { Save, ArrowLeft, Loader2, Factory, Trash2 } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -16,14 +16,21 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [centers, setCenters] = useState<CostCenter[]>([]);
 
     useEffect(() => {
-        getCostCenters().then(setCenters);
+        loadCenters();
     }, []);
+
+    const loadCenters = () => {
+        getCostCenters().then(setCenters);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
             await createCostCenter(name, code);
+            setName('');
+            setCode('');
+            loadCenters();
             onSuccess();
         } catch (error) {
             console.error(error);
@@ -32,6 +39,19 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             setLoading(false);
         }
     };
+
+    const handleDelete = async (id: string, centerName: string) => {
+        if (!confirm(`¿Estás seguro de que quieres eliminar la cantera "${centerName}"? Esta acción no se puede deshacer.`)) return;
+        
+        try {
+            await deleteCostCenter(id);
+            alert("Centro eliminado correctamente.");
+            loadCenters();
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message || "No se pudo eliminar el centro.");
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -90,6 +110,7 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                             <tr>
                                 <th className="px-4 py-3">Código</th>
                                 <th className="px-4 py-3">Nombre</th>
+                                <th className="px-4 py-3 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -97,11 +118,20 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                                 <tr key={center.id} className="bg-white border-b hover:bg-slate-50">
                                     <td className="px-4 py-3 font-medium text-blue-600">{center.code || '-'}</td>
                                     <td className="px-4 py-3 text-slate-900">{center.name}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        <button 
+                                            onClick={() => handleDelete(center.id, center.name)}
+                                            className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"
+                                            title="Eliminar Centro"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                             {centers.length === 0 && (
                                 <tr>
-                                    <td colSpan={2} className="px-4 py-3 text-center text-slate-400">No hay centros registrados</td>
+                                    <td colSpan={3} className="px-4 py-3 text-center text-slate-400">No hay centros registrados</td>
                                 </tr>
                             )}
                         </tbody>
