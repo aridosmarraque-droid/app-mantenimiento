@@ -8,9 +8,10 @@ interface MachineSelectorProps {
   onSelect: (machine: Machine, center: CostCenter) => void;
   selectedDate: Date;
   onChangeDate: (date: Date) => void;
+  hideDate?: boolean; // Nuevo prop opcional
 }
 
-export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, selectedDate, onChangeDate }) => {
+export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, selectedDate, onChangeDate, hideDate = false }) => {
   const [centers, setCenters] = useState<CostCenter[]>([]);
   const [selectedCenterId, setSelectedCenterId] = useState('');
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -53,17 +54,19 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   return (
     <div className="space-y-6">
-       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Fecha de trabajo
-        </label>
-        <input 
-          type="date" 
-          value={formattedDate}
-          onChange={(e) => onChangeDate(new Date(e.target.value))}
-          className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-        />
-       </div>
+       {!hideDate && (
+           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Fecha de trabajo
+            </label>
+            <input 
+              type="date" 
+              value={formattedDate}
+              onChange={(e) => onChangeDate(new Date(e.target.value))}
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+           </div>
+       )}
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
