@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus } from '../../services/db';
-import { CostCenter, Machine, MaintenanceDefinition } from '../../types';
+import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus, getSubCenters } from '../../services/db';
+import { CostCenter, Machine, MaintenanceDefinition, SubCenter } from '../../types';
 import { Save, ArrowLeft, Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 
 interface Props {
@@ -11,19 +11,21 @@ interface Props {
 }
 
 export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBack, onSuccess }) => {
-    // We keep local state for the machine to show updates immediately
     const [machine, setMachine] = useState<Machine>(initialMachine);
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [subCenters, setSubCenters] = useState<SubCenter[]>([]);
     const [loading, setLoading] = useState(false);
     
     // --- EDITING STATES ---
     const [name, setName] = useState(machine.name);
     const [companyCode, setCompanyCode] = useState(machine.companyCode || '');
     const [centerId, setCenterId] = useState(machine.costCenterId);
+    const [subCenterId, setSubCenterId] = useState(machine.subCenterId || ''); // Nuevo
     const [currentHours, setCurrentHours] = useState(machine.currentHours);
     const [requiresHours, setRequiresHours] = useState(machine.requiresHours);
     const [adminExpenses, setAdminExpenses] = useState(machine.adminExpenses);
     const [transportExpenses, setTransportExpenses] = useState(machine.transportExpenses);
+    const [isForWorkReport, setIsForWorkReport] = useState(machine.isForWorkReport || false); // Nuevo
 
     // --- MAINT DEF FORM STATE ---
     const [editingDefId, setEditingDefId] = useState<string | null>(null);
@@ -34,11 +36,12 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
 
     useEffect(() => {
         getCostCenters().then(setCenters);
-        // Ensure we have latest defs
+        getSubCenters().then(setSubCenters);
         calculateAndSyncMachineStatus(initialMachine).then(setMachine);
     }, [initialMachine]);
 
-    // Handle Basic Info Update
+    const filteredSubCenters = subCenters.filter(sc => sc.centerId === centerId);
+
     const handleUpdateBasicInfo = async () => {
         setLoading(true);
         try {
@@ -46,10 +49,12 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 name,
                 companyCode,
                 costCenterId: centerId,
+                subCenterId: subCenterId || undefined,
                 currentHours,
                 requiresHours,
                 adminExpenses,
-                transportExpenses
+                transportExpenses,
+                isForWorkReport
             });
             alert("Datos generales actualizados.");
         } catch (e) {
@@ -95,7 +100,6 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             } else {
                 await addMaintenanceDef(defPayload, machine.currentHours);
             }
-            // Refresh
             const updated = await calculateAndSyncMachineStatus(machine);
             setMachine(updated);
             resetDefForm();
@@ -145,8 +149,27 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Centro</label>
-                        <select className="w-full p-2 border rounded" value={centerId} onChange={e => setCenterId(e.target.value)}>
+                        <select 
+                            className="w-full p-2 border rounded" 
+                            value={centerId} 
+                            onChange={e => {
+                                setCenterId(e.target.value);
+                                setSubCenterId('');
+                            }}
+                        >
                             {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Subcentro</label>
+                        <select 
+                            className="w-full p-2 border rounded disabled:bg-slate-100" 
+                            value={subCenterId} 
+                            onChange={e => setSubCenterId(e.target.value)}
+                            disabled={!centerId}
+                        >
+                            <option value="">-- Ninguno --</option>
+                            {filteredSubCenters.map(sc => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
                         </select>
                     </div>
                     <div>
@@ -155,7 +178,12 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                 </div>
 
-                <div className="flex flex-wrap gap-4 pt-2">
+                <div className="flex flex-wrap gap-4 pt-4 border-t mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer bg-green-50 px-3 py-1 rounded border border-green-200">
+                        <input type="checkbox" checked={isForWorkReport} onChange={e => setIsForWorkReport(e.target.checked)} className="text-green-600"/>
+                        <span className="text-green-800 font-bold">Seleccionable Parte Trabajo</span>
+                    </label>
+
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" checked={requiresHours} onChange={e => setRequiresHours(e.target.checked)} />
                         <span>Control Horas</span>
@@ -170,7 +198,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </label>
                 </div>
 
-                <button onClick={handleUpdateBasicInfo} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
+                <button onClick={handleUpdateBasicInfo} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 mt-2">
                     Guardar Datos Generales
                 </button>
             </div>
@@ -178,8 +206,6 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             {/* Maintenance Definitions Manager */}
             <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
                 <h4 className="font-bold text-slate-700 border-b pb-2">Mantenimientos Programados</h4>
-                
-                {/* List */}
                 <div className="space-y-2">
                     {machine.maintenanceDefs.map(def => (
                         <div key={def.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-3 rounded border border-slate-200 gap-2">
@@ -200,7 +226,6 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     {machine.maintenanceDefs.length === 0 && <p className="text-slate-400 text-sm text-center">Sin mantenimientos definidos.</p>}
                 </div>
 
-                {/* Add/Edit Form */}
                 <div className={`p-4 rounded-lg border-2 ${editingDefId ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-slate-50'} mt-4`}>
                     <h5 className="font-bold text-sm mb-3 flex justify-between items-center">
                         {editingDefId ? 'Editar Mantenimiento' : 'Añadir Nuevo Mantenimiento'}
