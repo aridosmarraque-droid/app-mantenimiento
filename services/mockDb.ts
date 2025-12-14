@@ -1,5 +1,5 @@
 
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, SubCenter, PersonalWorkReport } from '../types';
 
 // --- MOCK DATA ---
 
@@ -12,8 +12,15 @@ export const WORKERS: Worker[] = [
 
 export const COST_CENTERS: CostCenter[] = [
   { id: 'c1', name: 'Maquinaria Móvil' },
-  { id: 'c2', name: 'Cantera Pura Machacadora' },
-  { id: 'c3', name: 'Cantera Pura Molienda' },
+  { id: 'c2', name: 'Cantera Pura' },
+  { id: 'c3', name: 'Cantera Canto Rodado' },
+];
+
+export const SUB_CENTERS: SubCenter[] = [
+  { id: 'sc1', centerId: 'c1', name: 'Palas Cargadoras' },
+  { id: 'sc2', centerId: 'c1', name: 'Retroexcavadoras' },
+  { id: 'sc3', centerId: 'c2', name: 'Machacadora' },
+  { id: 'sc4', centerId: 'c2', name: 'Molienda' },
 ];
 
 const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
@@ -24,19 +31,19 @@ const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
 
 export const MACHINES: Machine[] = [
   { 
-    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false,
+    id: 'm1', costCenterId: 'c1', subCenterId: 'sc1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false, isForWorkReport: true,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm1') 
   },
   { 
-    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false,
+    id: 'm2', costCenterId: 'c1', subCenterId: 'sc2', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false, isForWorkReport: true,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm2')
   },
   { 
-    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false,
+    id: 'm3', costCenterId: 'c2', subCenterId: 'sc3', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false, isForWorkReport: true,
     maintenanceDefs: []
   },
   { 
-    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false,
+    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false, isForWorkReport: false,
     maintenanceDefs: []
   },
 ];
@@ -51,13 +58,29 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
 
 // In-memory store for the session
 let logs: OperationLog[] = [];
-let cpReports: CPDailyReport[] = [];
-// Inicializar con algunos datos de ejemplo si está vacío para pruebas
-if (cpReports.length === 0) {
-    // No añadir datos automáticos para evitar confusión de "día 12"
-}
-
+let cpReports: CPDailyReport[] = []; 
+let personalReports: PersonalWorkReport[] = [];
 let cpPlanning: CPWeeklyPlan[] = [];
+
+// Helper to init default plan if needed
+const initDefaultPlan = () => {
+   const d = new Date();
+   const day = d.getDay();
+   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+   const monday = new Date(d.setDate(diff));
+   const mondayStr = monday.toISOString().split('T')[0];
+
+   cpPlanning.push({
+       id: 'default-plan',
+       mondayDate: mondayStr,
+       hoursMon: 9,
+       hoursTue: 9,
+       hoursWed: 9,
+       hoursThu: 9,
+       hoursFri: 9
+   });
+};
+initDefaultPlan();
 
 // --- SERVICE METHODS ---
 
@@ -67,6 +90,10 @@ export const getWorkers = async (): Promise<Worker[]> => {
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
   return new Promise(resolve => setTimeout(() => resolve(COST_CENTERS), 300));
+};
+
+export const getSubCenters = async (): Promise<SubCenter[]> => {
+    return new Promise(resolve => setTimeout(() => resolve(SUB_CENTERS), 300));
 };
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
@@ -133,7 +160,6 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
 
-// LOGIC CORE for MOCK
 const updateMockMaintenanceStatus = (machineId: string, currentHours: number) => {
     const machine = MACHINES.find(m => m.id === machineId);
     if (!machine) return;
@@ -246,4 +272,11 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     } else {
         cpPlanning.push(plan);
     }
+}
+
+// --- PERSONAL REPORT MOCK ---
+
+export const savePersonalWorkReport = async (report: Omit<PersonalWorkReport, 'id'>): Promise<void> => {
+    personalReports.push({ ...report, id: Math.random().toString() });
+    return new Promise(resolve => setTimeout(resolve, 300));
 }
