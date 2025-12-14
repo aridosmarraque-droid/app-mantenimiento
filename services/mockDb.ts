@@ -7,7 +7,7 @@ export const WORKERS: Worker[] = [
   { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin' },
   { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker' },
   { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker' },
-  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp' }, // Usuario CP
+  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp' }, 
 ];
 
 export const COST_CENTERS: CostCenter[] = [
@@ -56,13 +56,13 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
   { id: 'sp5', name: 'Neumáticos del Sur' },
 ];
 
-// In-memory store for the session
+// In-memory store
 let logs: OperationLog[] = [];
 let cpReports: CPDailyReport[] = []; 
 let personalReports: PersonalWorkReport[] = [];
 let cpPlanning: CPWeeklyPlan[] = [];
 
-// Helper to init default plan if needed
+// Helper to init default plan
 const initDefaultPlan = () => {
    const d = new Date();
    const day = d.getDay();
@@ -279,8 +279,6 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
         cpPlanning.push(plan);
     }
 }
-
-// --- PERSONAL REPORT MOCK ---
 
 export const savePersonalWorkReport = async (report: Omit<PersonalWorkReport, 'id'>): Promise<void> => {
     personalReports.push({ ...report, id: Math.random().toString() });
