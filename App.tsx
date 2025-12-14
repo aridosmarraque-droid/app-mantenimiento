@@ -9,6 +9,7 @@ import { BreakdownForm } from './components/forms/BreakdownForm';
 import { MaintenanceForm } from './components/forms/MaintenanceForm';
 import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
+import { CreateSubCenterForm } from './components/admin/CreateSubCenterForm'; // Nuevo import
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
 import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
@@ -16,25 +17,26 @@ import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
-import { WorkerDashboard } from './components/WorkerDashboard'; // Nuevo
-import { PersonalReportForm } from './components/personal/PersonalReportForm'; // Nuevo
+import { WorkerDashboard } from './components/WorkerDashboard'; 
+import { PersonalReportForm } from './components/personal/PersonalReportForm'; 
 import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData } from './services/db';
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, GitBranch } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
   CP_SELECTION,
   CP_DAILY_REPORT,
-  WORKER_SELECTION, // Nuevo menú para trabajador estándar
-  PERSONAL_REPORT_FORM, // Nuevo form
+  WORKER_SELECTION, 
+  PERSONAL_REPORT_FORM, 
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
   ADMIN_CREATE_CENTER,
+  ADMIN_CREATE_SUBCENTER, // Nuevo estado
   ADMIN_CREATE_MACHINE,
   ADMIN_SELECT_MACHINE_TO_EDIT,
   ADMIN_EDIT_MACHINE,
@@ -354,6 +356,10 @@ function App() {
                       <Factory className="w-5 h-5 text-blue-500" />
                       Nueva Cantera / Grupo
                   </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_SUBCENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <GitBranch className="w-5 h-5 text-blue-500" />
+                      Nuevo Subcentro
+                  </button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <Truck className="w-5 h-5 text-blue-500" />
                       Nueva Máquina
@@ -422,6 +428,13 @@ function App() {
                   <CreateCenterForm 
                     onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
                     onSuccess={() => handleAdminSuccess('Cantera creada correctamente')}
+                  />
+              )}
+
+              {viewState === ViewState.ADMIN_CREATE_SUBCENTER && (
+                  <CreateSubCenterForm 
+                    onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
+                    onSuccess={() => handleAdminSuccess('Subcentro creado correctamente')}
                   />
               )}
 
