@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { createSubCenter, getCostCenters, getSubCenters } from '../../services/db';
+import { createSubCenter, getCostCenters, getSubCenters, deleteSubCenter } from '../../services/db';
 import { CostCenter, SubCenter } from '../../types';
-import { Save, ArrowLeft, GitBranch, Loader2 } from 'lucide-react';
+import { Save, ArrowLeft, GitBranch, Loader2, Trash2 } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -18,17 +18,20 @@ export const CreateSubCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
 
     useEffect(() => {
         getCostCenters().then(setCenters);
-        getSubCenters().then(setSubCenters);
+        loadSubCenters();
     }, []);
+
+    const loadSubCenters = () => {
+        getSubCenters().then(setSubCenters);
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
             await createSubCenter(centerId, name);
-            // Refresh list
-            const updated = await getSubCenters();
-            setSubCenters(updated);
+            loadSubCenters();
+            setName('');
             onSuccess();
         } catch (error) {
             console.error(error);
@@ -37,6 +40,17 @@ export const CreateSubCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             setLoading(false);
         }
     };
+
+    const handleDelete = async (id: string, subName: string) => {
+        if (!confirm(`¿Estás seguro de que quieres eliminar el subcentro "${subName}"?`)) return;
+        try {
+            await deleteSubCenter(id);
+            alert("Subcentro eliminado.");
+            loadSubCenters();
+        } catch (error: any) {
+            alert(error.message || "Error al eliminar");
+        }
+    }
 
     const currentSubCenters = subCenters.filter(sc => sc.centerId === centerId);
 
@@ -110,6 +124,12 @@ export const CreateSubCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                             {currentSubCenters.map(sc => (
                                 <li key={sc.id} className="p-3 bg-slate-50 border border-slate-100 rounded text-slate-700 flex justify-between items-center">
                                     <span>{sc.name}</span>
+                                    <button 
+                                        onClick={() => handleDelete(sc.id, sc.name)}
+                                        className="text-red-500 hover:bg-red-50 p-2 rounded transition-colors"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
                                 </li>
                             ))}
                         </ul>
