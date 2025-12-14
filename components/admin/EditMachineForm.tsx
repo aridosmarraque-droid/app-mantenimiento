@@ -49,7 +49,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 name,
                 companyCode,
                 costCenterId: centerId,
-                subCenterId: subCenterId || undefined,
+                subCenterId: subCenterId, // Pasar directamente, db.ts sanitizará
                 currentHours,
                 requiresHours,
                 adminExpenses,
@@ -59,6 +59,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             alert("Datos generales actualizados.");
         } catch (e) {
             alert("Error al actualizar datos.");
+            console.error(e);
         } finally {
             setLoading(false);
         }
