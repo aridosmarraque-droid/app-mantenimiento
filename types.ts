@@ -16,6 +16,7 @@ export interface Worker {
 export interface CostCenter {
   id: string;
   name: string; // e.g., "Maquinaria Móvil"
+  code?: string; // Nuevo: e.g., "CP", "MM"
 }
 
 export interface SubCenter {
