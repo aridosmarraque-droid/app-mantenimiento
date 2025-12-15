@@ -4,6 +4,16 @@ import * as mock from './mockDb';
 import * as offline from './offlineQueue';
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, PersonalReport } from '../types';
 
+// --- HELPERS ---
+
+// Convierte una fecha local a YYYY-MM-DD sin verse afectada por la zona horaria UTC
+const toLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 // --- MAPPERS (Traducción DB -> App) ---
 
 const mapWorker = (w: any): Worker => ({
@@ -11,9 +21,6 @@ const mapWorker = (w: any): Worker => ({
     name: w.nombre,
     dni: w.dni,
     phone: w.telefono,
-    // La tabla mant_trabajadores no parece tener una columna de array 'posiciones', 
-    // pero existe mant_trabajadores_puestos. Por simplicidad y rendimiento, 
-    // devolvemos array vacío o lo gestionamos si es crítico más adelante.
     positionIds: [], 
     role: w.rol
 });
@@ -24,27 +31,25 @@ const mapDef = (d: any): MaintenanceDefinition => ({
     name: d.nombre,
     intervalHours: d.intervalo_horas,
     tasks: d.tareas,
-    warningHours: d.horas_preaviso, // DB: horas_preaviso
-    // La DB tiene columnas de estado, las usamos si existen
+    warningHours: d.horas_preaviso, 
     pending: d.pendiente || false,
     remainingHours: d.horas_restantes !== undefined ? d.horas_restantes : 0,
     lastMaintenanceHours: d.ultimas_horas_realizadas
 });
 
 const mapMachine = (m: any): Machine => {
-    // La relación en supabase suele devolver el nombre de la tabla relacionada
     const defs = m.mant_mantenimientos_def; 
     return {
         id: m.id,
-        costCenterId: m.centro_id, // DB: centro_id
+        costCenterId: m.centro_id, 
         name: m.nombre,
         companyCode: m.codigo_empresa,
         currentHours: m.horas_actuales,
-        requiresHours: m.requiere_horas, // DB: requiere_horas
+        requiresHours: m.requiere_horas, 
         adminExpenses: m.gastos_admin,
         transportExpenses: m.gastos_transporte,
         maintenanceDefs: defs ? defs.map(mapDef) : [],
-        selectableForReports: m.es_parte_trabajo // DB: es_parte_trabajo
+        selectableForReports: m.es_parte_trabajo 
     };
 };
 
@@ -73,7 +78,6 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
 export const getWorkers = async (): Promise<Worker[]> => {
     if (!isConfigured) return mock.getWorkers();
     
-    // Tabla: mant_trabajadores
     const { data, error } = await supabase.from('mant_trabajadores').select('*').eq('activo', true);
     if (error) { 
         console.error("DB Error getWorkers:", error); 
@@ -85,7 +89,6 @@ export const getWorkers = async (): Promise<Worker[]> => {
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
     
-    // Tabla: mant_centros
     const { data, error } = await supabase.from('mant_centros').select('*');
     if (error) { console.error("getCostCenters", error); return []; }
     return data.map((c: any) => ({ id: c.id, name: c.nombre }));
@@ -124,7 +127,6 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
     
-    // Tabla: mant_maquinas, Relación: mant_mantenimientos_def
     const { data, error } = await supabase
         .from('mant_maquinas')
         .select('*, mant_mantenimientos_def(*)')
@@ -146,7 +148,6 @@ export const getAllMachines = async (): Promise<Machine[]> => {
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
     if (!isConfigured) return mock.createMachine(machine);
     
-    // 1. Insert Machine en mant_maquinas
     const { data: mData, error: mError } = await supabase.from('mant_maquinas').insert({
         centro_id: machine.costCenterId,
         nombre: machine.name,
@@ -160,7 +161,6 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
     if (mError) throw mError;
 
-    // 2. Insert Defs en mant_mantenimientos_def
     if (machine.maintenanceDefs.length > 0) {
         const defsToInsert = machine.maintenanceDefs.map(d => ({
             maquina_id: mData.id,
@@ -203,7 +203,7 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
         intervalo_horas: def.intervalHours,
         tareas: def.tasks,
         horas_preaviso: def.warningHours,
-        pendiente: false // Default
+        pendiente: false
     }).select().single();
 
     if (error) throw error;
@@ -229,7 +229,6 @@ export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
 
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
     if (!isConfigured) return mock.getServiceProviders();
-    // Tabla: mant_proveedores
     const { data, error } = await supabase.from('mant_proveedores').select('*');
     if (error) { console.error("getServiceProviders", error); return []; }
     return data.map((p: any) => ({ id: p.id, name: p.nombre }));
@@ -238,7 +237,6 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
 export const getLastMaintenanceLog = async (machineId: string, defId: string): Promise<OperationLog | undefined> => {
     if (!isConfigured) return mock.getLastMaintenanceLog(machineId, defId);
     
-    // Tabla: mant_registros
     const { data, error } = await supabase.from('mant_registros')
         .select('*')
         .eq('maquina_id', machineId)
@@ -284,13 +282,11 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         const { data, error } = await supabase.from('mant_registros').insert(dbLog).select().single();
         if (error) throw error;
 
-        // Actualizar horas máquina
         const { data: mData } = await supabase.from('mant_maquinas').select('horas_actuales').eq('id', log.machineId).single();
         if (mData && log.hoursAtExecution > mData.horas_actuales) {
             await supabase.from('mant_maquinas').update({ horas_actuales: log.hoursAtExecution }).eq('id', log.machineId);
         }
         
-        // Si es un mantenimiento programado, actualizar la definición (ultimas_horas_realizadas)
         if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
              await supabase.from('mant_mantenimientos_def')
                 .update({ ultimas_horas_realizadas: log.hoursAtExecution, pendiente: false })
@@ -421,18 +417,22 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
     if (!navigator.onLine) return [];
 
     try {
+        // CORRECCIÓN CLAVE: Usar strings YYYY-MM-DD locales para evitar desfases UTC
+        const startStr = toLocalDateString(startDate);
+        const endStr = toLocalDateString(endDate);
+
         const { data, error } = await supabase
             .from('cp_partes_diarios')
             .select('*')
-            .gte('fecha', startDate.toISOString())
-            .lte('fecha', endDate.toISOString())
+            .gte('fecha', startStr)
+            .lte('fecha', endStr)
             .order('fecha', { ascending: true });
         
         if (error) throw error;
 
         return data.map((d: any) => ({
             id: d.id,
-            date: new Date(d.fecha),
+            date: new Date(d.fecha), // Al recibirlo, JS lo convierte a local
             workerId: d.trabajador_id,
             crusherStart: d.machacadora_inicio,
             crusherEnd: d.machacadora_fin,
@@ -455,10 +455,13 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
     }
 
     try {
+        // Usar formato fecha local para guardar, asegurando que se guarde el día correcto
+        const dateStr = toLocalDateString(report.date);
+
         const { error } = await supabase
             .from('cp_partes_diarios')
             .insert({
-                fecha: report.date.toISOString(),
+                fecha: dateStr,
                 trabajador_id: report.workerId,
                 machacadora_inicio: report.crusherStart,
                 machacadora_fin: report.crusherEnd,
@@ -533,7 +536,6 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return mock.getPersonalReports(workerId);
     
-    // Tabla: partes_trabajo
     const { data, error } = await supabase
         .from('partes_trabajo')
         .select(`
@@ -570,8 +572,10 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
     }
 
     try {
+        const dateStr = toLocalDateString(report.date);
+
         const { error } = await supabase.from('partes_trabajo').insert({
-            fecha: report.date.toISOString(),
+            fecha: dateStr,
             trabajador_id: report.workerId,
             horas: report.hours,
             maquina_id: report.machineId,
@@ -638,8 +642,12 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
 
             } else if (item.type === 'CP_REPORT') {
                 const report = item.payload;
+                // Parse date to ensure format
+                const d = new Date(report.date);
+                const dateStr = toLocalDateString(d);
+
                 const { error } = await supabase.from('cp_partes_diarios').insert({
-                    fecha: report.date,
+                    fecha: dateStr,
                     trabajador_id: report.workerId,
                     machacadora_inicio: report.crusherStart,
                     machacadora_fin: report.crusherEnd,
@@ -663,8 +671,11 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
             
             } else if (item.type === 'PERSONAL_REPORT') {
                 const report = item.payload;
+                const d = new Date(report.date);
+                const dateStr = toLocalDateString(d);
+
                 const { error } = await supabase.from('partes_trabajo').insert({
-                    fecha: report.date,
+                    fecha: dateStr,
                     trabajador_id: report.workerId,
                     horas: report.hours,
                     maquina_id: report.machineId,
