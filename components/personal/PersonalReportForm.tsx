@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { PersonalReport, CostCenter, Machine } from '../../types';
-import { getCostCenters, getMachinesByCenter, getPersonalReports } from '../../services/db';
+import { getCostCenters, getAllMachines, getPersonalReports } from '../../services/db';
 import { Save, ArrowLeft, Loader2, Calendar, Clock, Factory, Truck, ClipboardList } from 'lucide-react';
 
 interface Props {
@@ -19,7 +19,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
     const [centers, setCenters] = useState<CostCenter[]>([]);
     const [selectedCenterId, setSelectedCenterId] = useState('');
     
-    const [machines, setMachines] = useState<Machine[]>([]);
+    const [allSelectableMachines, setAllSelectableMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState('');
     
     const [hours, setHours] = useState<number | ''>('');
@@ -31,24 +31,29 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
         loadInitialData();
     }, []);
 
-    useEffect(() => {
-        if (selectedCenterId) {
-            loadMachines(selectedCenterId);
-        } else {
-            setMachines([]);
-            setSelectedMachineId('');
-        }
-    }, [selectedCenterId]);
-
     const loadInitialData = async () => {
         setLoadingData(true);
         try {
-            const [centersData, historyData] = await Promise.all([
+            const [centersData, historyData, machinesData] = await Promise.all([
                 getCostCenters(),
-                getPersonalReports(workerId)
+                getPersonalReports(workerId),
+                getAllMachines()
             ]);
             setCenters(centersData);
             setHistory(historyData);
+            
+            // Filtrar y Ordenar máquinas seleccionables
+            const selectable = machinesData.filter(m => m.selectableForReports === true);
+            selectable.sort((a, b) => {
+                 const codeA = a.companyCode || '';
+                 const codeB = b.companyCode || '';
+                 if (codeA && codeB) return codeA.localeCompare(codeB);
+                 if (codeA) return -1; 
+                 if (codeB) return 1;  
+                 return a.name.localeCompare(b.name);
+            });
+            setAllSelectableMachines(selectable);
+            
         } catch (error) {
             console.error(error);
         } finally {
@@ -56,13 +61,13 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
         }
     };
 
-    const loadMachines = async (centerId: string) => {
-        const allMachines = await getMachinesByCenter(centerId);
-        // Filter: Only machines marked as 'selectableForReports'
-        // If the flag is undefined (legacy data), we assume false unless explicitly true? 
-        // Or show all? The prompt said "maquinas con la marca".
-        const selectable = allMachines.filter(m => m.selectableForReports === true);
-        setMachines(selectable);
+    const handleMachineChange = (machineId: string) => {
+        setSelectedMachineId(machineId);
+        // Autocompletar centro
+        const m = allSelectableMachines.find(mac => mac.id === machineId);
+        if (m) {
+            setSelectedCenterId(m.costCenterId);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -109,45 +114,46 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                         className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     />
                 </div>
-
-                {/* 2. Center */}
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                
+                {/* 2. Machine (Principal Selection) */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                     <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                        <Factory size={16} className="text-green-600"/> Centro de Trabajo
+                        <Truck size={16} className="text-green-600"/> Máquina / Tajo
+                    </label>
+                    <select
+                        value={selectedMachineId}
+                        onChange={e => handleMachineChange(e.target.value)}
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    >
+                        <option value="">-- Seleccionar Máquina --</option>
+                        {allSelectableMachines.map(m => {
+                             // Encontrar nombre del centro para mostrarlo como grupo
+                             const cName = centers.find(c => c.id === m.costCenterId)?.name || 'Sin Centro';
+                             return (
+                                <option key={m.id} value={m.id}>
+                                    {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} ({cName})
+                                </option>
+                             );
+                        })}
+                    </select>
+                </div>
+
+                {/* 3. Center (Auto-filled but visible) */}
+                <div className="bg-slate-100 p-4 rounded-xl shadow-sm border border-slate-200">
+                    <label className="block text-sm font-bold text-slate-500 mb-2 flex items-center gap-2">
+                        <Factory size={16} className="text-slate-400"/> Centro de Trabajo (Auto)
                     </label>
                     <select
                         value={selectedCenterId}
-                        onChange={e => setSelectedCenterId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        disabled // Disabled as it is auto-filled
+                        className="w-full p-3 border border-slate-300 rounded-lg bg-slate-200 text-slate-600"
                     >
-                        <option value="">-- Seleccionar Centro --</option>
+                        <option value="">-- Seleccione Máquina Primero --</option>
                         {centers.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                     </select>
                 </div>
-
-                {/* 3. Machine */}
-                {selectedCenterId && (
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 animate-fade-in">
-                        <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                            <Truck size={16} className="text-green-600"/> Máquina / Tajo
-                        </label>
-                        <select
-                            value={selectedMachineId}
-                            onChange={e => setSelectedMachineId(e.target.value)}
-                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        >
-                            <option value="">-- Seleccionar Máquina --</option>
-                            {machines.map(m => (
-                                <option key={m.id} value={m.id}>{m.name} {m.companyCode ? `(${m.companyCode})` : ''}</option>
-                            ))}
-                        </select>
-                        {machines.length === 0 && (
-                            <p className="text-xs text-amber-600 mt-2">No hay máquinas seleccionables en este centro.</p>
-                        )}
-                    </div>
-                )}
 
                 {/* 4. Hours */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
@@ -198,3 +204,4 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
         </form>
     );
 };
+
