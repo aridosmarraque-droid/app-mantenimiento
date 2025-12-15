@@ -1,5 +1,5 @@
 
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, PersonalReport } from '../types';
 
 // --- MOCK DATA ---
 
@@ -24,19 +24,19 @@ const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
 
 export const MACHINES: Machine[] = [
   { 
-    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false,
+    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false, selectableForReports: true,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm1') 
   },
   { 
-    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false,
+    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false, selectableForReports: true,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm2')
   },
   { 
-    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false,
+    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false, selectableForReports: true,
     maintenanceDefs: []
   },
   { 
-    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false,
+    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false, selectableForReports: false,
     maintenanceDefs: []
   },
 ];
@@ -52,12 +52,13 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
 // In-memory store for the session
 let logs: OperationLog[] = [];
 let cpReports: CPDailyReport[] = [];
-// Inicializar con algunos datos de ejemplo si está vacío para pruebas
-if (cpReports.length === 0) {
-    // No añadir datos automáticos para evitar confusión de "día 12"
-}
-
+let personalReports: PersonalReport[] = []; 
 let cpPlanning: CPWeeklyPlan[] = [];
+
+// Initialize some dummy personal reports
+personalReports.push({
+    id: 'pr1', date: new Date(), workerId: '4', hours: 8, machineId: 'm3', costCenterId: 'c2', machineName: 'Machacadora Primaria', costCenterName: 'Cantera Pura Machacadora'
+});
 
 // --- SERVICE METHODS ---
 
@@ -255,4 +256,25 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
         cpPlanning.push(plan);
     }
 }
-       
+
+// --- PERSONAL REPORT MOCK ---
+
+export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
+    personalReports.push({ 
+        ...report, 
+        id: Math.random().toString(),
+        machineName: MACHINES.find(m => m.id === report.machineId)?.name,
+        costCenterName: COST_CENTERS.find(c => c.id === report.costCenterId)?.name
+    });
+}
+
+export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const filtered = personalReports.filter(r => r.workerId === workerId);
+            filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
+            resolve(filtered.slice(0, 5));
+        }, 300);
+    });
+}
+
