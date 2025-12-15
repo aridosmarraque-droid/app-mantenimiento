@@ -11,7 +11,6 @@ interface Props {
 
 export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [name, setName] = useState('');
-    const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [centers, setCenters] = useState<CostCenter[]>([]);
 
@@ -27,11 +26,11 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await createCostCenter(name, code);
+            await createCostCenter(name);
             setName('');
-            setCode('');
             loadCenters();
-            onSuccess();
+            // Optional: onSuccess(); if we want to close immediately, but staying to create more is often better in lists
+            alert("Cantera creada");
         } catch (error) {
             console.error(error);
             alert("Error al crear centro");
@@ -40,104 +39,64 @@ export const CreateCenterForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         }
     };
 
-    const handleDelete = async (id: string, centerName: string) => {
-        if (!confirm(`¿Estás seguro de que quieres eliminar la cantera "${centerName}"? Esta acción no se puede deshacer.`)) return;
-        
+    const handleDelete = async (id: string) => {
+        if(!confirm("¿Seguro que quieres eliminar esta cantera?")) return;
         try {
             await deleteCostCenter(id);
-            alert("Centro eliminado correctamente.");
             loadCenters();
-        } catch (error: any) {
-            console.error(error);
-            alert(error.message || "No se pudo eliminar el centro.");
+        } catch(e) {
+            alert("Error al eliminar");
         }
-    }
+    };
 
     return (
-        <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <div className="flex items-center gap-2 mb-4 border-b pb-2">
-                    <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
-                        <ArrowLeft className="w-5 h-5" />
-                    </button>
-                    <h3 className="text-xl font-bold text-slate-800">Nueva Cantera / Grupo</h3>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Cantera / Grupo *</label>
-                        <input
-                            type="text"
-                            required
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            placeholder="Ej. Cantera Machacadora"
-                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno (Opcional)</label>
-                        <input
-                            type="text"
-                            value={code}
-                            onChange={e => setCode(e.target.value)}
-                            placeholder="Ej. CP, MM, TALLER..."
-                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p className="text-xs text-slate-400 mt-1">Código corto para identificar el centro.</p>
-                    </div>
-
-                    <button 
-                        type="submit" 
-                        disabled={loading}
-                        className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400"
-                    >
-                        {loading ? <Loader2 className="animate-spin" /> : <Save className="w-5 h-5" />}
-                        {loading ? 'Guardando...' : 'Crear'}
-                    </button>
-                </form>
+        <div className="bg-white p-6 rounded-xl shadow-md space-y-6">
+            <div className="flex items-center gap-2 border-b pb-2">
+                <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
+                    <ArrowLeft className="w-5 h-5" />
+                </button>
+                <h3 className="text-xl font-bold text-slate-800">Gestionar Canteras</h3>
             </div>
 
-            {/* Listado de Centros Existentes */}
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
-                    <Factory className="w-4 h-4 text-slate-500"/> Canteras Existentes
-                </h4>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-500">
-                        <thead className="text-xs text-slate-700 uppercase bg-slate-50">
-                            <tr>
-                                <th className="px-4 py-3">Código</th>
-                                <th className="px-4 py-3">Nombre</th>
-                                <th className="px-4 py-3 text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {centers.map((center, idx) => (
-                                <tr key={center.id} className="bg-white border-b hover:bg-slate-50">
-                                    <td className="px-4 py-3 font-medium text-blue-600">{center.code || '-'}</td>
-                                    <td className="px-4 py-3 text-slate-900">{center.name}</td>
-                                    <td className="px-4 py-3 text-right">
-                                        <button 
-                                            onClick={() => handleDelete(center.id, center.name)}
-                                            className="text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors"
-                                            title="Eliminar Centro"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {centers.length === 0 && (
-                                <tr>
-                                    <td colSpan={3} className="px-4 py-3 text-center text-slate-400">No hay centros registrados</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+            <form onSubmit={handleSubmit} className="space-y-4 bg-slate-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-slate-700">Añadir Nueva</h4>
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
+                    <input
+                        type="text"
+                        required
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="Ej. Cantera Machacadora"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
                 </div>
+
+                <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400"
+                >
+                    <Save className="w-5 h-5" /> {loading ? 'Guardando...' : 'Crear'}
+                </button>
+            </form>
+
+            <div className="space-y-2">
+                <h4 className="font-semibold text-slate-700">Canteras Existentes</h4>
+                {centers.length === 0 && <p className="text-slate-400 text-sm">No hay canteras registradas.</p>}
+                {centers.map(c => (
+                    <div key={c.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50">
+                        <div className="flex items-center gap-2">
+                            <Factory size={16} className="text-slate-400"/>
+                            <span className="font-medium text-slate-700">{c.name}</span>
+                        </div>
+                        <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:bg-red-50 p-2 rounded">
+                            <Trash2 size={18} />
+                        </button>
+                    </div>
+                ))}
             </div>
         </div>
     );
 };
+   
