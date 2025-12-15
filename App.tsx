@@ -14,8 +14,8 @@ import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
-import { WorkerSelection } from './components/worker/WorkerSelection';
-import { PersonalReportForm } from './components/worker/PersonalReportForm';
+import { WorkerSelection } from './components/personal/WorkerSelection';
+import { PersonalReportForm } from './components/personal/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
 import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan, savePersonalReport } from './services/db';
@@ -27,8 +27,8 @@ import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Se
 
 enum ViewState {
   LOGIN,
-  WORKER_SELECTION, // Nuevo estado
-  PERSONAL_REPORT,  // Nuevo estado
+  WORKER_SELECTION,
+  PERSONAL_REPORT,
   CP_SELECTION,
   CP_DAILY_REPORT,
   CONTEXT_SELECTION,
