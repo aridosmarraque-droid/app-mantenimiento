@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus } from '../../services/db';
-import { CostCenter, Machine, MaintenanceDefinition } from '../../types';
+import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus, getWorkers } from '../../services/db';
+import { CostCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
 import { Save, ArrowLeft, Plus, Trash2, Edit2, X } from 'lucide-react';
 
 interface Props {
@@ -14,12 +14,14 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     // We keep local state for the machine to show updates immediately
     const [machine, setMachine] = useState<Machine>(initialMachine);
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(false);
     
     // --- EDITING STATES ---
     const [name, setName] = useState(machine.name);
     const [companyCode, setCompanyCode] = useState(machine.companyCode || '');
     const [centerId, setCenterId] = useState(machine.costCenterId);
+    const [responsibleId, setResponsibleId] = useState(machine.responsibleWorkerId || '');
     const [currentHours, setCurrentHours] = useState(machine.currentHours);
     const [requiresHours, setRequiresHours] = useState(machine.requiresHours);
     const [adminExpenses, setAdminExpenses] = useState(machine.adminExpenses);
@@ -29,12 +31,21 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     // --- MAINT DEF FORM STATE ---
     const [editingDefId, setEditingDefId] = useState<string | null>(null);
     const [defName, setDefName] = useState('');
+    const [defType, setDefType] = useState<'HOURS' | 'DATE'>('HOURS');
+    
+    // Hours
     const [defInterval, setDefInterval] = useState<number | ''>('');
     const [defWarning, setDefWarning] = useState<number | ''>('');
+    
+    // Date
+    const [defIntervalMonths, setDefIntervalMonths] = useState<number | ''>('');
+    const [defNextDate, setDefNextDate] = useState('');
+
     const [defTasks, setDefTasks] = useState('');
 
     useEffect(() => {
         getCostCenters().then(setCenters);
+        getWorkers().then(setWorkers);
         // Ensure we have latest defs
         calculateAndSyncMachineStatus(initialMachine).then(setMachine);
     }, [initialMachine]);
@@ -47,6 +58,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 name,
                 companyCode,
                 costCenterId: centerId,
+                responsibleWorkerId: responsibleId || undefined,
                 currentHours,
                 requiresHours,
                 adminExpenses,
@@ -65,31 +77,46 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     const resetDefForm = () => {
         setEditingDefId(null);
         setDefName('');
+        setDefType('HOURS');
         setDefInterval('');
         setDefWarning('');
+        setDefIntervalMonths('');
+        setDefNextDate('');
         setDefTasks('');
     };
 
     const handleEditClick = (def: MaintenanceDefinition) => {
         setEditingDefId(def.id!);
         setDefName(def.name);
-        setDefInterval(def.intervalHours);
-        setDefWarning(def.warningHours);
+        setDefType(def.maintenanceType || 'HOURS');
+        setDefInterval(def.intervalHours || '');
+        setDefWarning(def.warningHours || '');
+        setDefIntervalMonths(def.intervalMonths || '');
+        setDefNextDate(def.nextDate ? def.nextDate.toISOString().split('T')[0] : '');
         setDefTasks(def.tasks);
     };
 
     const handleSaveDef = async () => {
-        if (!defName || !defInterval || !defWarning) return;
+        if (!defName) return;
         setLoading(true);
 
         const defPayload: MaintenanceDefinition = {
             id: editingDefId || undefined,
             machineId: machine.id,
             name: defName,
-            intervalHours: Number(defInterval),
-            warningHours: Number(defWarning),
+            maintenanceType: defType,
+            intervalHours: 0,
+            warningHours: 0,
             tasks: defTasks
         };
+
+        if (defType === 'HOURS') {
+            defPayload.intervalHours = Number(defInterval);
+            defPayload.warningHours = Number(defWarning);
+        } else {
+             defPayload.intervalMonths = Number(defIntervalMonths);
+             defPayload.nextDate = new Date(defNextDate);
+        }
 
         try {
             if (editingDefId) {
@@ -152,7 +179,14 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Responsable</label>
+                        <select className="w-full p-2 border rounded" value={responsibleId} onChange={e => setResponsibleId(e.target.value)}>
+                             <option value="">-- Sin Responsable --</option>
+                            {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kilómetros Actuales</label>
                         <input type="number" className="w-full p-2 border rounded" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} />
                     </div>
                 </div>
@@ -160,7 +194,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 <div className="flex flex-col gap-2 pt-2">
                     <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-2 rounded">
                         <input type="checkbox" checked={requiresHours} onChange={e => setRequiresHours(e.target.checked)} className="w-5 h-5" />
-                        <span className="font-medium text-slate-700">Control Horas</span>
+                        <span className="font-medium text-slate-700">Control Horas/Kms</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer bg-green-50 p-2 rounded border border-green-100">
@@ -195,7 +229,12 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                         <div key={def.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-3 rounded border border-slate-200 gap-2">
                             <div>
                                 <p className="font-bold text-slate-800">{def.name}</p>
-                                <p className="text-xs text-slate-500">Cada {def.intervalHours}h (Aviso {def.warningHours}h) - {def.tasks}</p>
+                                <p className="text-xs text-slate-500">
+                                     {def.maintenanceType === 'HOURS' 
+                                            ? `Cada ${def.intervalHours}h (Aviso ${def.warningHours}h)`
+                                            : `Por Fecha: ${def.nextDate?.toLocaleDateString()} (Cada ${def.intervalMonths || 0} meses)`
+                                     }
+                                </p>
                             </div>
                             <div className="flex gap-2 self-end sm:self-auto">
                                 <button onClick={() => handleEditClick(def)} className="p-2 text-blue-600 hover:bg-blue-100 rounded">
@@ -218,28 +257,64 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </h5>
                     
                     <div className="space-y-3">
+                         <div className="flex gap-2 mb-2">
+                            <button 
+                                type="button"
+                                onClick={() => setDefType('HOURS')}
+                                className={`flex-1 py-1 text-sm font-bold rounded ${defType === 'HOURS' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}
+                            >
+                                Por Horas
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setDefType('DATE')}
+                                className={`flex-1 py-1 text-sm font-bold rounded ${defType === 'DATE' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}
+                            >
+                                Por Fecha
+                            </button>
+                        </div>
+
                         <input 
                             placeholder="Nombre (ej. Mantenimiento 500h)" 
                             className="w-full p-2 border rounded"
                             value={defName}
                             onChange={e => setDefName(e.target.value)}
                         />
-                        <div className="flex gap-2">
-                            <input 
-                                type="number" 
-                                placeholder="Intervalo" 
-                                className="w-1/2 p-2 border rounded"
-                                value={defInterval}
-                                onChange={e => setDefInterval(Number(e.target.value))}
-                            />
-                            <input 
-                                type="number" 
-                                placeholder="Preaviso" 
-                                className="w-1/2 p-2 border rounded"
-                                value={defWarning}
-                                onChange={e => setDefWarning(Number(e.target.value))}
-                            />
-                        </div>
+                        
+                        {defType === 'HOURS' ? (
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" 
+                                    placeholder="Intervalo" 
+                                    className="w-1/2 p-2 border rounded"
+                                    value={defInterval}
+                                    onChange={e => setDefInterval(Number(e.target.value))}
+                                />
+                                <input 
+                                    type="number" 
+                                    placeholder="Preaviso" 
+                                    className="w-1/2 p-2 border rounded"
+                                    value={defWarning}
+                                    onChange={e => setDefWarning(Number(e.target.value))}
+                                />
+                            </div>
+                        ) : (
+                             <div className="flex gap-2">
+                                <input 
+                                    type="date" 
+                                    className="w-1/2 p-2 border rounded"
+                                    value={defNextDate}
+                                    onChange={e => setDefNextDate(e.target.value)}
+                                />
+                                <input 
+                                    type="number" 
+                                    placeholder="Repetir (Meses)" 
+                                    className="w-1/2 p-2 border rounded"
+                                    value={defIntervalMonths}
+                                    onChange={e => setDefIntervalMonths(Number(e.target.value))}
+                                />
+                            </div>
+                        )}
                         <textarea 
                             placeholder="Tareas..." 
                             className="w-full p-2 border rounded"
@@ -249,7 +324,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                         />
                         <button 
                             onClick={handleSaveDef} 
-                            disabled={loading || !defName || !defInterval}
+                            disabled={loading || !defName}
                             className={`w-full py-2 rounded font-bold flex items-center justify-center gap-2 ${editingDefId ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
                         >
                             {editingDefId ? <Save size={18}/> : <Plus size={18}/>}
@@ -261,3 +336,4 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
         </div>
     );
 };
+
