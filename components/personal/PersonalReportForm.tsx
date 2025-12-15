@@ -31,7 +31,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             location,
             description
         });
-        // Parent component handles navigation/state reset
     };
 
     return (
