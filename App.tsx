@@ -9,7 +9,6 @@ import { BreakdownForm } from './components/forms/BreakdownForm';
 import { MaintenanceForm } from './components/forms/MaintenanceForm';
 import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
-import { CreateSubCenterForm } from './components/admin/CreateSubCenterForm'; 
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
 import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
@@ -17,26 +16,21 @@ import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
-import { WorkerDashboard } from './components/WorkerDashboard'; 
-import { PersonalReportForm } from './components/personal/PersonalReportForm'; 
-import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData } from './services/db';
+import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan } from './services/db';
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, GitBranch, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
   CP_SELECTION,
   CP_DAILY_REPORT,
-  WORKER_SELECTION, 
-  PERSONAL_REPORT_FORM, 
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
   ADMIN_CREATE_CENTER,
-  ADMIN_CREATE_SUBCENTER, 
   ADMIN_CREATE_MACHINE,
   ADMIN_SELECT_MACHINE_TO_EDIT,
   ADMIN_EDIT_MACHINE,
@@ -62,13 +56,13 @@ function App() {
 
   // Menu State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [adminMenuSection, setAdminMenuSection] = useState<string | null>(null);
 
   useEffect(() => {
       const handleStatusChange = () => {
           setIsOnline(navigator.onLine);
       };
       
+      // Update pending items count periodically
       const checkQueue = () => {
           setPendingItems(getQueue().length);
       };
@@ -105,14 +99,10 @@ function App() {
 
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
-    if (worker.role === 'admin') {
-        // Admins go straight to context selection or can open menu
-        setViewState(ViewState.CONTEXT_SELECTION);
-    } else if (worker.role === 'cp') {
+    if (worker.role === 'cp') {
         setViewState(ViewState.CP_SELECTION);
     } else {
-        // Standard workers now have a dashboard too
-        setViewState(ViewState.WORKER_SELECTION);
+        setViewState(ViewState.CONTEXT_SELECTION);
     }
   };
 
@@ -144,22 +134,65 @@ function App() {
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
       try {
+          // 1. Guardar en Base de Datos (o cola offline)
           await saveCPReport(data);
+          
           setSuccessMsg('Guardando...');
           
+          // 2. Calcular Eficiencia y Generar PDF (Solo si hay usuario logueado y online para enviar mail)
           if (currentUser && navigator.onLine) {
-              setSuccessMsg('Generando PDF y Enviando...');
-              const pdfBase64 = generateCPReportPDF(data, currentUser.name);
+              setSuccessMsg('Analizando datos y generando PDF...');
+              
+              // A. Obtener fecha lunes para buscar planificación
+              const d = new Date(data.date);
+              const day = d.getDay();
+              const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+              const monday = new Date(d);
+              monday.setDate(diff);
+              const mondayStr = monday.toISOString().split('T')[0];
+
+              // B. Buscar Plan
+              const plan = await getCPWeeklyPlan(mondayStr);
+              
+              // C. Obtener horas planificadas para HOY
+              let plannedHours = 8; // Default
+              if (plan) {
+                  switch(day) {
+                      case 1: plannedHours = plan.hoursMon; break;
+                      case 2: plannedHours = plan.hoursTue; break;
+                      case 3: plannedHours = plan.hoursWed; break;
+                      case 4: plannedHours = plan.hoursThu; break;
+                      case 5: plannedHours = plan.hoursFri; break;
+                      default: plannedHours = 0; // Findes
+                  }
+              }
+
+              // D. Calcular Eficiencia (Molienda)
+              const actualHours = data.millsEnd - data.millsStart;
+              const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
+
+              // E. Generar PDF con los nuevos datos
+              const pdfBase64 = generateCPReportPDF(data, currentUser.name, plannedHours, efficiency);
+              
               const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
               const emailHtml = `
                 <h2>Parte Diario de Producción</h2>
                 <p><strong>Fecha:</strong> ${data.date.toLocaleDateString()}</p>
                 <p><strong>Operario:</strong> ${currentUser.name}</p>
+                <hr/>
+                <p><strong>Resumen de Rendimiento (Molienda):</strong></p>
+                <ul>
+                    <li>Horas Reales: ${actualHours}h</li>
+                    <li>Horas Planificadas: ${plannedHours}h</li>
+                    <li>Eficiencia: <strong>${efficiency.toFixed(1)}%</strong></li>
+                </ul>
+                <br/>
                 <p>Adjunto encontrarás el informe detallado en PDF.</p>
                 <br/>
                 <p><em>GMAO Aridos Marraque</em></p>
               `;
 
+              setSuccessMsg('Enviando Email...');
               const { success } = await sendEmail(
                   ['aridos@marraque.es'], 
                   emailSubject, 
@@ -207,6 +240,8 @@ function App() {
           ? logData.hoursAtExecution 
           : selectedContext.machine.currentHours;
 
+      // Optimistic update for UI if online, or local logic
+      // Note: calculateAndSyncMachineStatus checks online status internally now
       try {
           const tempMachine = { ...selectedContext.machine, currentHours: newHours };
           const updatedMachine = await calculateAndSyncMachineStatus(tempMachine);
@@ -215,7 +250,9 @@ function App() {
               ...selectedContext,
               machine: updatedMachine
           });
-      } catch (err) {}
+      } catch (err) {
+           // Ignore errors in optimistic UI update
+      }
 
       setSuccessMsg(navigator.onLine ? 'Operación registrada' : 'Guardado en dispositivo (Sin Red)');
       setTimeout(() => {
@@ -237,11 +274,6 @@ function App() {
       }, 1500);
   };
 
-  const toggleAdminSection = (section: string) => {
-      if (adminMenuSection === section) setAdminMenuSection(null);
-      else setAdminMenuSection(section);
-  };
-
   if (viewState === ViewState.LOGIN) {
       return (
         <div className="flex flex-col min-h-screen">
@@ -255,44 +287,13 @@ function App() {
       );
   }
 
-  // Selección Menú: Cantera Pura
   if (viewState === ViewState.CP_SELECTION && currentUser) {
       return (
           <CPSelection 
             workerName={currentUser.name}
             onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
             onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)}
-            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT_FORM)}
             onLogout={handleLogout}
-          />
-      );
-  }
-
-  // Selección Menú: Trabajador Estándar
-  if (viewState === ViewState.WORKER_SELECTION && currentUser) {
-      return (
-          <WorkerDashboard 
-            workerName={currentUser.name}
-            onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
-            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT_FORM)}
-            onLogout={handleLogout}
-          />
-      );
-  }
-
-  // Formulario Parte Trabajo Personal
-  if (viewState === ViewState.PERSONAL_REPORT_FORM && currentUser) {
-      return (
-          <PersonalReportForm 
-              workerId={currentUser.id}
-              onBack={() => setViewState(currentUser.role === 'cp' ? ViewState.CP_SELECTION : ViewState.WORKER_SELECTION)}
-              onSuccess={() => {
-                  setSuccessMsg("Parte registrado correctamente");
-                  setTimeout(() => {
-                      setSuccessMsg("");
-                      setViewState(currentUser.role === 'cp' ? ViewState.CP_SELECTION : ViewState.WORKER_SELECTION);
-                  }, 1500);
-              }}
           />
       );
   }
@@ -310,6 +311,7 @@ function App() {
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl overflow-hidden min-h-screen relative">
         <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
+          {/* OFFLINE / SYNC BANNER */}
           {(!isOnline || pendingItems > 0) && (
               <div className={`text-white text-xs text-center p-2 font-bold flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
                   <div className="flex items-center gap-2">
@@ -344,80 +346,46 @@ function App() {
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
                 )}
-                {/* Botón Volver al Menú Principal si no eres admin */}
-                {currentUser && currentUser.role !== 'admin' && (viewState === ViewState.CONTEXT_SELECTION || viewState === ViewState.ACTION_MENU || viewState === ViewState.FORM) && (
-                    <button onClick={() => setViewState(currentUser.role === 'cp' ? ViewState.CP_SELECTION : ViewState.WORKER_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">
-                        Volver Menú
+                {currentUser?.role === 'cp' && viewState !== ViewState.CP_SELECTION && (
+                    <button onClick={() => setViewState(ViewState.CP_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded">
+                        Volver Inicio
                     </button>
                 )}
             </div>
           </div>
           
           {isMenuOpen && (
-              <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-y-auto border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5 max-h-[80vh]">
+              <div className="absolute top-full right-0 w-64 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
                   <div className="p-4 border-b border-slate-100 bg-slate-50">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Menú Administración</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Administración</p>
                   </div>
-                  
-                  {/* CENTROS Y GRUPOS */}
-                  <div className="border-b border-slate-100">
-                      <button onClick={() => toggleAdminSection('CENTERS')} className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 font-medium">
-                          <span className="flex items-center gap-2"><Factory className="w-4 h-4 text-slate-500"/> Centros de Coste</span>
-                          <ChevronDown size={16} className={`transition-transform ${adminMenuSection === 'CENTERS' ? 'rotate-180' : ''}`} />
-                      </button>
-                      {adminMenuSection === 'CENTERS' && (
-                          <div className="bg-slate-50 pb-2">
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Gestión Canteras / Grupos
-                             </button>
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_SUBCENTER)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Gestión Subcentros
-                             </button>
-                          </div>
-                      )}
-                  </div>
-
-                  {/* MAQUINARIA */}
-                  <div className="border-b border-slate-100">
-                      <button onClick={() => toggleAdminSection('MACHINES')} className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 font-medium">
-                          <span className="flex items-center gap-2"><Truck className="w-4 h-4 text-slate-500"/> Maquinaria</span>
-                          <ChevronDown size={16} className={`transition-transform ${adminMenuSection === 'MACHINES' ? 'rotate-180' : ''}`} />
-                      </button>
-                      {adminMenuSection === 'MACHINES' && (
-                          <div className="bg-slate-50 pb-2">
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Crear Nueva Máquina
-                             </button>
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Modificar / Eliminar Máquina
-                             </button>
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Consultar Registros Mantenimiento
-                             </button>
-                          </div>
-                      )}
-                  </div>
-
-                   {/* PRODUCCIÓN */}
-                   <div className="border-b border-slate-100">
-                      <button onClick={() => toggleAdminSection('PRODUCTION')} className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-50 font-medium">
-                          <span className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-slate-500"/> Cantera Pura</span>
-                          <ChevronDown size={16} className={`transition-transform ${adminMenuSection === 'PRODUCTION' ? 'rotate-180' : ''}`} />
-                      </button>
-                      {adminMenuSection === 'PRODUCTION' && (
-                          <div className="bg-slate-50 pb-2">
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Planificación Semanal
-                             </button>
-                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-10 pr-4 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-slate-100 block">
-                                Dashboard Producción
-                             </button>
-                          </div>
-                      )}
-                  </div>
-
-                  <div className="p-4 mt-2">
-                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left px-2 py-2 hover:bg-red-50 rounded">Cerrar Sesión</button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <Factory className="w-5 h-5 text-blue-500" />
+                      Nueva Cantera / Grupo
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <Truck className="w-5 h-5 text-blue-500" />
+                      Nueva Máquina
+                  </button>
+                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <Settings className="w-5 h-5 text-blue-500" />
+                      Modificar Máquina
+                  </button>
+                  <div className="p-2 border-b border-slate-50"></div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <CalendarDays className="w-5 h-5 text-amber-500" />
+                      Planificación Cantera
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
+                      <TrendingUp className="w-5 h-5 text-amber-500" />
+                      Informes Producción
+                  </button>
+                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
+                      <FileSearch className="w-5 h-5 text-blue-500" />
+                      Consultar Registros
+                  </button>
+                  <div className="p-4 border-t border-slate-100 mt-2">
+                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
                   </div>
               </div>
           )}
@@ -428,7 +396,7 @@ function App() {
         <main className="flex-1 p-4 overflow-y-auto">
           {successMsg ? (
             <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in">
-              {successMsg.includes('Enviando') || successMsg.includes('Generando') ? (
+              {successMsg.includes('Enviando') || successMsg.includes('Generando') || successMsg.includes('Analizando') ? (
                   <Mail className="w-20 h-20 mb-4 animate-pulse text-blue-500" />
               ) : (
                   <CheckCircle2 className="w-20 h-20 mb-4" />
@@ -453,7 +421,6 @@ function App() {
                       <MachineSelector 
                         selectedDate={new Date()} 
                         onChangeDate={() => {}} 
-                        hideDate={true}
                         onSelect={handleEditSelection}
                       />
                       <button onClick={() => setViewState(ViewState.CONTEXT_SELECTION)} className="w-full py-3 text-slate-500 font-medium">Cancelar</button>
@@ -464,13 +431,6 @@ function App() {
                   <CreateCenterForm 
                     onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
                     onSuccess={() => handleAdminSuccess('Cantera creada correctamente')}
-                  />
-              )}
-
-              {viewState === ViewState.ADMIN_CREATE_SUBCENTER && (
-                  <CreateSubCenterForm 
-                    onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
-                    onSuccess={() => handleAdminSuccess('Subcentro creado correctamente')}
                   />
               )}
 
