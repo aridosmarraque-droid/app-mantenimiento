@@ -1,13 +1,13 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import { CPDailyReport } from '../types';
+import { CPDailyReport, PersonalReport } from '../types';
 
 export const generateCPReportPDF = (
     report: Omit<CPDailyReport, 'id'>, 
     workerName: string,
-    plannedHours: number, // Nuevo parámetro
-    efficiency: number    // Nuevo parámetro
+    plannedHours: number,
+    efficiency: number
 ): string => {
   // Use any to bypass type issues with jsPDF definitions in this environment
   const doc: any = new jsPDF();
@@ -37,7 +37,7 @@ export const generateCPReportPDF = (
 
   // --- MACHACADORA TABLE ---
   doc.setFontSize(12);
-  doc.setTextColor(180, 83, 9); // Amber-700 approx
+  doc.setTextColor(180, 83, 9); 
   doc.setFont("helvetica", "bold");
   doc.text("Producción Machacadora", 20, finalY);
   finalY += 5;
@@ -51,7 +51,7 @@ export const generateCPReportPDF = (
       ['TOTAL PRODUCCIÓN', `${report.crusherEnd - report.crusherStart} Horas`]
     ],
     theme: 'striped',
-    headStyles: { fillColor: [217, 119, 6] }, // Amber-600
+    headStyles: { fillColor: [217, 119, 6] },
     styles: { fontSize: 10 },
     columnStyles: {
         0: { fontStyle: 'bold' },
@@ -63,7 +63,7 @@ export const generateCPReportPDF = (
 
   // --- MOLINOS TABLE ---
   doc.setFontSize(12);
-  doc.setTextColor(29, 78, 216); // Blue-700 approx
+  doc.setTextColor(29, 78, 216); 
   doc.text("Producción Molinos", 20, finalY);
   finalY += 5;
 
@@ -76,7 +76,7 @@ export const generateCPReportPDF = (
       ['TOTAL PRODUCCIÓN', `${report.millsEnd - report.millsStart} Horas`]
     ],
     theme: 'striped',
-    headStyles: { fillColor: [37, 99, 235] }, // Blue-600
+    headStyles: { fillColor: [37, 99, 235] },
     styles: { fontSize: 10 },
     columnStyles: {
         0: { fontStyle: 'bold' },
@@ -86,20 +86,19 @@ export const generateCPReportPDF = (
 
   finalY = doc.lastAutoTable.finalY + 15;
 
-  // --- EFICIENCIA / OBJETIVOS TABLE (NUEVO) ---
+  // --- EFICIENCIA ---
   doc.setFontSize(12);
-  doc.setTextColor(22, 163, 74); // Green-600 approx
+  doc.setTextColor(22, 163, 74);
   doc.text("Análisis de Rendimiento (Molienda)", 20, finalY);
   finalY += 5;
 
-  // Determinar color basado en eficiencia
-  let efficiencyColor: [number, number, number] = [22, 163, 74]; // Green
+  let efficiencyColor: [number, number, number] = [22, 163, 74];
   let statusText = "Excelente";
   if (efficiency < 75) {
-      efficiencyColor = [220, 38, 38]; // Red
+      efficiencyColor = [220, 38, 38];
       statusText = "Bajo Rendimiento";
   } else if (efficiency < 90) {
-      efficiencyColor = [202, 138, 4]; // Amber/Yellow
+      efficiencyColor = [202, 138, 4];
       statusText = "Aceptable";
   }
 
@@ -123,7 +122,6 @@ export const generateCPReportPDF = (
 
   finalY = doc.lastAutoTable.finalY + 15;
 
-  // --- COMENTARIOS ---
   if (report.comments) {
       doc.setFontSize(12);
       doc.setTextColor(40, 40, 40);
@@ -136,12 +134,78 @@ export const generateCPReportPDF = (
       doc.text(splitText, 20, finalY + 7);
   }
 
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text("Documento generado automáticamente por GMAO Marraque App", 105, 290, { align: 'center' });
+
+  const dataUri = doc.output('datauristring');
+  return dataUri.split(',')[1];
+};
+
+export const generatePersonalReportPDF = (
+    report: Omit<PersonalReport, 'id'>, 
+    workerName: string
+): string => {
+  const doc: any = new jsPDF();
+  const dateStr = report.date.toLocaleDateString('es-ES');
+
+  // --- HEADER ---
+  doc.setFillColor(30, 41, 59); // Slate-800 header
+  doc.rect(0, 0, 210, 40, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text("ARIDOS MARRAQUE", 20, 20);
+  
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "normal");
+  doc.text("Parte de Trabajo Personal", 20, 30);
+
+  // --- INFO ---
+  doc.setTextColor(40, 40, 40);
+  doc.setFontSize(10);
+  doc.text(`Fecha: ${dateStr}`, 20, 50);
+  doc.text(`Operario: ${workerName}`, 20, 56);
+  doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 140, 50);
+
+  let finalY = 70;
+
+  // --- DETAILS TABLE ---
+  autoTable(doc, {
+    startY: finalY,
+    head: [['Concepto', 'Detalle']],
+    body: [
+      ['Horas Trabajadas', `${report.hours} horas`],
+      ['Ubicación / Tajo', report.location || 'No especificado'],
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [71, 85, 105] }, // Slate-600
+    styles: { fontSize: 12, cellPadding: 4 },
+    columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 60 },
+    }
+  });
+
+  finalY = doc.lastAutoTable.finalY + 20;
+
+  // --- DESCRIPTION ---
+  doc.setFontSize(14);
+  doc.setTextColor(30, 41, 59);
+  doc.text("Descripción de Trabajos Realizados", 20, finalY);
+  
+  doc.setFontSize(11);
+  doc.setTextColor(50, 50, 50);
+  doc.setFont("helvetica", "normal");
+  
+  const splitText = doc.splitTextToSize(report.description, 170);
+  doc.text(splitText, 20, finalY + 10);
+
   // Footer
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
   doc.text("Documento generado automáticamente por GMAO Marraque App", 105, 290, { align: 'center' });
 
-  // Return base64 string without the prefix
   const dataUri = doc.output('datauristring');
   return dataUri.split(',')[1];
 };
