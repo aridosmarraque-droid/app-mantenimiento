@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Hammer, ClipboardList, LogOut } from 'lucide-react';
+import { Hammer, ClipboardList } from 'lucide-react';
 
 interface Props {
     onSelectMachines: () => void;
@@ -11,18 +11,8 @@ interface Props {
 
 export const WorkerSelection: React.FC<Props> = ({ onSelectMachines, onSelectPersonalReport, onLogout, workerName }) => {
     return (
-        <div className="flex flex-col min-h-screen bg-slate-100">
-            <div className="bg-slate-800 text-white p-4 flex justify-between items-center shadow-lg">
-                <div>
-                    <h1 className="font-bold text-lg text-white">Panel Operario</h1>
-                    <p className="text-xs text-slate-300">Hola, {workerName}</p>
-                </div>
-                <button onClick={onLogout} className="text-slate-300 hover:text-white">
-                    <LogOut size={20} />
-                </button>
-            </div>
-
-            <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
+        <div className="flex flex-col h-full">
+            <div className="flex-1 flex flex-col items-center justify-center py-6 gap-6">
                 <h2 className="text-xl font-bold text-slate-800 text-center mb-2">¿Qué deseas realizar hoy?</h2>
                 
                 <button 
@@ -46,3 +36,4 @@ export const WorkerSelection: React.FC<Props> = ({ onSelectMachines, onSelectPer
         </div>
     );
 };
+
