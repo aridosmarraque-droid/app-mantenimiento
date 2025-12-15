@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition } from '../../types';
 import { getServiceProviders } from '../../services/db';
-import { Save, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Save, AlertTriangle, CheckCircle, Clock, Calendar } from 'lucide-react';
 
 interface Props {
   machine: Machine;
@@ -54,7 +54,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
             <p className="text-sm text-slate-500 bg-slate-100 p-2 rounded mb-4">{def?.tasks}</p>
 
             <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Horas de Ejecución *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kilómetros al ejecutar *</label>
                 <input
                     type="number"
                     required
@@ -96,14 +96,24 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
            <div className="text-center py-8 text-slate-500 flex flex-col items-center">
                <CheckCircle className="w-12 h-12 text-green-500 mb-2" />
                <p>No hay mantenimientos pendientes.</p>
-               <p className="text-xs mt-2">Los mantenimientos aparecen automáticamente cuando se acercan las horas.</p>
            </div>
        ) : (
            <div className="space-y-4">
                {pendingList.map((def) => {
-                   const remaining = def.remainingHours ?? 0;
-                   // Si es negativo (se pasó), mostrar en rojo
-                   const isOverdue = remaining < 0;
+                   
+                   let statusText = "";
+                   let isOverdue = false;
+
+                   if (def.maintenanceType === 'DATE') {
+                       const d = def.nextDate?.toLocaleDateString() || 'N/A';
+                       statusText = `Fecha prevista: ${d}`;
+                       // Si estamos aquí es porque pending=true, así que ya pasó la fecha
+                       isOverdue = true; 
+                   } else {
+                        const remaining = def.remainingHours ?? 0;
+                        isOverdue = remaining < 0;
+                        statusText = isOverdue ? `Pasado por ${Math.abs(remaining)}h` : `Restan: ${remaining}h`;
+                   }
 
                    return (
                    <div key={def.id} className={`border rounded-lg p-4 border-amber-300 bg-amber-50`}>
@@ -116,9 +126,9 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                        </div>
                        
                        <div className="flex justify-between items-center text-sm text-slate-500 mt-3 mb-3">
-                           <span>Intervalo: {def.intervalHours}h</span>
+                           <span>{def.maintenanceType === 'DATE' ? 'Por Calendario' : `Intervalo: ${def.intervalHours}h`}</span>
                            <span className={isOverdue ? "text-red-600 font-bold" : "text-slate-700 font-bold"}>
-                               {isOverdue ? `Pasado por ${Math.abs(remaining)}h` : `Restan: ${remaining}h`}
+                               {statusText}
                            </span>
                        </div>
 
@@ -136,13 +146,19 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
 
        {/* Debug / Info list of future */}
        <div className="mt-8 pt-4 border-t border-slate-100">
-           <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos (No pendientes)</h4>
+           <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos</h4>
            <ul className="text-xs text-slate-400 space-y-1">
                {machine.maintenanceDefs.filter(d => !d.pending).map(d => {
+                   let info = "";
+                   if (d.maintenanceType === 'DATE') {
+                       info = d.nextDate?.toLocaleDateString() || '-';
+                   } else {
+                       info = `Restan: ${d.remainingHours ?? '?'}h`;
+                   }
                    return (
                    <li key={d.id} className="flex justify-between">
                        <span>{d.name}</span>
-                       <span>Restan: {d.remainingHours ?? '?'}h</span>
+                       <span>{info}</span>
                    </li>
                    );
                })}
