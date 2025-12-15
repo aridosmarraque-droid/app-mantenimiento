@@ -76,6 +76,14 @@ export const createCostCenter = async (name: string): Promise<CostCenter> => {
     return new Promise(resolve => setTimeout(() => resolve(newCenter), 300));
 };
 
+export const updateCostCenter = async (id: string, name: string): Promise<void> => {
+    const center = COST_CENTERS.find(c => c.id === id);
+    if (center) {
+        center.name = name;
+    }
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
 export const deleteCostCenter = async (id: string): Promise<void> => {
     const idx = COST_CENTERS.findIndex(c => c.id === id);
     if (idx !== -1) {
@@ -277,4 +285,3 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         }, 300);
     });
 }
-
