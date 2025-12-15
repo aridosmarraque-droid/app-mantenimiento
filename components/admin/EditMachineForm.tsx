@@ -24,6 +24,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     const [requiresHours, setRequiresHours] = useState(machine.requiresHours);
     const [adminExpenses, setAdminExpenses] = useState(machine.adminExpenses);
     const [transportExpenses, setTransportExpenses] = useState(machine.transportExpenses);
+    const [selectableForReports, setSelectableForReports] = useState(machine.selectableForReports ?? true);
 
     // --- MAINT DEF FORM STATE ---
     const [editingDefId, setEditingDefId] = useState<string | null>(null);
@@ -49,7 +50,8 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 currentHours,
                 requiresHours,
                 adminExpenses,
-                transportExpenses
+                transportExpenses,
+                selectableForReports
             });
             alert("Datos generales actualizados.");
         } catch (e) {
@@ -155,19 +157,27 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                 </div>
 
-                <div className="flex flex-wrap gap-4 pt-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={requiresHours} onChange={e => setRequiresHours(e.target.checked)} />
-                        <span>Control Horas</span>
+                <div className="flex flex-col gap-2 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-2 rounded">
+                        <input type="checkbox" checked={requiresHours} onChange={e => setRequiresHours(e.target.checked)} className="w-5 h-5" />
+                        <span className="font-medium text-slate-700">Control Horas</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={adminExpenses} onChange={e => setAdminExpenses(e.target.checked)} />
-                        <span>Gastos Admin</span>
+
+                    <label className="flex items-center gap-2 cursor-pointer bg-green-50 p-2 rounded border border-green-100">
+                        <input type="checkbox" checked={selectableForReports} onChange={e => setSelectableForReports(e.target.checked)} className="w-5 h-5 text-green-600" />
+                        <span className="font-medium text-green-800">Seleccionable para Partes de Trabajo</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={transportExpenses} onChange={e => setTransportExpenses(e.target.checked)} />
-                        <span>Gastos Transporte</span>
-                    </label>
+
+                    <div className="flex gap-4 mt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={adminExpenses} onChange={e => setAdminExpenses(e.target.checked)} />
+                            <span>Gastos Admin</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={transportExpenses} onChange={e => setTransportExpenses(e.target.checked)} />
+                            <span>Gastos Transporte</span>
+                        </label>
+                    </div>
                 </div>
 
                 <button onClick={handleUpdateBasicInfo} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
