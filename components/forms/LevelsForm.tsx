@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Machine, OperationLog } from '../../types';
 import { Save } from 'lucide-react';
@@ -30,7 +31,7 @@ export const LevelsForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) => 
       
       {machine.requiresHours && (
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales Máquina *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kilómetros Actuales *</label>
           <input
             type="number"
             required
