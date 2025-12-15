@@ -43,6 +43,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             setHistory(historyData);
             
             // Filtrar y Ordenar máquinas seleccionables
+            // NOTA: Se cargan TODAS las máquinas seleccionables, independientemente del centro
             const selectable = machinesData.filter(m => m.selectableForReports === true);
             selectable.sort((a, b) => {
                  const codeA = a.companyCode || '';
@@ -58,15 +59,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             console.error(error);
         } finally {
             setLoadingData(false);
-        }
-    };
-
-    const handleMachineChange = (machineId: string) => {
-        setSelectedMachineId(machineId);
-        // Autocompletar centro
-        const m = allSelectableMachines.find(mac => mac.id === machineId);
-        if (m) {
-            setSelectedCenterId(m.costCenterId);
         }
     };
 
@@ -115,43 +107,43 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     />
                 </div>
                 
-                {/* 2. Machine (Principal Selection) */}
+                {/* 2. Center Selection (Ahora es el primero y manual) */}
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                        <Factory size={16} className="text-green-600"/> Centro de Trabajo
+                    </label>
+                    <select
+                        value={selectedCenterId}
+                        onChange={(e) => setSelectedCenterId(e.target.value)}
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    >
+                        <option value="">-- Seleccionar Centro --</option>
+                        {centers.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* 3. Machine Selection (Muestra TODAS las disponibles, sin filtrar por centro) */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                     <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <Truck size={16} className="text-green-600"/> Máquina / Tajo
                     </label>
                     <select
                         value={selectedMachineId}
-                        onChange={e => handleMachineChange(e.target.value)}
+                        onChange={e => setSelectedMachineId(e.target.value)}
                         className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
                         <option value="">-- Seleccionar Máquina --</option>
                         {allSelectableMachines.map(m => {
-                             // Encontrar nombre del centro para mostrarlo como grupo
-                             const cName = centers.find(c => c.id === m.costCenterId)?.name || 'Sin Centro';
+                             // Mostramos el centro "original" de la máquina como referencia visual
+                             const defaultCenterName = centers.find(c => c.id === m.costCenterId)?.name || '';
                              return (
                                 <option key={m.id} value={m.id}>
-                                    {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} ({cName})
+                                    {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} {defaultCenterName ? `(${defaultCenterName})` : ''}
                                 </option>
                              );
                         })}
-                    </select>
-                </div>
-
-                {/* 3. Center (Auto-filled but visible) */}
-                <div className="bg-slate-100 p-4 rounded-xl shadow-sm border border-slate-200">
-                    <label className="block text-sm font-bold text-slate-500 mb-2 flex items-center gap-2">
-                        <Factory size={16} className="text-slate-400"/> Centro de Trabajo (Auto)
-                    </label>
-                    <select
-                        value={selectedCenterId}
-                        disabled // Disabled as it is auto-filled
-                        className="w-full p-3 border border-slate-300 rounded-lg bg-slate-200 text-slate-600"
-                    >
-                        <option value="">-- Seleccione Máquina Primero --</option>
-                        {centers.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
                     </select>
                 </div>
 
