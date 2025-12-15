@@ -23,7 +23,7 @@ export const WorkerSelection: React.FC<Props> = ({ onSelectMachines, onSelectPer
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-                <h2 className="text-xl font-bold text-slate-800 text-center mb-2">Selecciona una opción</h2>
+                <h2 className="text-xl font-bold text-slate-800 text-center mb-2">¿Qué deseas realizar hoy?</h2>
                 
                 <button 
                     onClick={onSelectMachines}
@@ -45,4 +45,4 @@ export const WorkerSelection: React.FC<Props> = ({ onSelectMachines, onSelectPer
             </div>
         </div>
     );
-}
+};
