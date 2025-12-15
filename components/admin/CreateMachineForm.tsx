@@ -21,6 +21,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [requiresHours, setRequiresHours] = useState(true);
     const [adminExpenses, setAdminExpenses] = useState(false);
     const [transportExpenses, setTransportExpenses] = useState(false);
+    const [selectableForReports, setSelectableForReports] = useState(true); // Default true
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
@@ -82,6 +83,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 requiresHours,
                 adminExpenses,
                 transportExpenses,
+                selectableForReports,
                 maintenanceDefs: defs
             });
             onSuccess();
@@ -156,7 +158,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
                 <h4 className="font-semibold text-sm text-slate-500 uppercase">Configuración</h4>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 mb-2">
                     <input 
                         type="checkbox" 
                         id="reqHours"
@@ -167,7 +169,18 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                     <label htmlFor="reqHours" className="text-slate-700 font-medium">Controlar Horas</label>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 mt-2">
+                <div className="flex items-center gap-3 mb-2">
+                    <input 
+                        type="checkbox" 
+                        id="selectableReports"
+                        checked={selectableForReports}
+                        onChange={e => setSelectableForReports(e.target.checked)}
+                        className="w-5 h-5 text-green-600 rounded"
+                    />
+                    <label htmlFor="selectableReports" className="text-slate-700 font-medium">Seleccionable para Partes de Trabajo</label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 mt-2 border-t pt-2">
                     <div className="flex items-center gap-2">
                         <input 
                             type="checkbox" 
