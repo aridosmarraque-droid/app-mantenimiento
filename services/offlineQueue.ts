@@ -1,7 +1,7 @@
 
-import { OperationLog, CPDailyReport, CPWeeklyPlan } from '../types';
+import { OperationLog, CPDailyReport, CPWeeklyPlan, PersonalReport } from '../types';
 
-export type OfflineActionType = 'LOG' | 'CP_REPORT' | 'CP_PLAN';
+export type OfflineActionType = 'LOG' | 'CP_REPORT' | 'CP_PLAN' | 'PERSONAL_REPORT';
 
 export interface PendingAction {
   id: string;
