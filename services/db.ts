@@ -88,6 +88,12 @@ export const createCostCenter = async (name: string): Promise<CostCenter> => {
     return { id: data.id, name: data.nombre };
 };
 
+export const deleteCostCenter = async (id: string): Promise<void> => {
+    if (!isConfigured) return mock.deleteCostCenter(id);
+    const { error } = await supabase.from('centros_coste').delete().eq('id', id);
+    if (error) throw error;
+};
+
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
     const { data, error } = await supabase
@@ -591,3 +597,4 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
 
     return { synced, errors };
 };
+     
