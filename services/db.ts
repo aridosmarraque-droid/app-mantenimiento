@@ -36,7 +36,8 @@ const mapMachine = (m: any): Machine => ({
     requiresHours: m.requiere_control_horas,
     adminExpenses: m.gastos_admin,
     transportExpenses: m.gastos_transporte,
-    maintenanceDefs: m.mantenimiento_defs ? m.mantenimiento_defs.map(mapDef) : []
+    maintenanceDefs: m.mantenimiento_defs ? m.mantenimiento_defs.map(mapDef) : [],
+    selectableForReports: m.seleccionable_partes // Mapeo de la nueva columna DB
 });
 
 const mapLogFromDb = (dbLog: any): OperationLog => ({
@@ -124,7 +125,8 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
         horas_actuales: machine.currentHours,
         requiere_control_horas: machine.requiresHours,
         gastos_admin: machine.adminExpenses,
-        gastos_transporte: machine.transportExpenses
+        gastos_transporte: machine.transportExpenses,
+        seleccionable_partes: machine.selectableForReports // New field
     }).select().single();
 
     if (mError) throw mError;
@@ -156,6 +158,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.requiresHours !== undefined) dbUpdates.requiere_control_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) dbUpdates.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) dbUpdates.gastos_transporte = updates.transportExpenses;
+    if (updates.selectableForReports !== undefined) dbUpdates.seleccionable_partes = updates.selectableForReports;
 
     const { error } = await supabase.from('maquinas').update(dbUpdates).eq('id', id);
     if (error) throw error;
@@ -475,12 +478,40 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 
 // --- PERSONAL REPORT SERVICE ---
 
-export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
-    // Si estamos en mock, no hacemos nada (o podríamos guardarlo en memoria si extendiéramos el mock)
-    if (!isConfigured) {
-        console.log("Mock: Guardado parte personal", report);
-        return;
+export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
+    if (!isConfigured) return mock.getPersonalReports(workerId);
+    
+    // Tabla 'partes_trabajo'
+    const { data, error } = await supabase
+        .from('partes_trabajo')
+        .select(`
+            *,
+            maquina:maquinas(nombre),
+            centro:centros_coste(nombre)
+        `)
+        .eq('trabajador_id', workerId)
+        .order('fecha', { ascending: false })
+        .limit(5);
+
+    if (error) {
+        console.error("Error fetching personal reports", error);
+        return [];
     }
+    
+    return data.map((d: any) => ({
+        id: d.id,
+        date: new Date(d.fecha),
+        workerId: d.trabajador_id,
+        hours: d.horas,
+        machineId: d.maquina_id,
+        costCenterId: d.centro_coste_id,
+        machineName: d.maquina?.nombre,
+        costCenterName: d.centro?.nombre
+    }));
+};
+
+export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
+    if (!isConfigured) return mock.savePersonalReport(report);
 
     if (!navigator.onLine) {
         offline.addToQueue('PERSONAL_REPORT', report);
@@ -488,19 +519,17 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
     }
 
     try {
-        // Intenta guardar en tabla 'personal_partes'
-        // NOTA: Si la tabla no existe en supabase, esto dará error, pero el flujo de PDF seguirá.
-        const { error } = await supabase.from('personal_partes').insert({
+        // Guardando en 'partes_trabajo' como solicitado
+        const { error } = await supabase.from('partes_trabajo').insert({
             fecha: report.date.toISOString(),
             trabajador_id: report.workerId,
             horas: report.hours,
-            descripcion: report.description,
-            lugar: report.location
+            maquina_id: report.machineId,
+            centro_coste_id: report.costCenterId
         });
 
         if (error) {
-            console.warn("Error guardando parte personal en DB (puede que la tabla no exista):", error);
-            // No lanzamos error para permitir que el PDF se envíe
+            console.warn("Error guardando parte personal en DB:", error);
         }
     } catch (e) {
         console.warn("Excepción guardando parte personal", e);
@@ -576,12 +605,12 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
             
             } else if (item.type === 'PERSONAL_REPORT') {
                 const report = item.payload;
-                const { error } = await supabase.from('personal_partes').insert({
+                const { error } = await supabase.from('partes_trabajo').insert({
                     fecha: report.date,
                     trabajador_id: report.workerId,
                     horas: report.hours,
-                    descripcion: report.description,
-                    lugar: report.location
+                    maquina_id: report.machineId,
+                    centro_coste_id: report.costCenterId
                 });
                 if (error) throw error;
             }
@@ -597,4 +626,3 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
 
     return { synced, errors };
 };
-     
