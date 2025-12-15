@@ -40,6 +40,7 @@ export interface Machine {
   adminExpenses: boolean; // "Gastos de Administración"
   transportExpenses: boolean; // "Gastos de Transporte"
   maintenanceDefs: MaintenanceDefinition[];
+  selectableForReports?: boolean; // Nuevo: Para partes de trabajo personal
 }
 
 export interface ServiceProvider {
@@ -110,6 +111,13 @@ export interface PersonalReport {
     date: Date;
     workerId: string;
     hours: number;
-    description: string;
-    location?: string; // Opcional: Lugar de trabajo
+    
+    // New Fields for Machine flow
+    costCenterId?: string;
+    machineId?: string;
+    machineName?: string; // Helper for display
+    costCenterName?: string; // Helper for display
+
+    description?: string; // Optional now?
+    location?: string; // Legacy/Optional
 }
