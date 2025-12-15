@@ -8,10 +8,9 @@ interface MachineSelectorProps {
   onSelect: (machine: Machine, center: CostCenter) => void;
   selectedDate: Date;
   onChangeDate: (date: Date) => void;
-  hideDate?: boolean; // Nuevo prop opcional
 }
 
-export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, selectedDate, onChangeDate, hideDate = false }) => {
+export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, selectedDate, onChangeDate }) => {
   const [centers, setCenters] = useState<CostCenter[]>([]);
   const [selectedCenterId, setSelectedCenterId] = useState('');
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -24,7 +23,18 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   useEffect(() => {
     if (selectedCenterId) {
-      getMachinesByCenter(selectedCenterId).then(setMachines);
+      getMachinesByCenter(selectedCenterId).then(data => {
+          // Ordenar: Primero Código (si existe), luego Nombre
+          data.sort((a, b) => {
+             const codeA = a.companyCode || '';
+             const codeB = b.companyCode || '';
+             if (codeA && codeB) return codeA.localeCompare(codeB);
+             if (codeA) return -1; // A tiene código, va antes
+             if (codeB) return 1;  // B tiene código, va antes
+             return a.name.localeCompare(b.name);
+          });
+          setMachines(data);
+      });
       setSelectedMachineId('');
     } else {
       setMachines([]);
@@ -54,19 +64,17 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   return (
     <div className="space-y-6">
-       {!hideDate && (
-           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Fecha de trabajo
-            </label>
-            <input 
-              type="date" 
-              value={formattedDate}
-              onChange={(e) => onChangeDate(new Date(e.target.value))}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-           </div>
-       )}
+       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          Fecha de trabajo
+        </label>
+        <input 
+          type="date" 
+          value={formattedDate}
+          onChange={(e) => onChangeDate(new Date(e.target.value))}
+          className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        />
+       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -80,9 +88,7 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
         >
           <option value="">-- Seleccione Cantera --</option>
           {centers.map(c => (
-            <option key={c.id} value={c.id}>
-              {c.name} {c.code ? `(${c.code})` : ''}
-            </option>
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
       </div>
@@ -101,7 +107,7 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
             <option value="">-- Seleccione Máquina --</option>
             {machines.map(m => (
               <option key={m.id} value={m.id}>
-                {m.name} {m.companyCode ? `(${m.companyCode})` : ''} {m.adminExpenses ? '(Gastos Admin)' : ''}
+                {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} {m.adminExpenses ? '(Gastos Admin)' : ''}
               </option>
             ))}
           </select>
@@ -118,3 +124,4 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
     </div>
   );
 };
+
