@@ -104,6 +104,17 @@ export const createCostCenter = async (name: string): Promise<CostCenter> => {
     return { id: data.id, name: data.nombre };
 };
 
+export const updateCostCenter = async (id: string, name: string): Promise<void> => {
+    if (!isConfigured) return mock.updateCostCenter(id, name);
+    
+    const { error } = await supabase
+        .from('mant_centros')
+        .update({ nombre: name })
+        .eq('id', id);
+        
+    if (error) throw error;
+};
+
 export const deleteCostCenter = async (id: string): Promise<void> => {
     if (!isConfigured) return mock.deleteCostCenter(id);
     const { error } = await supabase.from('mant_centros').delete().eq('id', id);
@@ -297,17 +308,11 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return mock.calculateAndSyncMachineStatus(machine);
     
-    // Aunque la DB tiene campos calculados, hacemos el cálculo en cliente para la UI inmediata
-    // y para asegurarnos de que el usuario ve el estado real basado en las horas actuales.
-    // Opcionalmente podríamos actualizar la DB aquí si quisiéramos persistir el estado "pendiente".
-
     try {
         const updatedDefs = await Promise.all(machine.maintenanceDefs.map(async (def) => {
-            // Usamos ultimas_horas_realizadas si viene de DB, o buscamos el log si no.
             let lastHours = def.lastMaintenanceHours;
             
             if (lastHours === undefined || lastHours === null) {
-                // Fallback si no vino mapeado correctamente
                 const lastLog = await getLastMaintenanceLog(machine.id, def.id!);
                 lastHours = lastLog ? lastLog.hoursAtExecution : 0;
             }
@@ -317,14 +322,12 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
                 const nextDue = Number(lastHours) + Number(def.intervalHours);
                 remaining = nextDue - machine.currentHours;
             } else {
-                // Nunca se ha hecho, basamos en intervalo cíclico puro desde 0
                 const hoursInCycle = machine.currentHours % def.intervalHours;
                 remaining = def.intervalHours - hoursInCycle;
             }
 
             const pending = remaining <= def.warningHours;
             
-            // Si estamos online, actualizamos el estado en DB para otros usuarios
             if (navigator.onLine) {
                  await supabase.from('mant_mantenimientos_def').update({
                      horas_restantes: remaining,
@@ -531,7 +534,6 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
     if (!isConfigured) return mock.getPersonalReports(workerId);
     
     // Tabla: partes_trabajo
-    // Relaciones: maquina_id -> mant_maquinas(nombre), NO hay centro_coste_id en esta tabla
     const { data, error } = await supabase
         .from('partes_trabajo')
         .select(`
@@ -554,8 +556,7 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         hours: d.horas,
         machineId: d.maquina_id,
         machineName: d.maquina?.nombre,
-        description: d.comentarios, // Mapeamos comentarios a description
-        // Tratamos de obtener el centro ID desde la máquina relacionada si es posible
+        description: d.comentarios, 
         costCenterId: d.maquina?.centro_id
     }));
 };
@@ -569,14 +570,12 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
     }
 
     try {
-        // Tabla partes_trabajo columnas: fecha, trabajador_id, maquina_id, horas, comentarios
-        // NO tiene centro_coste_id
         const { error } = await supabase.from('partes_trabajo').insert({
             fecha: report.date.toISOString(),
             trabajador_id: report.workerId,
             horas: report.hours,
             maquina_id: report.machineId,
-            comentarios: report.description // Mapeamos descripción a comentarios
+            comentarios: report.description 
         });
 
         if (error) {
