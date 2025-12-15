@@ -1,4 +1,5 @@
 
+
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, PersonalReport } from '../types';
 
 // --- MOCK DATA ---
@@ -17,9 +18,9 @@ export const COST_CENTERS: CostCenter[] = [
 ];
 
 const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
-  { id: 'md1', machineId: 'm1', name: 'Mantenimiento 250h', intervalHours: 250, tasks: 'Engrase general y revisión niveles', warningHours: 25, pending: false, remainingHours: 100, lastMaintenanceHours: 4860 },
-  { id: 'md2', machineId: 'm1', name: 'Mantenimiento 500h', intervalHours: 500, tasks: 'Cambio aceite motor y filtros', warningHours: 50, pending: false, remainingHours: 350, lastMaintenanceHours: 4500 },
-  { id: 'md3', machineId: 'm2', name: 'Mantenimiento 1000h', intervalHours: 1000, tasks: 'Cambio aceite hidráulico', warningHours: 100, pending: true, remainingHours: 50, lastMaintenanceHours: 11000 },
+  { id: 'md1', machineId: 'm1', name: 'Mantenimiento 250h', maintenanceType: 'HOURS', intervalHours: 250, tasks: 'Engrase general y revisión niveles', warningHours: 25, pending: false, remainingHours: 100, lastMaintenanceHours: 4860 },
+  { id: 'md2', machineId: 'm1', name: 'Mantenimiento 500h', maintenanceType: 'HOURS', intervalHours: 500, tasks: 'Cambio aceite motor y filtros', warningHours: 50, pending: false, remainingHours: 350, lastMaintenanceHours: 4500 },
+  { id: 'md3', machineId: 'm2', name: 'Mantenimiento 1000h', maintenanceType: 'HOURS', intervalHours: 1000, tasks: 'Cambio aceite hidráulico', warningHours: 100, pending: true, remainingHours: 50, lastMaintenanceHours: 11000 },
 ];
 
 export const MACHINES: Machine[] = [
@@ -156,6 +157,21 @@ const updateMockMaintenanceStatus = (machineId: string, currentHours: number) =>
     if (!machine) return;
 
     machine.maintenanceDefs.forEach(def => {
+        // Logica para DATE
+        if (def.maintenanceType === 'DATE') {
+            if (def.nextDate) {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const target = new Date(def.nextDate);
+                target.setHours(0,0,0,0);
+                def.pending = today >= target;
+            }
+            return;
+        }
+
+        // Logica para HOURS
+        if (def.intervalHours === undefined) return;
+
         let remaining;
 
         if (def.lastMaintenanceHours !== undefined && def.lastMaintenanceHours !== null) {
@@ -167,7 +183,7 @@ const updateMockMaintenanceStatus = (machineId: string, currentHours: number) =>
         }
 
         def.remainingHours = remaining;
-        const shouldBePending = remaining <= def.warningHours;
+        const shouldBePending = remaining <= (def.warningHours || 0);
         def.pending = shouldBePending;
     });
 };
@@ -186,7 +202,16 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
   if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
       const def = machine.maintenanceDefs.find(d => d.id === log.maintenanceDefId);
       if (def) {
-          def.lastMaintenanceHours = log.hoursAtExecution;
+          if (def.maintenanceType === 'DATE') {
+              def.lastMaintenanceDate = log.date;
+              if (def.nextDate && def.intervalMonths) {
+                  const next = new Date(log.date);
+                  next.setMonth(next.getMonth() + def.intervalMonths);
+                  def.nextDate = next;
+              }
+          } else {
+              def.lastMaintenanceHours = log.hoursAtExecution;
+          }
       }
   }
 
