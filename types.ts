@@ -15,14 +15,7 @@ export interface Worker {
 
 export interface CostCenter {
   id: string;
-  name: string; // e.g., "Maquinaria Móvil"
-  code?: string; // Nuevo: e.g., "CP", "MM"
-}
-
-export interface SubCenter {
-  id: string;
-  centerId: string;
-  name: string; // e.g., "Palas Cargadoras", "Machacadora"
+  name: string; // e.g., "Cantera Pura Machacadora"
 }
 
 export interface MaintenanceDefinition {
@@ -40,20 +33,18 @@ export interface MaintenanceDefinition {
 export interface Machine {
   id: string;
   costCenterId: string;
-  subCenterId?: string; // Nuevo: Subcentro
   name: string;
-  companyCode?: string;
+  companyCode?: string; // Nuevo campo: Código Interno
   currentHours: number;
   requiresHours: boolean;
-  adminExpenses: boolean; 
-  transportExpenses: boolean;
-  isForWorkReport: boolean; // Nuevo: Seleccionable para partes de trabajo
+  adminExpenses: boolean; // "Gastos de Administración"
+  transportExpenses: boolean; // "Gastos de Transporte"
   maintenanceDefs: MaintenanceDefinition[];
 }
 
 export interface ServiceProvider {
   id: string;
-  name: string; 
+  name: string; // "Volvo Service", "IDESA"
 }
 
 // Logs for operations
@@ -112,13 +103,13 @@ export interface CPWeeklyPlan {
     hoursFri: number;
 }
 
-// --- PERSONAL WORK REPORT ---
+// --- PERSONAL REPORT TYPES ---
 
-export interface PersonalWorkReport {
-  id: string;
-  date: Date;
-  workerId: string;
-  machineId: string;
-  hours: number;
-  comments?: string;
+export interface PersonalReport {
+    id: string;
+    date: Date;
+    workerId: string;
+    hours: number;
+    description: string;
+    location?: string; // Opcional: Lugar de trabajo
 }
