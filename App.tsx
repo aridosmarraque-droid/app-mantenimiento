@@ -141,42 +141,17 @@ function App() {
           // 1. Guardar
           await savePersonalReport(data);
           
-          setSuccessMsg('Guardando...');
+          setSuccessMsg('Guardado Correctamente ✅');
 
-          // 2. Generar PDF y Email
-          if (currentUser && navigator.onLine) {
-              setSuccessMsg('Generando PDF...');
-              const pdfBase64 = generatePersonalReportPDF(data, currentUser.name);
-              
-              const emailSubject = `Parte Personal - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
-              const emailHtml = `
-                <h2>Parte de Trabajo Personal</h2>
-                <p><strong>Operario:</strong> ${currentUser.name}</p>
-                <p><strong>Fecha:</strong> ${data.date.toLocaleDateString()}</p>
-                <p><strong>Horas:</strong> ${data.hours}</p>
-                <p><strong>Lugar:</strong> ${data.location || 'No especificado'}</p>
-                <br/>
-                <p>Adjunto encontrarás el informe detallado.</p>
-              `;
-
-              const { success } = await sendEmail(
-                  ['aridos@marraque.es'],
-                  emailSubject,
-                  emailHtml,
-                  pdfBase64,
-                  `Parte_Personal_${currentUser.name.replace(/\s+/g,'_')}_${data.date.toISOString().split('T')[0]}.pdf`
-              );
-              
-              if (success) setSuccessMsg('Enviado ✅');
-              else setSuccessMsg('Guardado (Email falló)');
-          } else {
-              setSuccessMsg('Guardado en cola');
-          }
-
+          // NOTA: Para este flujo específico (nueva lógica), no generamos PDF ni email
+          // porque el usuario no lo ha pedido explícitamente y es un registro de 'partes_trabajo'.
+          
           setTimeout(() => {
               setSuccessMsg('');
-              setViewState(ViewState.WORKER_SELECTION);
-          }, 2000);
+              // Volver al menu correspondiente
+              if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION);
+              else setViewState(ViewState.WORKER_SELECTION);
+          }, 1500);
       } catch (e) {
           console.error(e);
           setSuccessMsg('Error al guardar');
@@ -337,7 +312,10 @@ function App() {
       return (
           <PersonalReportForm 
             workerId={currentUser.id}
-            onBack={() => setViewState(ViewState.WORKER_SELECTION)}
+            onBack={() => {
+                if (currentUser.role === 'cp') setViewState(ViewState.CP_SELECTION);
+                else setViewState(ViewState.WORKER_SELECTION);
+            }}
             onSubmit={handlePersonalReportSubmit}
           />
       );
@@ -349,6 +327,7 @@ function App() {
             workerName={currentUser.name}
             onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
             onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)}
+            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)}
             onLogout={handleLogout}
           />
       );
