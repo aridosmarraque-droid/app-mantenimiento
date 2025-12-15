@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -40,7 +41,7 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
 
       {machine.requiresHours && (
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales Máquina *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kilómetros Actuales *</label>
           <input
             type="number"
             required
