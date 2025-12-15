@@ -23,7 +23,7 @@ import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -63,6 +63,15 @@ function App() {
 
   // Helper para verificar rol de admin insensible a mayúsculas
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
+  
+  // Debug logs
+  useEffect(() => {
+    if (currentUser) {
+        console.log("Usuario actual:", currentUser.name);
+        console.log("Rol:", currentUser.role);
+        console.log("Es Admin?:", isUserAdmin);
+    }
+  }, [currentUser, isUserAdmin]);
 
   useEffect(() => {
       const handleStatusChange = () => {
@@ -289,52 +298,7 @@ function App() {
       );
   }
 
-  // Selección para Operarios normales y Admin
-  if (viewState === ViewState.WORKER_SELECTION && currentUser) {
-      return (
-          <WorkerSelection 
-            workerName={currentUser.name}
-            onSelectMachines={() => setViewState(ViewState.CONTEXT_SELECTION)}
-            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)}
-            onLogout={handleLogout}
-          />
-      );
-  }
-
-  if (viewState === ViewState.PERSONAL_REPORT && currentUser) {
-      return (
-          <PersonalReportForm 
-            workerId={currentUser.id}
-            onBack={() => {
-                if (currentUser.role === 'cp') setViewState(ViewState.CP_SELECTION);
-                else setViewState(ViewState.WORKER_SELECTION);
-            }}
-            onSubmit={handlePersonalReportSubmit}
-          />
-      );
-  }
-
-  if (viewState === ViewState.CP_SELECTION && currentUser) {
-      return (
-          <CPSelection 
-            workerName={currentUser.name}
-            onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
-            onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)}
-            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)}
-            onLogout={handleLogout}
-          />
-      );
-  }
-
-  if (viewState === ViewState.CP_DAILY_REPORT && currentUser) {
-      return (
-          <DailyReportForm 
-            workerId={currentUser.id}
-            onBack={() => setViewState(ViewState.CP_SELECTION)}
-            onSubmit={handleCPReportSubmit}
-          />
-      );
-  }
+  // --- MAIN LAYOUT FOR LOGGED IN USERS ---
 
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl overflow-hidden min-h-screen relative">
@@ -368,14 +332,20 @@ function App() {
                     <p className="text-xs text-slate-300">Usuario</p>
                     <p className="text-sm font-semibold">{currentUser?.name}</p>
                 </div>
-                {/* MENU HAMBURGUESA ADMIN: Solo visible si el usuario es admin */}
-                {isUserAdmin && (
+                
+                {/* ADMIN HAMBURGER MENU */}
+                {isUserAdmin ? (
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-1 hover:bg-slate-700 rounded transition-colors">
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
+                ) : (
+                    // WORKER LOGOUT BUTTON
+                    <button onClick={handleLogout} className="p-1 hover:bg-slate-700 rounded transition-colors text-slate-300 hover:text-white" title="Cerrar Sesión">
+                        <LogOut className="w-5 h-5" />
+                    </button>
                 )}
                 
-                {/* Botón Volver dinámico según rol y vista */}
+                {/* BOTÓN VOLVER (Oculto en pantallas principales) */}
                 {viewState !== ViewState.WORKER_SELECTION && viewState !== ViewState.CP_SELECTION && (
                    <button onClick={() => {
                         if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION);
@@ -431,7 +401,9 @@ function App() {
                   </button>
                   
                   <div className="p-4 border-t border-slate-100 mt-2">
-                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left hover:text-red-700">Cerrar Sesión</button>
+                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left hover:text-red-700 flex items-center gap-2">
+                           <LogOut size={16} /> Cerrar Sesión
+                       </button>
                   </div>
               </div>
           )}
@@ -440,8 +412,8 @@ function App() {
         {isMenuOpen && <div className="fixed inset-0 bg-black/20 z-10" onClick={() => setIsMenuOpen(false)}></div>}
 
         <main className="flex-1 p-4 overflow-y-auto">
-          {successMsg ? (
-            <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in">
+          {successMsg && (
+            <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in absolute inset-0 bg-white/90 z-50">
               {successMsg.includes('Enviando') || successMsg.includes('Generando') || successMsg.includes('Analizando') ? (
                   <Mail className="w-20 h-20 mb-4 animate-pulse text-blue-500" />
               ) : (
@@ -449,8 +421,48 @@ function App() {
               )}
               <h2 className="text-xl font-bold text-center">{successMsg}</h2>
             </div>
-          ) : (
-            <>
+          )}
+
+            {/* SELECCIÓN PRINCIPAL INTEGRADA */}
+            {viewState === ViewState.WORKER_SELECTION && currentUser && (
+                <WorkerSelection 
+                    workerName={currentUser.name}
+                    onSelectMachines={() => setViewState(ViewState.CONTEXT_SELECTION)}
+                    onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)}
+                    onLogout={handleLogout}
+                />
+            )}
+
+            {viewState === ViewState.CP_SELECTION && currentUser && (
+                <CPSelection 
+                    workerName={currentUser.name}
+                    onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)}
+                    onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)}
+                    onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)}
+                    onLogout={handleLogout}
+                />
+            )}
+
+            {viewState === ViewState.PERSONAL_REPORT && currentUser && (
+                <PersonalReportForm 
+                    workerId={currentUser.id}
+                    onBack={() => {
+                        if (currentUser.role === 'cp') setViewState(ViewState.CP_SELECTION);
+                        else setViewState(ViewState.WORKER_SELECTION);
+                    }}
+                    onSubmit={handlePersonalReportSubmit}
+                />
+            )}
+
+            {viewState === ViewState.CP_DAILY_REPORT && currentUser && (
+                <DailyReportForm 
+                    workerId={currentUser.id}
+                    onBack={() => setViewState(ViewState.CP_SELECTION)}
+                    onSubmit={handleCPReportSubmit}
+                />
+            )}
+
+            {/* VISTAS RESTANTES */}
               {viewState === ViewState.CONTEXT_SELECTION && (
                 <MachineSelector 
                   selectedDate={selectedDate}
@@ -578,8 +590,6 @@ function App() {
                   )}
                 </div>
               )}
-            </>
-          )}
         </main>
       </div>
     );
