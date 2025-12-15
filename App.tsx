@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport } from './types';
+import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport, PersonalReport } from './types';
 import { Login } from './components/Login';
 import { MachineSelector } from './components/MachineSelector';
 import { MainMenu } from './components/MainMenu';
@@ -14,17 +14,21 @@ import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
+import { WorkerSelection } from './components/worker/WorkerSelection';
+import { PersonalReportForm } from './components/worker/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
-import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan } from './services/db';
+import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
-import { generateCPReportPDF } from './services/pdf'; 
+import { generateCPReportPDF, generatePersonalReportPDF } from './services/pdf'; 
 import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
+  WORKER_SELECTION, // Nuevo estado
+  PERSONAL_REPORT,  // Nuevo estado
   CP_SELECTION,
   CP_DAILY_REPORT,
   CONTEXT_SELECTION,
@@ -62,7 +66,6 @@ function App() {
           setIsOnline(navigator.onLine);
       };
       
-      // Update pending items count periodically
       const checkQueue = () => {
           setPendingItems(getQueue().length);
       };
@@ -102,7 +105,8 @@ function App() {
     if (worker.role === 'cp') {
         setViewState(ViewState.CP_SELECTION);
     } else {
-        setViewState(ViewState.CONTEXT_SELECTION);
+        // Workers y Admins van a la selección general primero
+        setViewState(ViewState.WORKER_SELECTION);
     }
   };
 
@@ -132,18 +136,62 @@ function App() {
       setIsMenuOpen(false);
   };
 
-  const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
+  const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
       try {
-          // 1. Guardar en Base de Datos (o cola offline)
-          await saveCPReport(data);
+          // 1. Guardar
+          await savePersonalReport(data);
           
           setSuccessMsg('Guardando...');
+
+          // 2. Generar PDF y Email
+          if (currentUser && navigator.onLine) {
+              setSuccessMsg('Generando PDF...');
+              const pdfBase64 = generatePersonalReportPDF(data, currentUser.name);
+              
+              const emailSubject = `Parte Personal - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
+              const emailHtml = `
+                <h2>Parte de Trabajo Personal</h2>
+                <p><strong>Operario:</strong> ${currentUser.name}</p>
+                <p><strong>Fecha:</strong> ${data.date.toLocaleDateString()}</p>
+                <p><strong>Horas:</strong> ${data.hours}</p>
+                <p><strong>Lugar:</strong> ${data.location || 'No especificado'}</p>
+                <br/>
+                <p>Adjunto encontrarás el informe detallado.</p>
+              `;
+
+              const { success } = await sendEmail(
+                  ['aridos@marraque.es'],
+                  emailSubject,
+                  emailHtml,
+                  pdfBase64,
+                  `Parte_Personal_${currentUser.name.replace(/\s+/g,'_')}_${data.date.toISOString().split('T')[0]}.pdf`
+              );
+              
+              if (success) setSuccessMsg('Enviado ✅');
+              else setSuccessMsg('Guardado (Email falló)');
+          } else {
+              setSuccessMsg('Guardado en cola');
+          }
+
+          setTimeout(() => {
+              setSuccessMsg('');
+              setViewState(ViewState.WORKER_SELECTION);
+          }, 2000);
+      } catch (e) {
+          console.error(e);
+          setSuccessMsg('Error al guardar');
+          setTimeout(() => setSuccessMsg(''), 2000);
+      }
+  };
+
+  const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
+      try {
+          await saveCPReport(data);
+          setSuccessMsg('Guardando...');
           
-          // 2. Calcular Eficiencia y Generar PDF (Solo si hay usuario logueado y online para enviar mail)
           if (currentUser && navigator.onLine) {
               setSuccessMsg('Analizando datos y generando PDF...');
               
-              // A. Obtener fecha lunes para buscar planificación
               const d = new Date(data.date);
               const day = d.getDay();
               const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -151,11 +199,9 @@ function App() {
               monday.setDate(diff);
               const mondayStr = monday.toISOString().split('T')[0];
 
-              // B. Buscar Plan
               const plan = await getCPWeeklyPlan(mondayStr);
               
-              // C. Obtener horas planificadas para HOY
-              let plannedHours = 8; // Default
+              let plannedHours = 8;
               if (plan) {
                   switch(day) {
                       case 1: plannedHours = plan.hoursMon; break;
@@ -163,15 +209,13 @@ function App() {
                       case 3: plannedHours = plan.hoursWed; break;
                       case 4: plannedHours = plan.hoursThu; break;
                       case 5: plannedHours = plan.hoursFri; break;
-                      default: plannedHours = 0; // Findes
+                      default: plannedHours = 0;
                   }
               }
 
-              // D. Calcular Eficiencia (Molienda)
               const actualHours = data.millsEnd - data.millsStart;
               const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
 
-              // E. Generar PDF con los nuevos datos
               const pdfBase64 = generateCPReportPDF(data, currentUser.name, plannedHours, efficiency);
               
               const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
@@ -188,11 +232,8 @@ function App() {
                 </ul>
                 <br/>
                 <p>Adjunto encontrarás el informe detallado en PDF.</p>
-                <br/>
-                <p><em>GMAO Aridos Marraque</em></p>
               `;
 
-              setSuccessMsg('Enviando Email...');
               const { success } = await sendEmail(
                   ['aridos@marraque.es'], 
                   emailSubject, 
@@ -201,11 +242,8 @@ function App() {
                   `Parte_${data.date.toISOString().split('T')[0]}.pdf`
               );
 
-              if (success) {
-                  setSuccessMsg('Guardado y Email Enviado ✅');
-              } else {
-                  setSuccessMsg('Guardado (Email falló) ⚠️');
-              }
+              if (success) setSuccessMsg('Guardado y Enviado ✅');
+              else setSuccessMsg('Guardado (Email falló) ⚠️');
           } else {
               setSuccessMsg(navigator.onLine ? 'Guardado ✅' : 'Guardado en cola (Offline) 📡');
           }
@@ -240,8 +278,6 @@ function App() {
           ? logData.hoursAtExecution 
           : selectedContext.machine.currentHours;
 
-      // Optimistic update for UI if online, or local logic
-      // Note: calculateAndSyncMachineStatus checks online status internally now
       try {
           const tempMachine = { ...selectedContext.machine, currentHours: newHours };
           const updatedMachine = await calculateAndSyncMachineStatus(tempMachine);
@@ -250,9 +286,7 @@ function App() {
               ...selectedContext,
               machine: updatedMachine
           });
-      } catch (err) {
-           // Ignore errors in optimistic UI update
-      }
+      } catch (err) {}
 
       setSuccessMsg(navigator.onLine ? 'Operación registrada' : 'Guardado en dispositivo (Sin Red)');
       setTimeout(() => {
@@ -287,6 +321,28 @@ function App() {
       );
   }
 
+  // Selección para Operarios normales y Admin
+  if (viewState === ViewState.WORKER_SELECTION && currentUser) {
+      return (
+          <WorkerSelection 
+            workerName={currentUser.name}
+            onSelectMachines={() => setViewState(ViewState.CONTEXT_SELECTION)}
+            onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)}
+            onLogout={handleLogout}
+          />
+      );
+  }
+
+  if (viewState === ViewState.PERSONAL_REPORT && currentUser) {
+      return (
+          <PersonalReportForm 
+            workerId={currentUser.id}
+            onBack={() => setViewState(ViewState.WORKER_SELECTION)}
+            onSubmit={handlePersonalReportSubmit}
+          />
+      );
+  }
+
   if (viewState === ViewState.CP_SELECTION && currentUser) {
       return (
           <CPSelection 
@@ -311,7 +367,6 @@ function App() {
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl overflow-hidden min-h-screen relative">
         <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
-          {/* OFFLINE / SYNC BANNER */}
           {(!isOnline || pendingItems > 0) && (
               <div className={`text-white text-xs text-center p-2 font-bold flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
                   <div className="flex items-center gap-2">
@@ -346,46 +401,64 @@ function App() {
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
                 )}
-                {currentUser?.role === 'cp' && viewState !== ViewState.CP_SELECTION && (
-                    <button onClick={() => setViewState(ViewState.CP_SELECTION)} className="text-xs bg-slate-700 px-2 py-1 rounded">
-                        Volver Inicio
+                
+                {/* Botón Volver dinámico según rol y vista */}
+                {viewState !== ViewState.WORKER_SELECTION && viewState !== ViewState.CP_SELECTION && (
+                   <button onClick={() => {
+                        if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION);
+                        else setViewState(ViewState.WORKER_SELECTION);
+                   }} className="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">
+                        Volver
                     </button>
                 )}
             </div>
           </div>
           
+          {/* MENU ADMIN REORGANIZADO */}
           {isMenuOpen && (
-              <div className="absolute top-full right-0 w-64 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
-                  <div className="p-4 border-b border-slate-100 bg-slate-50">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Administración</p>
+              <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
+                  
+                  {/* GRUPO 1: GESTIÓN DE ACTIVOS */}
+                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gestión de Activos</p>
                   </div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <Factory className="w-5 h-5 text-blue-500" />
-                      Nueva Cantera / Grupo
+                      <Factory className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">Nueva Cantera / Grupo</span>
                   </button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <Truck className="w-5 h-5 text-blue-500" />
-                      Nueva Máquina
+                      <Truck className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">Nueva Máquina</span>
                   </button>
                    <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <Settings className="w-5 h-5 text-blue-500" />
-                      Modificar Máquina
+                      <Settings className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">Modificar Máquina</span>
                   </button>
-                  <div className="p-2 border-b border-slate-50"></div>
+
+                  {/* GRUPO 2: PRODUCCIÓN */}
+                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producción</p>
+                  </div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <CalendarDays className="w-5 h-5 text-amber-500" />
-                      Planificación Cantera
+                      <CalendarDays className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm">Planificación Cantera</span>
                   </button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
-                      <TrendingUp className="w-5 h-5 text-amber-500" />
-                      Informes Producción
+                      <TrendingUp className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm">Informes Producción</span>
                   </button>
+
+                  {/* GRUPO 3: REGISTROS */}
+                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Datos</p>
+                  </div>
                    <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors">
-                      <FileSearch className="w-5 h-5 text-blue-500" />
-                      Consultar Registros
+                      <FileSearch className="w-4 h-4 text-green-600" />
+                      <span className="text-sm">Consultar Registros</span>
                   </button>
+                  
                   <div className="p-4 border-t border-slate-100 mt-2">
-                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left">Cerrar Sesión</button>
+                       <button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left hover:text-red-700">Cerrar Sesión</button>
                   </div>
               </div>
           )}
