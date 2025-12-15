@@ -22,25 +22,37 @@ export interface MaintenanceDefinition {
   id?: string; // Optional for creation
   machineId?: string;
   name: string; // e.g., "Mantenimiento 500h"
-  intervalHours: number; // 500
+  
+  // Logic Config
+  maintenanceType: 'HOURS' | 'DATE'; // Nuevo: Tipo de mantenimiento
+  
+  // Hours Logic
+  intervalHours?: number; // 500
+  warningHours?: number; // 50
+  lastMaintenanceHours?: number | null; // Cuándo se hizo por última vez
+  remainingHours?: number; // Horas hasta el próximo
+
+  // Date Logic
+  intervalMonths?: number; // Nuevo: Intervalo en meses
+  nextDate?: Date; // Nuevo: Próxima fecha programada
+  lastMaintenanceDate?: Date; // Nuevo: Fecha última realización
+  
   tasks: string; // "Cambio aceite y filtros"
-  warningHours: number; // 50
   pending?: boolean; // Check "Mantenimiento Pendiente"
-  remainingHours?: number; // Nuevo campo: Horas hasta el próximo
-  lastMaintenanceHours?: number | null; // Nuevo campo: Cuándo se hizo por última vez
 }
 
 export interface Machine {
   id: string;
   costCenterId: string;
   name: string;
-  companyCode?: string; // Nuevo campo: Código Interno
+  companyCode?: string; // Código Interno
   currentHours: number;
   requiresHours: boolean;
   adminExpenses: boolean; // "Gastos de Administración"
   transportExpenses: boolean; // "Gastos de Transporte"
   maintenanceDefs: MaintenanceDefinition[];
-  selectableForReports?: boolean; // Nuevo: Para partes de trabajo personal
+  selectableForReports?: boolean; // Para partes de trabajo personal
+  responsibleWorkerId?: string; // Nuevo: Responsable de la máquina
 }
 
 export interface ServiceProvider {
