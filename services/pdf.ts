@@ -1,8 +1,14 @@
+
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { CPDailyReport } from '../types';
 
-export const generateCPReportPDF = (report: Omit<CPDailyReport, 'id'>, workerName: string): string => {
+export const generateCPReportPDF = (
+    report: Omit<CPDailyReport, 'id'>, 
+    workerName: string,
+    plannedHours: number, // Nuevo parámetro
+    efficiency: number    // Nuevo parámetro
+): string => {
   // Use any to bypass type issues with jsPDF definitions in this environment
   const doc: any = new jsPDF();
   const dateStr = report.date.toLocaleDateString('es-ES');
@@ -76,6 +82,43 @@ export const generateCPReportPDF = (report: Omit<CPDailyReport, 'id'>, workerNam
         0: { fontStyle: 'bold' },
         1: { halign: 'right' }
     }
+  });
+
+  finalY = doc.lastAutoTable.finalY + 15;
+
+  // --- EFICIENCIA / OBJETIVOS TABLE (NUEVO) ---
+  doc.setFontSize(12);
+  doc.setTextColor(22, 163, 74); // Green-600 approx
+  doc.text("Análisis de Rendimiento (Molienda)", 20, finalY);
+  finalY += 5;
+
+  // Determinar color basado en eficiencia
+  let efficiencyColor: [number, number, number] = [22, 163, 74]; // Green
+  let statusText = "Excelente";
+  if (efficiency < 75) {
+      efficiencyColor = [220, 38, 38]; // Red
+      statusText = "Bajo Rendimiento";
+  } else if (efficiency < 90) {
+      efficiencyColor = [202, 138, 4]; // Amber/Yellow
+      statusText = "Aceptable";
+  }
+
+  const actualHours = report.millsEnd - report.millsStart;
+  
+  autoTable(doc, {
+    startY: finalY,
+    head: [['Horas Reales', 'Horas Planificadas', 'Eficiencia %', 'Estado']],
+    body: [
+      [
+          `${actualHours} h`, 
+          `${plannedHours} h`, 
+          `${efficiency.toFixed(1)}%`, 
+          statusText
+      ]
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: efficiencyColor }, 
+    styles: { fontSize: 11, halign: 'center', fontStyle: 'bold' },
   });
 
   finalY = doc.lastAutoTable.finalY + 15;
