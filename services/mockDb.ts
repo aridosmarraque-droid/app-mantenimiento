@@ -1,5 +1,5 @@
 
-import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, SubCenter, PersonalWorkReport } from '../types';
+import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan } from '../types';
 
 // --- MOCK DATA ---
 
@@ -7,20 +7,13 @@ export const WORKERS: Worker[] = [
   { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin' },
   { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker' },
   { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker' },
-  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp' }, 
+  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp' }, // Usuario CP
 ];
 
 export const COST_CENTERS: CostCenter[] = [
-  { id: 'c1', name: 'Maquinaria Móvil', code: 'MM' },
-  { id: 'c2', name: 'Cantera Pura', code: 'CP' },
-  { id: 'c3', name: 'Cantera Canto Rodado', code: 'CCR' },
-];
-
-export const SUB_CENTERS: SubCenter[] = [
-  { id: 'sc1', centerId: 'c1', name: 'Palas Cargadoras' },
-  { id: 'sc2', centerId: 'c1', name: 'Retroexcavadoras' },
-  { id: 'sc3', centerId: 'c2', name: 'Machacadora' },
-  { id: 'sc4', centerId: 'c2', name: 'Molienda' },
+  { id: 'c1', name: 'Maquinaria Móvil' },
+  { id: 'c2', name: 'Cantera Pura Machacadora' },
+  { id: 'c3', name: 'Cantera Pura Molienda' },
 ];
 
 const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
@@ -31,19 +24,19 @@ const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
 
 export const MACHINES: Machine[] = [
   { 
-    id: 'm1', costCenterId: 'c1', subCenterId: 'sc1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false, isForWorkReport: true,
+    id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm1') 
   },
   { 
-    id: 'm2', costCenterId: 'c1', subCenterId: 'sc2', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false, isForWorkReport: true,
+    id: 'm2', costCenterId: 'c1', name: 'CAT 336 (Retro)', companyCode: 'CAT-055', currentHours: 12100, requiresHours: true, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: MOCK_MAINTENANCE_DEFS.filter(m => m.machineId === 'm2')
   },
   { 
-    id: 'm3', costCenterId: 'c2', subCenterId: 'sc3', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false, isForWorkReport: true,
+    id: 'm3', costCenterId: 'c2', name: 'Machacadora Primaria', companyCode: 'MACH-01', currentHours: 0, requiresHours: false, adminExpenses: false, transportExpenses: false,
     maintenanceDefs: []
   },
   { 
-    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false, isForWorkReport: false,
+    id: 'm4', costCenterId: 'c1', name: 'Coche Empresa Ford', companyCode: 'FORD-99', currentHours: 150000, requiresHours: false, adminExpenses: true, transportExpenses: false,
     maintenanceDefs: []
   },
 ];
@@ -56,31 +49,15 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
   { id: 'sp5', name: 'Neumáticos del Sur' },
 ];
 
-// In-memory store
+// In-memory store for the session
 let logs: OperationLog[] = [];
-let cpReports: CPDailyReport[] = []; 
-let personalReports: PersonalWorkReport[] = [];
+let cpReports: CPDailyReport[] = [];
+// Inicializar con algunos datos de ejemplo si está vacío para pruebas
+if (cpReports.length === 0) {
+    // No añadir datos automáticos para evitar confusión de "día 12"
+}
+
 let cpPlanning: CPWeeklyPlan[] = [];
-
-// Helper to init default plan
-const initDefaultPlan = () => {
-   const d = new Date();
-   const day = d.getDay();
-   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-   const monday = new Date(d.setDate(diff));
-   const mondayStr = monday.toISOString().split('T')[0];
-
-   cpPlanning.push({
-       id: 'default-plan',
-       mondayDate: mondayStr,
-       hoursMon: 9,
-       hoursTue: 9,
-       hoursWed: 9,
-       hoursThu: 9,
-       hoursFri: 9
-   });
-};
-initDefaultPlan();
 
 // --- SERVICE METHODS ---
 
@@ -92,20 +69,18 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
   return new Promise(resolve => setTimeout(() => resolve(COST_CENTERS), 300));
 };
 
-export const getSubCenters = async (): Promise<SubCenter[]> => {
-    return new Promise(resolve => setTimeout(() => resolve(SUB_CENTERS), 300));
-};
-
-export const createCostCenter = async (name: string, code?: string): Promise<CostCenter> => {
-    const newCenter = { id: Math.random().toString(36).substr(2, 9), name, code };
+export const createCostCenter = async (name: string): Promise<CostCenter> => {
+    const newCenter = { id: Math.random().toString(36).substr(2, 9), name };
     COST_CENTERS.push(newCenter);
     return new Promise(resolve => setTimeout(() => resolve(newCenter), 300));
 };
 
-export const createSubCenter = async (centerId: string, name: string): Promise<SubCenter> => {
-    const newSub = { id: Math.random().toString(36).substr(2, 9), centerId, name };
-    SUB_CENTERS.push(newSub);
-    return new Promise(resolve => setTimeout(() => resolve(newSub), 300));
+export const deleteCostCenter = async (id: string): Promise<void> => {
+    const idx = COST_CENTERS.findIndex(c => c.id === id);
+    if (idx !== -1) {
+        COST_CENTERS.splice(idx, 1);
+    }
+    return new Promise(resolve => setTimeout(resolve, 300));
 };
 
 export const getMachinesByCenter = async (centerId: string): Promise<Machine[]> => {
@@ -166,6 +141,7 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
 
+// LOGIC CORE for MOCK
 const updateMockMaintenanceStatus = (machineId: string, currentHours: number) => {
     const machine = MACHINES.find(m => m.id === machineId);
     if (!machine) return;
@@ -279,8 +255,4 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
         cpPlanning.push(plan);
     }
 }
-
-export const savePersonalWorkReport = async (report: Omit<PersonalWorkReport, 'id'>): Promise<void> => {
-    personalReports.push({ ...report, id: Math.random().toString() });
-    return new Promise(resolve => setTimeout(resolve, 300));
-}
+       
