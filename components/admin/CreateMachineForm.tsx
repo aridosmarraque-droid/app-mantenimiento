@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { createMachine, getCostCenters } from '../../services/db';
-import { CostCenter, MaintenanceDefinition } from '../../types';
+import { createMachine, getCostCenters, getWorkers } from '../../services/db';
+import { CostCenter, MaintenanceDefinition, Worker } from '../../types';
 import { Save, ArrowLeft, Plus, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -11,12 +11,14 @@ interface Props {
 
 export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(false);
     
     // Main Form State
     const [name, setName] = useState('');
     const [companyCode, setCompanyCode] = useState('');
     const [centerId, setCenterId] = useState('');
+    const [responsibleId, setResponsibleId] = useState('');
     const [currentHours, setCurrentHours] = useState(0);
     const [requiresHours, setRequiresHours] = useState(true);
     const [adminExpenses, setAdminExpenses] = useState(false);
@@ -28,12 +30,21 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     
     // Temp State for new Def
     const [newDefName, setNewDefName] = useState('');
+    const [newDefType, setNewDefType] = useState<'HOURS' | 'DATE'>('HOURS');
+    
+    // Hours Inputs
     const [newDefInterval, setNewDefInterval] = useState<number | ''>('');
     const [newDefWarning, setNewDefWarning] = useState<number | ''>('');
+    
+    // Date Inputs
+    const [newDefIntervalMonths, setNewDefIntervalMonths] = useState<number | ''>('');
+    const [newDefNextDate, setNewDefNextDate] = useState('');
+
     const [newDefTasks, setNewDefTasks] = useState('');
 
     useEffect(() => {
         getCostCenters().then(setCenters);
+        getWorkers().then(setWorkers);
     }, []);
 
     const handleExpenseChange = (type: 'admin' | 'transport') => {
@@ -47,14 +58,26 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     };
 
     const addMaintenanceDef = () => {
-        if (!newDefName || !newDefInterval || !newDefWarning) return;
-        
+        if (!newDefName) return;
+
         const newDef: MaintenanceDefinition = {
             name: newDefName,
-            intervalHours: Number(newDefInterval),
-            warningHours: Number(newDefWarning),
-            tasks: newDefTasks
+            tasks: newDefTasks,
+            maintenanceType: newDefType,
+            intervalHours: 0,
+            warningHours: 0
         };
+
+        if (newDefType === 'HOURS') {
+            if (!newDefInterval || !newDefWarning) return;
+            newDef.intervalHours = Number(newDefInterval);
+            newDef.warningHours = Number(newDefWarning);
+        } else {
+            // DATE
+            if (!newDefNextDate) return;
+            newDef.intervalMonths = newDefIntervalMonths ? Number(newDefIntervalMonths) : 0;
+            newDef.nextDate = new Date(newDefNextDate);
+        }
         
         setDefs([...defs, newDef]);
         
@@ -63,6 +86,8 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         setNewDefInterval('');
         setNewDefWarning('');
         setNewDefTasks('');
+        setNewDefIntervalMonths('');
+        setNewDefNextDate('');
     };
 
     const removeDef = (index: number) => {
@@ -79,6 +104,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 name,
                 companyCode,
                 costCenterId: centerId,
+                responsibleWorkerId: responsibleId || undefined,
                 currentHours,
                 requiresHours,
                 adminExpenses,
@@ -117,15 +143,26 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                     />
                 </div>
                 
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno</label>
-                    <input
-                        type="text"
-                        value={companyCode}
-                        onChange={e => setCompanyCode(e.target.value)}
-                        placeholder="Ej. RETRO-01"
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno</label>
+                        <input
+                            type="text"
+                            value={companyCode}
+                            onChange={e => setCompanyCode(e.target.value)}
+                            placeholder="Ej. RETRO-01"
+                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kilómetros Iniciales</label>
+                        <input
+                            type="number"
+                            value={currentHours}
+                            onChange={e => setCurrentHours(Number(e.target.value))}
+                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
                 </div>
 
                 <div>
@@ -142,15 +179,19 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         ))}
                     </select>
                 </div>
-
+                
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Horas Iniciales</label>
-                    <input
-                        type="number"
-                        value={currentHours}
-                        onChange={e => setCurrentHours(Number(e.target.value))}
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Responsable</label>
+                    <select
+                        value={responsibleId}
+                        onChange={e => setResponsibleId(e.target.value)}
                         className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                        <option value="">-- Sin Responsable Asignado --</option>
+                        {workers.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                    </select>
                 </div>
             </div>
 
@@ -166,7 +207,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         onChange={e => setRequiresHours(e.target.checked)}
                         className="w-5 h-5 text-blue-600 rounded"
                     />
-                    <label htmlFor="reqHours" className="text-slate-700 font-medium">Controlar Horas</label>
+                    <label htmlFor="reqHours" className="text-slate-700 font-medium">Controlar Horas/Kms</label>
                 </div>
 
                 <div className="flex items-center gap-3 mb-2">
@@ -218,7 +259,12 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                             <div key={idx} className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
                                 <div>
                                     <p className="font-bold text-blue-900">{def.name}</p>
-                                    <p className="text-xs text-blue-700">Cada {def.intervalHours}h (Aviso {def.warningHours}h)</p>
+                                    <p className="text-xs text-blue-700">
+                                        {def.maintenanceType === 'HOURS' 
+                                            ? `Cada ${def.intervalHours}h (Aviso ${def.warningHours}h)`
+                                            : `Por Fecha: ${def.nextDate?.toLocaleDateString()} (Cada ${def.intervalMonths || 0} meses)`
+                                        }
+                                    </p>
                                 </div>
                                 <button type="button" onClick={() => removeDef(idx)} className="text-red-500 hover:bg-red-100 p-1 rounded">
                                     <Trash2 size={18} />
@@ -230,28 +276,65 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
 
                 {/* Add New Def Form */}
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                    <div className="flex gap-2 mb-2">
+                        <button 
+                            type="button"
+                            onClick={() => setNewDefType('HOURS')}
+                            className={`flex-1 py-1 text-sm font-bold rounded ${newDefType === 'HOURS' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}
+                        >
+                            Por Horas
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => setNewDefType('DATE')}
+                            className={`flex-1 py-1 text-sm font-bold rounded ${newDefType === 'DATE' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}
+                        >
+                            Por Fecha
+                        </button>
+                    </div>
+
                     <input 
                         placeholder="Nombre (ej. Mantenimiento 500h)" 
                         className="w-full p-2 border rounded"
                         value={newDefName}
                         onChange={e => setNewDefName(e.target.value)}
                     />
-                    <div className="flex gap-2">
-                        <input 
-                            type="number" 
-                            placeholder="Intervalo (horas)" 
-                            className="w-1/2 p-2 border rounded"
-                            value={newDefInterval}
-                            onChange={e => setNewDefInterval(Number(e.target.value))}
-                        />
-                        <input 
-                            type="number" 
-                            placeholder="Preaviso (horas)" 
-                            className="w-1/2 p-2 border rounded"
-                            value={newDefWarning}
-                            onChange={e => setNewDefWarning(Number(e.target.value))}
-                        />
-                    </div>
+                    
+                    {newDefType === 'HOURS' ? (
+                        <div className="flex gap-2">
+                            <input 
+                                type="number" 
+                                placeholder="Intervalo (horas)" 
+                                className="w-1/2 p-2 border rounded"
+                                value={newDefInterval}
+                                onChange={e => setNewDefInterval(Number(e.target.value))}
+                            />
+                            <input 
+                                type="number" 
+                                placeholder="Preaviso (horas)" 
+                                className="w-1/2 p-2 border rounded"
+                                value={newDefWarning}
+                                onChange={e => setNewDefWarning(Number(e.target.value))}
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <input 
+                                type="date" 
+                                className="w-1/2 p-2 border rounded"
+                                value={newDefNextDate}
+                                onChange={e => setNewDefNextDate(e.target.value)}
+                            />
+                             <input 
+                                type="number" 
+                                placeholder="Repetir cada X meses (0 = No)" 
+                                className="w-1/2 p-2 border rounded"
+                                value={newDefIntervalMonths}
+                                onChange={e => setNewDefIntervalMonths(Number(e.target.value))}
+                            />
+                        </div>
+                    )}
+
                     <textarea 
                         placeholder="Tareas a realizar..." 
                         className="w-full p-2 border rounded"
@@ -262,7 +345,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                     <button 
                         type="button" 
                         onClick={addMaintenanceDef}
-                        disabled={!newDefName || !newDefInterval}
+                        disabled={!newDefName || (newDefType === 'HOURS' && !newDefInterval) || (newDefType === 'DATE' && !newDefNextDate)}
                         className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded hover:bg-slate-300 disabled:opacity-50 flex justify-center items-center gap-2"
                     >
                         <Plus size={16} /> Añadir Mantenimiento
@@ -280,3 +363,4 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         </form>
     );
 };
+
