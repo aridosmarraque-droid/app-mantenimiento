@@ -22,7 +22,7 @@ import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPend
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
-import { generateCPReportPDF, generatePersonalReportPDF } from './services/pdf'; 
+import { generateCPReportPDF } from './services/pdf'; 
 import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw } from 'lucide-react';
 
 enum ViewState {
@@ -60,6 +60,9 @@ function App() {
 
   // Menu State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Helper para verificar rol de admin insensible a mayúsculas
+  const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
 
   useEffect(() => {
       const handleStatusChange = () => {
@@ -138,17 +141,10 @@ function App() {
 
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
       try {
-          // 1. Guardar
           await savePersonalReport(data);
-          
           setSuccessMsg('Guardado Correctamente ✅');
-
-          // NOTA: Para este flujo específico (nueva lógica), no generamos PDF ni email
-          // porque el usuario no lo ha pedido explícitamente y es un registro de 'partes_trabajo'.
-          
           setTimeout(() => {
               setSuccessMsg('');
-              // Volver al menu correspondiente
               if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION);
               else setViewState(ViewState.WORKER_SELECTION);
           }, 1500);
@@ -166,7 +162,6 @@ function App() {
           
           if (currentUser && navigator.onLine) {
               setSuccessMsg('Analizando datos y generando PDF...');
-              
               const d = new Date(data.date);
               const day = d.getDay();
               const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -175,7 +170,6 @@ function App() {
               const mondayStr = monday.toISOString().split('T')[0];
 
               const plan = await getCPWeeklyPlan(mondayStr);
-              
               let plannedHours = 8;
               if (plan) {
                   switch(day) {
@@ -190,7 +184,6 @@ function App() {
 
               const actualHours = data.millsEnd - data.millsStart;
               const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
-
               const pdfBase64 = generateCPReportPDF(data, currentUser.name, plannedHours, efficiency);
               
               const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
@@ -375,7 +368,8 @@ function App() {
                     <p className="text-xs text-slate-300">Usuario</p>
                     <p className="text-sm font-semibold">{currentUser?.name}</p>
                 </div>
-                {currentUser?.role === 'admin' && (
+                {/* MENU HAMBURGUESA ADMIN: Solo visible si el usuario es admin */}
+                {isUserAdmin && (
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-1 hover:bg-slate-700 rounded transition-colors">
                         {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                     </button>
@@ -393,8 +387,8 @@ function App() {
             </div>
           </div>
           
-          {/* MENU ADMIN REORGANIZADO */}
-          {isMenuOpen && (
+          {/* MENU ADMIN DESPLEGABLE */}
+          {isMenuOpen && isUserAdmin && (
               <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
                   
                   {/* GRUPO 1: GESTIÓN DE ACTIVOS */}
@@ -403,7 +397,7 @@ function App() {
                   </div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <Factory className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm">Nueva Cantera / Grupo</span>
+                      <span className="text-sm">Gestionar Canteras / Grupos</span>
                   </button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 transition-colors">
                       <Truck className="w-4 h-4 text-blue-500" />
