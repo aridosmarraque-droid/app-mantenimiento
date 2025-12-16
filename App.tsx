@@ -19,6 +19,7 @@ import { PersonalReportForm } from './components/personal/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
 import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan, savePersonalReport } from './services/db';
+import { getProductionEfficiencyStats } from './services/stats'; // Importar funcion de estadisticas
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
@@ -178,6 +179,7 @@ function App() {
               monday.setDate(diff);
               const mondayStr = monday.toISOString().split('T')[0];
 
+              // Obtener planificación semanal
               const plan = await getCPWeeklyPlan(mondayStr);
               let plannedHours = 8;
               if (plan) {
@@ -191,21 +193,49 @@ function App() {
                   }
               }
 
+              // Calcular eficiencia diaria
               const actualHours = data.millsEnd - data.millsStart;
               const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
-              const pdfBase64 = generateCPReportPDF(data, currentUser.name, plannedHours, efficiency);
+
+              // Obtener estadísticas globales (Semanal/Mensual)
+              const globalStats = await getProductionEfficiencyStats();
+              const { weekly, monthly } = globalStats;
+
+              // Generar PDF incluyendo stats
+              const pdfBase64 = generateCPReportPDF(
+                  data, 
+                  currentUser.name, 
+                  plannedHours, 
+                  efficiency,
+                  weekly,
+                  monthly
+              );
               
+              // Preparar email
               const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()} - ${currentUser.name}`;
+              
+              const formatTrend = (trend: 'up'|'down'|'equal', diff: number) => {
+                  const arrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '=';
+                  const color = trend === 'up' ? 'green' : trend === 'down' ? 'red' : 'gray';
+                  return `<span style="color:${color}; font-weight:bold;">${arrow} ${diff > 0 ? '+' : ''}${diff}%</span>`;
+              };
+
               const emailHtml = `
                 <h2>Parte Diario de Producción</h2>
                 <p><strong>Fecha:</strong> ${data.date.toLocaleDateString()}</p>
                 <p><strong>Operario:</strong> ${currentUser.name}</p>
                 <hr/>
-                <p><strong>Resumen de Rendimiento (Molienda):</strong></p>
+                <h3>Resumen de Rendimiento (Molienda):</h3>
                 <ul>
-                    <li>Horas Reales: ${actualHours}h</li>
-                    <li>Horas Planificadas: ${plannedHours}h</li>
-                    <li>Eficiencia: <strong>${efficiency.toFixed(1)}%</strong></li>
+                    <li>Horas Reales Hoy: ${actualHours}h</li>
+                    <li>Horas Planificadas Hoy: ${plannedHours}h</li>
+                    <li>Eficiencia Diaria: <strong>${efficiency.toFixed(1)}%</strong></li>
+                </ul>
+                <br/>
+                <h3>Tendencias Globales:</h3>
+                <ul>
+                    <li>Rendimiento Semanal: <strong>${weekly.current.efficiency.toFixed(1)}%</strong> (${formatTrend(weekly.trend, weekly.diff)})</li>
+                    <li>Rendimiento Mensual: <strong>${monthly.current.efficiency.toFixed(1)}%</strong> (${formatTrend(monthly.trend, monthly.diff)})</li>
                 </ul>
                 <br/>
                 <p>Adjunto encontrarás el informe detallado en PDF.</p>
