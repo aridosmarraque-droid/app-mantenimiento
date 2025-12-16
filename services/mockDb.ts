@@ -1,5 +1,4 @@
 
-
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, PersonalReport } from '../types';
 
 // --- MOCK DATA ---
@@ -253,60 +252,99 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
             }
             filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
             resolve(filtered);
-        }, 500);
+        }, 300);
     });
-}
-
-// --- CP MOCK SERVICES ---
+};
 
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
-    if (cpReports.length === 0) return null;
-    return cpReports.sort((a,b) => b.date.getTime() - a.date.getTime())[0];
-}
+    return new Promise(resolve => {
+        setTimeout(() => {
+            if (cpReports.length === 0) resolve(null);
+            else {
+                // Sort by date desc
+                const sorted = [...cpReports].sort((a, b) => b.date.getTime() - a.date.getTime());
+                resolve(sorted[0]);
+            }
+        }, 300);
+    });
+};
 
 export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
-    return cpReports.filter(r => {
-        const d = new Date(r.date);
-        const s = new Date(startDate); s.setHours(0,0,0,0);
-        const e = new Date(endDate); e.setHours(23,59,59,999);
-        return d >= s && d <= e;
+    return new Promise(resolve => {
+        setTimeout(() => {
+            // Filter inclusive
+            const start = new Date(startDate); start.setHours(0,0,0,0);
+            const end = new Date(endDate); end.setHours(23,59,59,999);
+            
+            const filtered = cpReports.filter(r => r.date >= start && r.date <= end);
+            resolve(filtered);
+        }, 300);
     });
-}
+};
 
 export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
-    cpReports.push({ ...report, id: Math.random().toString() });
-}
+    const newReport = { ...report, id: Math.random().toString(36).substr(2, 9) };
+    cpReports.push(newReport);
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const updateCPReportAnalysis = async (id: string, analysis: string): Promise<void> => {
+    const report = cpReports.find(r => r.id === id);
+    if (report) {
+        report.aiAnalysis = analysis;
+    }
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
-    return cpPlanning.find(p => p.mondayDate === mondayDate) || null;
-}
+     return new Promise(resolve => {
+        setTimeout(() => {
+            const plan = cpPlanning.find(p => p.mondayDate === mondayDate);
+            resolve(plan || null);
+        }, 300);
+    });
+};
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
-    const idx = cpPlanning.findIndex(p => p.mondayDate === plan.mondayDate);
-    if (idx >= 0) {
-        cpPlanning[idx] = plan;
-    } else {
-        cpPlanning.push(plan);
-    }
-}
-
-// --- PERSONAL REPORT MOCK ---
-
-export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
-    personalReports.push({ 
-        ...report, 
-        id: Math.random().toString(),
-        machineName: MACHINES.find(m => m.id === report.machineId)?.name,
-        costCenterName: COST_CENTERS.find(c => c.id === report.costCenterId)?.name
+     return new Promise(resolve => {
+        setTimeout(() => {
+            const idx = cpPlanning.findIndex(p => p.mondayDate === plan.mondayDate);
+            if (idx >= 0) {
+                cpPlanning[idx] = { ...plan, id: cpPlanning[idx].id }; // Update keeping ID if existed
+            } else {
+                cpPlanning.push({ ...plan, id: Math.random().toString(36).substr(2, 9) });
+            }
+            resolve();
+        }, 300);
     });
-}
+};
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     return new Promise(resolve => {
         setTimeout(() => {
-            const filtered = personalReports.filter(r => r.workerId === workerId);
-            filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
-            resolve(filtered.slice(0, 5));
+            const reports = personalReports.filter(r => r.workerId === workerId);
+            reports.sort((a, b) => b.date.getTime() - a.date.getTime());
+            resolve(reports.slice(0, 5)); // Limit like DB
         }, 300);
     });
-}
+};
+
+export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
+    const newReport = { ...report, id: Math.random().toString(36).substr(2, 9) };
+    // Enrich with names for mock display consistency if needed
+    if (!newReport.machineName) {
+        const m = MACHINES.find(mach => mach.id === report.machineId);
+        if (m) {
+            newReport.machineName = m.name;
+            if (!newReport.costCenterId) newReport.costCenterId = m.costCenterId;
+        }
+    }
+    if (!newReport.costCenterName && newReport.costCenterId) {
+        const c = COST_CENTERS.find(cen => cen.id === newReport.costCenterId);
+        if (c) newReport.costCenterName = c.name;
+    }
+
+    personalReports.push(newReport);
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
