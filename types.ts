@@ -104,6 +104,7 @@ export interface CPDailyReport {
     millsStart: number;
     millsEnd: number;
     comments?: string;
+    aiAnalysis?: string; // Nuevo: Análisis de Gemini
 }
 
 export interface CPWeeklyPlan {
@@ -133,3 +134,4 @@ export interface PersonalReport {
     description?: string; // Optional now?
     location?: string; // Legacy/Optional
 }
+
