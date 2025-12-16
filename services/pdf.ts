@@ -173,7 +173,14 @@ export const generateCPReportPDF = (
       finalY = doc.lastAutoTable.finalY + 15;
   }
 
+  // --- COMENTARIOS ---
   if (report.comments) {
+      // Check page break
+      if (finalY > 250) {
+          doc.addPage();
+          finalY = 20;
+      }
+
       doc.setFontSize(12);
       doc.setTextColor(40, 40, 40);
       doc.text("Comentarios / Incidencias", 20, finalY);
@@ -183,6 +190,31 @@ export const generateCPReportPDF = (
       
       const splitText = doc.splitTextToSize(report.comments, 170);
       doc.text(splitText, 20, finalY + 7);
+      
+      // Update Y based on text lines
+      const dim = doc.getTextDimensions(splitText);
+      finalY = finalY + 7 + dim.h + 10;
+  }
+
+  // --- ANÁLISIS IA (NUEVO BLOQUE) ---
+  if (report.aiAnalysis) {
+      // Check page break
+      if (finalY > 220) {
+          doc.addPage();
+          finalY = 20;
+      }
+
+      doc.setFontSize(12);
+      doc.setTextColor(79, 70, 229); // Indigo color for AI
+      doc.setFont("helvetica", "bold");
+      doc.text("Análisis Técnico Inteligente (IA)", 20, finalY);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(60, 60, 60);
+      doc.setFont("helvetica", "italic");
+      
+      const splitAnalysis = doc.splitTextToSize(report.aiAnalysis, 170);
+      doc.text(splitAnalysis, 20, finalY + 7);
   }
 
   doc.setFontSize(8);
