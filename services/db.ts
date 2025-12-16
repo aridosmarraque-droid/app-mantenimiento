@@ -469,7 +469,8 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
             crusherEnd: data.machacadora_fin,
             millsStart: data.molinos_inicio,
             millsEnd: data.molinos_fin,
-            comments: data.comentarios
+            comments: data.comentarios,
+            aiAnalysis: data.ai_analisis // Assuming column name in Supabase
         };
     } catch (e) {
         return null;
@@ -504,7 +505,8 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
             crusherEnd: d.machacadora_fin,
             millsStart: d.molinos_inicio,
             millsEnd: d.molinos_fin,
-            comments: d.comentarios
+            comments: d.comentarios,
+            aiAnalysis: d.ai_analisis
         }));
     } catch (error) {
         console.error("Error fetching CP reports", error);
@@ -533,7 +535,8 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
                 machacadora_fin: report.crusherEnd,
                 molinos_inicio: report.millsStart,
                 molinos_fin: report.millsEnd,
-                comentarios: report.comments
+                comentarios: report.comments,
+                ai_analisis: report.aiAnalysis
             });
         
         if (error) throw error;
@@ -541,6 +544,19 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
          console.warn("Error saving CP Report, adding to queue", e);
          offline.addToQueue('CP_REPORT', report);
     }
+};
+
+export const updateCPReportAnalysis = async (id: string, analysis: string): Promise<void> => {
+    if (!isConfigured) return mock.updateCPReportAnalysis(id, analysis);
+    
+    if (!navigator.onLine) return; // No offline queue for AI analysis updates for now
+
+    const { error } = await supabase
+        .from('cp_partes_diarios')
+        .update({ ai_analisis: analysis })
+        .eq('id', id);
+
+    if (error) throw error;
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
@@ -722,7 +738,8 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
                     machacadora_fin: report.crusherEnd,
                     molinos_inicio: report.millsStart,
                     molinos_fin: report.millsEnd,
-                    comentarios: report.comments
+                    comentarios: report.comments,
+                    ai_analisis: report.aiAnalysis
                 });
                 if (error) throw error;
 
@@ -764,3 +781,4 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
 
     return { synced, errors };
 };
+
