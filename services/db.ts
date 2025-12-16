@@ -272,7 +272,7 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
         .eq('mantenimiento_def_id', defId)
         .order('horas_registro', { ascending: false })
         .limit(1)
-        .maybeSingle(); // Cambiado a maybeSingle para evitar 406
+        .maybeSingle(); 
     if (error || !data) return undefined;
     return mapLogFromDb(data);
 };
@@ -458,25 +458,28 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (!navigator.onLine) return null;
 
     try {
+        // CORREGIDO: Usar limit(1) y verificar array para evitar errores 406 en consola
         const { data, error } = await supabase
             .from('cp_partes_diarios')
             .select('*')
             .order('fecha', { ascending: false })
-            .limit(1)
-            .maybeSingle(); // Cambiado a maybeSingle
+            .limit(1);
         
-        if (error || !data) return null;
+        if (error) return null;
+        
+        const report = data && data.length > 0 ? data[0] : null;
+        if (!report) return null;
 
         return {
-            id: data.id,
-            date: new Date(data.fecha),
-            workerId: data.trabajador_id,
-            crusherStart: data.machacadora_inicio,
-            crusherEnd: data.machacadora_fin,
-            millsStart: data.molinos_inicio,
-            millsEnd: data.molinos_fin,
-            comments: data.comentarios,
-            aiAnalysis: data.ai_analisis // Assuming column name in Supabase
+            id: report.id,
+            date: new Date(report.fecha),
+            workerId: report.trabajador_id,
+            crusherStart: report.machacadora_inicio,
+            crusherEnd: report.machacadora_fin,
+            millsStart: report.molinos_inicio,
+            millsEnd: report.molinos_fin,
+            comments: report.comentarios,
+            aiAnalysis: report.ai_analisis 
         };
     } catch (e) {
         return null;
@@ -490,7 +493,6 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
     if (!navigator.onLine) return [];
 
     try {
-        // CORRECCIÓN CLAVE: Usar strings YYYY-MM-DD locales para evitar desfases UTC
         const startStr = toLocalDateString(startDate);
         const endStr = toLocalDateString(endDate);
 
@@ -505,7 +507,7 @@ export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promi
 
         return data.map((d: any) => ({
             id: d.id,
-            date: new Date(d.fecha), // Al recibirlo, JS lo convierte a local
+            date: new Date(d.fecha),
             workerId: d.trabajador_id,
             crusherStart: d.machacadora_inicio,
             crusherEnd: d.machacadora_fin,
@@ -529,7 +531,6 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
     }
 
     try {
-        // Usar formato fecha local para guardar, asegurando que se guarde el día correcto
         const dateStr = toLocalDateString(report.date);
 
         const { error } = await supabase
@@ -557,7 +558,6 @@ export const updateCPReportAnalysis = async (id: string, analysis: string): Prom
     
     if (!navigator.onLine) return; 
 
-    // Validación de ID para evitar error 400 (Bad Request)
     if (!isValidUUID(id)) {
         console.warn(`ID inválido para actualización (probablemente offline ID): ${id}`);
         return;
@@ -579,27 +579,26 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
     if (!navigator.onLine) return null;
 
     try {
-        // Cambiado .single() a .maybeSingle() para evitar errores 406
+        // CORREGIDO: Usar limit(1) y verificar array para evitar errores 406 en consola
         const { data, error } = await supabase
             .from('cp_planificacion')
             .select('*')
             .eq('fecha_lunes', mondayDate)
-            .maybeSingle();
+            .limit(1);
         
-        if (error) {
-            // Log silencioso para no ensuciar consola
-            return null;
-        }
-        if (!data) return null;
+        if (error) return null;
+        
+        const plan = data && data.length > 0 ? data[0] : null;
+        if (!plan) return null;
 
         return {
-            id: data.id,
-            mondayDate: data.fecha_lunes,
-            hoursMon: data.horas_lunes,
-            hoursTue: data.horas_martes,
-            hoursWed: data.horas_miercoles,
-            hoursThu: data.horas_jueves,
-            hoursFri: data.horas_viernes
+            id: plan.id,
+            mondayDate: plan.fecha_lunes,
+            hoursMon: plan.horas_lunes,
+            hoursTue: plan.horas_martes,
+            hoursWed: plan.horas_miercoles,
+            hoursThu: plan.horas_jueves,
+            hoursFri: plan.horas_viernes
         };
     } catch (e) {
         return null;
