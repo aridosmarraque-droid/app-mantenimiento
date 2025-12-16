@@ -2,12 +2,15 @@
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { CPDailyReport, PersonalReport } from '../types';
+import { ProductionComparison } from './stats'; // Importar tipo de estadísticas
 
 export const generateCPReportPDF = (
     report: Omit<CPDailyReport, 'id'>, 
     workerName: string,
     plannedHours: number,
-    efficiency: number
+    efficiency: number,
+    weeklyStats?: ProductionComparison, // Nuevo parámetro opcional
+    monthlyStats?: ProductionComparison // Nuevo parámetro opcional
 ): string => {
   // Use any to bypass type issues with jsPDF definitions in this environment
   const doc: any = new jsPDF();
@@ -86,10 +89,10 @@ export const generateCPReportPDF = (
 
   finalY = doc.lastAutoTable.finalY + 15;
 
-  // --- EFICIENCIA ---
+  // --- EFICIENCIA DIARIA ---
   doc.setFontSize(12);
   doc.setTextColor(22, 163, 74);
-  doc.text("Análisis de Rendimiento (Molienda)", 20, finalY);
+  doc.text("Rendimiento Diario (Molienda)", 20, finalY);
   finalY += 5;
 
   let efficiencyColor: [number, number, number] = [22, 163, 74];
@@ -121,6 +124,54 @@ export const generateCPReportPDF = (
   });
 
   finalY = doc.lastAutoTable.finalY + 15;
+
+  // --- TENDENCIAS (NUEVO BLOQUE) ---
+  if (weeklyStats && monthlyStats) {
+      doc.setFontSize(12);
+      doc.setTextColor(71, 85, 105); // Slate
+      doc.text("Tendencias de Rendimiento", 20, finalY);
+      finalY += 5;
+
+      const formatTrend = (stat: ProductionComparison) => {
+          const arrow = stat.trend === 'up' ? '▲' : stat.trend === 'down' ? '▼' : '=';
+          return `${arrow} ${stat.diff > 0 ? '+' : ''}${stat.diff}% vs anterior`;
+      };
+
+      autoTable(doc, {
+        startY: finalY,
+        head: [['Periodo', 'Eficiencia Actual', 'Tendencia', 'Comparativa']],
+        body: [
+          [
+              'Semanal', 
+              `${weeklyStats.current.efficiency.toFixed(1)}%`, 
+              weeklyStats.trend === 'up' ? 'MEJORA' : weeklyStats.trend === 'down' ? 'BAJA' : 'IGUAL',
+              formatTrend(weeklyStats)
+          ],
+          [
+              'Mensual', 
+              `${monthlyStats.current.efficiency.toFixed(1)}%`, 
+              monthlyStats.trend === 'up' ? 'MEJORA' : monthlyStats.trend === 'down' ? 'BAJA' : 'IGUAL',
+              formatTrend(monthlyStats)
+          ]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [71, 85, 105] },
+        styles: { fontSize: 10, halign: 'center' },
+        columnStyles: {
+            0: { fontStyle: 'bold' }
+        },
+        didParseCell: function(data: any) {
+             // Colorear celda de tendencia
+             if (data.section === 'body' && data.column.index === 2) {
+                 const text = data.cell.raw;
+                 if (text === 'MEJORA') data.cell.styles.textColor = [22, 163, 74];
+                 if (text === 'BAJA') data.cell.styles.textColor = [220, 38, 38];
+             }
+        }
+      });
+      
+      finalY = doc.lastAutoTable.finalY + 15;
+  }
 
   if (report.comments) {
       doc.setFontSize(12);
@@ -209,3 +260,4 @@ export const generatePersonalReportPDF = (
   const dataUri = doc.output('datauristring');
   return dataUri.split(',')[1];
 };
+
