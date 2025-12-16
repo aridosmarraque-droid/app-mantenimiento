@@ -7,13 +7,15 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // La API Key debe venir de las variables de entorno por seguridad.
-    // Si estás en local, asegúrate de tenerla configurada en tu entorno.
-    const apiKey = process.env.API_KEY;
+    // En Vite, las variables de entorno se acceden con import.meta.env
+    // Asegúrate de tener VITE_API_KEY definida en tu archivo .env
+    // @ts-ignore
+    const apiKey = import.meta.env.VITE_API_KEY;
 
     // Si no hay key configurada, devolvemos una respuesta simulada para evitar errores en la Demo.
     if (!apiKey) {
-        return "⚠️ Modo Demo: No se ha detectado una API Key válida (process.env.API_KEY). \n\n" +
+        console.warn("⚠️ API Key no encontrada (VITE_API_KEY). Usando modo simulación.");
+        return "⚠️ Modo Demo: No se ha detectado una API Key válida (VITE_API_KEY). \n\n" +
                "**Simulación de respuesta del Gerente Virtual:** \n" +
                "Basado en los comentarios, parece haber un problema mecánico recurrente en la línea de molienda. " +
                "Se recomienda revisar los rodamientos del molino y verificar la tensión de las correas principales. " +
