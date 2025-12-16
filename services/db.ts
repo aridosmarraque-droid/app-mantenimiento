@@ -14,6 +14,12 @@ const toLocalDateString = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+// Verifica si un string parece un UUID válido
+const isValidUUID = (id: string) => {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return regex.test(id);
+};
+
 // --- MAPPERS (Traducción DB -> App) ---
 
 const mapWorker = (w: any): Worker => ({
@@ -266,7 +272,7 @@ export const getLastMaintenanceLog = async (machineId: string, defId: string): P
         .eq('mantenimiento_def_id', defId)
         .order('horas_registro', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle(); // Cambiado a maybeSingle para evitar 406
     if (error || !data) return undefined;
     return mapLogFromDb(data);
 };
@@ -457,7 +463,7 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
             .select('*')
             .order('fecha', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle(); // Cambiado a maybeSingle
         
         if (error || !data) return null;
 
@@ -549,14 +555,23 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 export const updateCPReportAnalysis = async (id: string, analysis: string): Promise<void> => {
     if (!isConfigured) return mock.updateCPReportAnalysis(id, analysis);
     
-    if (!navigator.onLine) return; // No offline queue for AI analysis updates for now
+    if (!navigator.onLine) return; 
+
+    // Validación de ID para evitar error 400 (Bad Request)
+    if (!isValidUUID(id)) {
+        console.warn(`ID inválido para actualización (probablemente offline ID): ${id}`);
+        return;
+    }
 
     const { error } = await supabase
         .from('cp_partes_diarios')
         .update({ ai_analisis: analysis })
         .eq('id', id);
 
-    if (error) throw error;
+    if (error) {
+        console.error("Error actualizando análisis IA. Verifica que la columna 'ai_analisis' existe en la tabla.", error);
+        throw error;
+    }
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
@@ -564,13 +579,18 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
     if (!navigator.onLine) return null;
 
     try {
+        // Cambiado .single() a .maybeSingle() para evitar errores 406
         const { data, error } = await supabase
             .from('cp_planificacion')
             .select('*')
             .eq('fecha_lunes', mondayDate)
-            .single();
+            .maybeSingle();
         
-        if (error || !data) return null;
+        if (error) {
+            // Log silencioso para no ensuciar consola
+            return null;
+        }
+        if (!data) return null;
 
         return {
             id: data.id,
