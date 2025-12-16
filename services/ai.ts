@@ -7,19 +7,18 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // En Vite, las variables de entorno se acceden con import.meta.env
-    // Asegúrate de tener VITE_API_KEY definida en tu archivo .env
     // @ts-ignore
     const apiKey = import.meta.env.VITE_API_KEY;
 
-    // Si no hay key configurada, devolvemos una respuesta simulada para evitar errores en la Demo.
+    // Si no hay key configurada
     if (!apiKey) {
-        console.warn("⚠️ API Key no encontrada (VITE_API_KEY). Usando modo simulación.");
-        return "⚠️ Modo Demo: No se ha detectado una API Key válida (VITE_API_KEY). \n\n" +
-               "**Simulación de respuesta del Gerente Virtual:** \n" +
-               "Basado en los comentarios, parece haber un problema mecánico recurrente en la línea de molienda. " +
-               "Se recomienda revisar los rodamientos del molino y verificar la tensión de las correas principales. " +
-               `La eficiencia del ${efficiency.toFixed(1)}% indica una pérdida significativa de producción respecto a lo planificado.`;
+        console.warn("⚠️ API Key no encontrada (VITE_API_KEY).");
+        return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
+               "No se ha detectado la API Key de Google Gemini.\n" +
+               "Si estás en Vercel: Ve a Settings > Environment Variables y añade 'VITE_API_KEY'.\n\n" +
+               "**Simulación (Modo Demo):** \n" +
+               "Basado en los comentarios, parece haber un problema mecánico recurrente. " +
+               `La eficiencia del ${efficiency.toFixed(1)}% es baja. Revise los molinos.`;
     }
 
     try {
@@ -50,7 +49,7 @@ export const analyzeProductionReport = async (
 
     } catch (error) {
         console.error("Error llamando a Gemini:", error);
-        return "Error al conectar con el servicio de IA. Verifique su API Key y conexión.";
+        return "Error al conectar con el servicio de IA. Verifique su API Key en Vercel.";
     }
 };
 
