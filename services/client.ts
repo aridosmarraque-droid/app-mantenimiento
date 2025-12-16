@@ -1,59 +1,41 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// ------------------------------------------------------------------
-// CONFIGURACIÓN DE SUPABASE
-// ------------------------------------------------------------------
+// ============================================================================
+// CONFIGURACIÓN DE CONEXIÓN A SUPABASE
+// ============================================================================
 
-// 1. Intenta leer variables de entorno de forma segura
-let ENV_URL = '';
-let ENV_KEY = '';
+// Intento seguro de leer variables de entorno (Vite / Vercel)
+let envUrl = '';
+let envKey = '';
 
 try {
-    // Verificamos si existe import.meta.env antes de leer propiedades
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-        // @ts-ignore
-        ENV_URL = import.meta.env.VITE_SUPABASE_URL;
-        // @ts-ignore
-        ENV_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    }
+  // @ts-ignore
+  envUrl = import.meta.env.VITE_SUPABASE_URL;
+  // @ts-ignore
+  envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 } catch (e) {
-    console.warn("No se pudo acceder a import.meta.env, usando valores por defecto.");
+  // Ignorar errores de entorno local
 }
 
-// 2. Variables manuales (Edita esto si no usas .env)
-const HARDCODED_URL = 'https://tdgyqgrzjkafxwfkqtix.supabase.co'; // Pega tu URL de Supabase aquí (ej: https://xyz.supabase.co)
-const HARDCODED_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkZ3lxZ3J6amthZnh3ZmtxdGl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5MjEyODQsImV4cCI6MjA4MDQ5NzI4NH0.qplUc1Dy1dUdQgijek-J0cA1aMOxwqia_8W7LhmbxiY'; // Pega tu ANON KEY aquí
+const targetUrl = envUrl || '';
+const targetKey = envKey || '';
 
-// Selección de credenciales
-const targetUrl = ENV_URL || HARDCODED_URL || '';
-const targetKey = ENV_KEY || HARDCODED_KEY || '';
+const isConfigured = targetUrl.startsWith('http') && targetKey.length > 0;
 
-// Validar formato de URL para evitar que la app explote al iniciar
-const isValidUrl = (url: string) => {
-    try {
-        if (!url) return false;
-        const u = new URL(url);
-        return u.protocol === 'https:' || u.protocol === 'http:';
-    } catch (e) {
-        return false;
-    }
-};
-
-// Determinamos si estamos listos para conectar
-export const isConfigured = isValidUrl(targetUrl) && targetKey.length > 0;
-
+// Logging de estado para depuración en consola del navegador
 if (isConfigured) {
-    console.log("✅ Conexión Supabase: Configurada correctamente");
+    console.log("✅ Conectado a Supabase (Vercel/Local)");
 } else {
-    console.log("⚠️ Conexión Supabase: No configurada o URL inválida. Usando MODO DEMO.");
+    console.warn("⚠️ Credenciales Supabase NO encontradas.");
+    console.warn("Si estás en Vercel, ve a Settings > Environment Variables y añade VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY");
 }
 
-// Inicializamos el cliente de forma segura.
-// Si la configuración no es válida, usamos una URL dummy sintácticamente correcta
-// para que createClient no lance una excepción y la app pueda arrancar en modo Mock.
+// Crear cliente (usando valores dummy si no está configurado para evitar crashes del SDK)
 export const supabase = createClient(
-    isConfigured ? targetUrl : 'https://placeholder.supabase.co', 
+    isConfigured ? targetUrl : 'https://placeholder.supabase.co',
     isConfigured ? targetKey : 'placeholder'
 );
+
+export { isConfigured };
+
