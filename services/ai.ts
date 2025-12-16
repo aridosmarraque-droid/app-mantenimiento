@@ -1,23 +1,23 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Configurar API Key de forma segura o simular si no existe
-// @ts-ignore
-const apiKey = import.meta.env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : undefined) || 'demo-key';
-
 export const analyzeProductionReport = async (
     comments: string, 
     efficiency: number,
     date: Date
 ): Promise<string> => {
     
-    // Si no hay key real o es demo, devolver simulación para evitar errores
-    if (apiKey === 'demo-key' || !apiKey) {
-        return "⚠️ Modo Demo: No se ha configurado una API Key válida para Gemini. \n\n" +
-               "Simulación de respuesta: \n" +
-               "Basado en los comentarios, parece haber un problema mecánico recurrente. " +
-               "Se recomienda revisar los rodamientos del molino y verificar la tensión de las correas. " +
-               "La eficiencia del " + efficiency.toFixed(1) + "% indica una pérdida significativa de producción.";
+    // La API Key debe venir de las variables de entorno por seguridad.
+    // Si estás en local, asegúrate de tenerla configurada en tu entorno.
+    const apiKey = process.env.API_KEY;
+
+    // Si no hay key configurada, devolvemos una respuesta simulada para evitar errores en la Demo.
+    if (!apiKey) {
+        return "⚠️ Modo Demo: No se ha detectado una API Key válida (process.env.API_KEY). \n\n" +
+               "**Simulación de respuesta del Gerente Virtual:** \n" +
+               "Basado en los comentarios, parece haber un problema mecánico recurrente en la línea de molienda. " +
+               "Se recomienda revisar los rodamientos del molino y verificar la tensión de las correas principales. " +
+               `La eficiencia del ${efficiency.toFixed(1)}% indica una pérdida significativa de producción respecto a lo planificado.`;
     }
 
     try {
@@ -48,6 +48,7 @@ export const analyzeProductionReport = async (
 
     } catch (error) {
         console.error("Error llamando a Gemini:", error);
-        return "Error al conectar con el servicio de IA. Verifique la conexión o la API Key.";
+        return "Error al conectar con el servicio de IA. Verifique su API Key y conexión.";
     }
 };
+
