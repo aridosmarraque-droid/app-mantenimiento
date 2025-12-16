@@ -18,13 +18,13 @@ import { WorkerSelection } from './components/personal/WorkerSelection';
 import { PersonalReportForm } from './components/personal/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
-import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan, savePersonalReport } from './services/db';
+import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan, savePersonalReport, getLastCPReport } from './services/db';
 import { getProductionEfficiencyStats } from './services/stats'; // Importar funcion de estadisticas
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -110,6 +110,108 @@ function App() {
           setTimeout(() => setSuccessMsg(''), 2000);
       } else if (res.errors > 0) {
           alert(`Hubo errores al sincronizar ${res.errors} elementos. Inténtalo de nuevo.`);
+      }
+  };
+
+  const handleForceLastReportEmail = async () => {
+      setIsMenuOpen(false); // Cerrar menú
+      if (!navigator.onLine) {
+          alert("Necesitas conexión a internet para enviar el email.");
+          return;
+      }
+
+      setSuccessMsg('Generando PDF y enviando...');
+      try {
+          // 1. Obtener último reporte
+          const lastReport = await getLastCPReport();
+          if (!lastReport) {
+              alert("No hay reportes de producción registrados.");
+              setSuccessMsg('');
+              return;
+          }
+
+          // 2. Obtener datos auxiliares (Planificación y Stats)
+          const d = new Date(lastReport.date);
+          const day = d.getDay(); // 0-6
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const monday = new Date(d);
+          monday.setDate(diff);
+          const mondayStr = monday.toISOString().split('T')[0];
+
+          const [plan, globalStats] = await Promise.all([
+              getCPWeeklyPlan(mondayStr),
+              getProductionEfficiencyStats()
+          ]);
+
+          let plannedHours = 8;
+          if (plan) {
+              switch(day) {
+                  case 1: plannedHours = plan.hoursMon; break;
+                  case 2: plannedHours = plan.hoursTue; break;
+                  case 3: plannedHours = plan.hoursWed; break;
+                  case 4: plannedHours = plan.hoursThu; break;
+                  case 5: plannedHours = plan.hoursFri; break;
+                  default: plannedHours = 0;
+              }
+          }
+
+          const actualHours = lastReport.millsEnd - lastReport.millsStart;
+          const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
+          const { weekly, monthly } = globalStats;
+
+          // 3. Generar PDF
+          const pdfBase64 = generateCPReportPDF(
+              lastReport,
+              currentUser?.name || 'Administrador',
+              plannedHours,
+              efficiency,
+              weekly,
+              monthly
+          );
+
+          // 4. Enviar Email
+          const emailSubject = `[REENVÍO] Parte Producción - ${lastReport.date.toLocaleDateString()}`;
+          const formatTrend = (trend: 'up'|'down'|'equal', diff: number) => {
+               const arrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '=';
+               const color = trend === 'up' ? 'green' : trend === 'down' ? 'red' : 'gray';
+               return `<span style="color:${color}; font-weight:bold;">${arrow} ${diff > 0 ? '+' : ''}${diff}%</span>`;
+          };
+
+          const emailHtml = `
+            <h2>Parte Diario de Producción (Reenvío Manual)</h2>
+            <p><strong>Fecha del Parte:</strong> ${lastReport.date.toLocaleDateString()}</p>
+            <p><strong>Solicitado por:</strong> ${currentUser?.name}</p>
+            <hr/>
+            <h3>Resumen:</h3>
+            <ul>
+                <li>Eficiencia Diaria: <strong>${efficiency.toFixed(1)}%</strong></li>
+                <li>Tendencia Semanal: ${formatTrend(weekly.trend, weekly.diff)}</li>
+            </ul>
+            <br/>
+            <p>Se adjunta el informe PDF actualizado (incluyendo análisis IA si está disponible).</p>
+          `;
+
+          const { success } = await sendEmail(
+              ['aridos@marraque.es'],
+              emailSubject,
+              emailHtml,
+              pdfBase64,
+              `Parte_${lastReport.date.toISOString().split('T')[0]}.pdf`
+          );
+
+          if (success) {
+              setSuccessMsg('Email Enviado Correctamente ✅');
+          } else {
+              alert("Error al enviar el email.");
+              setSuccessMsg('');
+          }
+          
+          setTimeout(() => setSuccessMsg(''), 2000);
+
+      } catch (e) {
+          console.error(e);
+          alert("Ocurrió un error inesperado.");
+          setSuccessMsg('');
       }
   };
 
@@ -420,6 +522,10 @@ function App() {
                       <TrendingUp className="w-4 h-4 text-amber-500" />
                       <span className="text-sm">Informes Producción</span>
                   </button>
+                   <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-green-50 text-green-700 flex items-center gap-3 border-b border-slate-50 transition-colors bg-green-50/50">
+                      <Send className="w-4 h-4" />
+                      <span className="text-sm font-semibold">Forzar Envío Email PDF</span>
+                  </button>
 
                   {/* GRUPO 3: REGISTROS */}
                   <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t">
@@ -626,3 +732,4 @@ function App() {
 }
 
 export default App;
+
