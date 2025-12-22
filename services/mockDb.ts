@@ -4,10 +4,10 @@ import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, Maintenance
 // --- MOCK DATA ---
 
 export const WORKERS: Worker[] = [
-  { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin' },
-  { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker' },
-  { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker' },
-  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp' }, // Usuario CP
+  { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin', active: true },
+  { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker', active: true },
+  { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker', active: true },
+  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp', active: true },
 ];
 
 export const COST_CENTERS: CostCenter[] = [
@@ -49,21 +49,26 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
   { id: 'sp5', name: 'Neumáticos del Sur' },
 ];
 
-// In-memory store for the session
 let logs: OperationLog[] = [];
 let cpReports: CPDailyReport[] = [];
 let personalReports: PersonalReport[] = []; 
 let cpPlanning: CPWeeklyPlan[] = [];
 
-// Initialize some dummy personal reports
-personalReports.push({
-    id: 'pr1', date: new Date(), workerId: '4', hours: 8, machineId: 'm3', costCenterId: 'c2', machineName: 'Machacadora Primaria', costCenterName: 'Cantera Pura Machacadora'
-});
-
 // --- SERVICE METHODS ---
 
 export const getWorkers = async (): Promise<Worker[]> => {
   return new Promise(resolve => setTimeout(() => resolve(WORKERS), 300));
+};
+
+export const saveWorker = async (worker: Omit<Worker, 'id'>): Promise<void> => {
+    WORKERS.push({ ...worker, id: Math.random().toString(36).substr(2, 9), positionIds: [] });
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const updateWorker = async (id: string, updates: Partial<Worker>): Promise<void> => {
+    const idx = WORKERS.findIndex(w => w.id === id);
+    if (idx !== -1) WORKERS[idx] = { ...WORKERS[idx], ...updates };
+    return new Promise(resolve => setTimeout(resolve, 300));
 };
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
@@ -78,17 +83,13 @@ export const createCostCenter = async (name: string): Promise<CostCenter> => {
 
 export const updateCostCenter = async (id: string, name: string): Promise<void> => {
     const center = COST_CENTERS.find(c => c.id === id);
-    if (center) {
-        center.name = name;
-    }
+    if (center) center.name = name;
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
 export const deleteCostCenter = async (id: string): Promise<void> => {
     const idx = COST_CENTERS.findIndex(c => c.id === id);
-    if (idx !== -1) {
-        COST_CENTERS.splice(idx, 1);
-    }
+    if (idx !== -1) COST_CENTERS.splice(idx, 1);
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
@@ -113,18 +114,14 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     const idx = MACHINES.findIndex(m => m.id === id);
-    if (idx !== -1) {
-        MACHINES[idx] = { ...MACHINES[idx], ...updates };
-    }
+    if (idx !== -1) MACHINES[idx] = { ...MACHINES[idx], ...updates };
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     const newDef = { ...def, id: Math.random().toString(36).substr(2, 9) };
     const machine = MACHINES.find(m => m.id === def.machineId);
-    if (machine) {
-        machine.maintenanceDefs.push(newDef);
-    }
+    if (machine) machine.maintenanceDefs.push(newDef);
     return new Promise(resolve => setTimeout(() => resolve(newDef), 300));
 };
 
@@ -132,9 +129,7 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
     const machine = MACHINES.find(m => m.id === def.machineId);
     if (machine) {
         const idx = machine.maintenanceDefs.findIndex(d => d.id === def.id);
-        if (idx !== -1) {
-            machine.maintenanceDefs[idx] = def;
-        }
+        if (idx !== -1) machine.maintenanceDefs[idx] = def;
     }
     return new Promise(resolve => setTimeout(resolve, 300));
 };
@@ -150,29 +145,37 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
   return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
 
-// LOGIC CORE for MOCK
+export const createServiceProvider = async (name: string): Promise<void> => {
+    SERVICE_PROVIDERS.push({ id: Math.random().toString(36).substr(2, 9), name });
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const updateServiceProvider = async (id: string, name: string): Promise<void> => {
+    const p = SERVICE_PROVIDERS.find(sp => sp.id === id);
+    if (p) p.name = name;
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const deleteServiceProvider = async (id: string): Promise<void> => {
+    const idx = SERVICE_PROVIDERS.findIndex(p => p.id === id);
+    if (idx !== -1) SERVICE_PROVIDERS.splice(idx, 1);
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
 const updateMockMaintenanceStatus = (machineId: string, currentHours: number) => {
     const machine = MACHINES.find(m => m.id === machineId);
     if (!machine) return;
-
     machine.maintenanceDefs.forEach(def => {
-        // Logica para DATE
         if (def.maintenanceType === 'DATE') {
             if (def.nextDate) {
-                const today = new Date();
-                today.setHours(0,0,0,0);
-                const target = new Date(def.nextDate);
-                target.setHours(0,0,0,0);
+                const today = new Date(); today.setHours(0,0,0,0);
+                const target = new Date(def.nextDate); target.setHours(0,0,0,0);
                 def.pending = today >= target;
             }
             return;
         }
-
-        // Logica para HOURS
         if (def.intervalHours === undefined) return;
-
         let remaining;
-
         if (def.lastMaintenanceHours !== undefined && def.lastMaintenanceHours !== null) {
             const nextDue = Number(def.lastMaintenanceHours) + Number(def.intervalHours);
             remaining = nextDue - currentHours;
@@ -180,25 +183,17 @@ const updateMockMaintenanceStatus = (machineId: string, currentHours: number) =>
             const hoursInCycle = currentHours % def.intervalHours;
             remaining = def.intervalHours - hoursInCycle;
         }
-
         def.remainingHours = remaining;
-        const shouldBePending = remaining <= (def.warningHours || 0);
-        def.pending = shouldBePending;
+        def.pending = remaining <= (def.warningHours || 0);
     });
 };
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
   const newLog = { ...log, id: Math.random().toString(36).substr(2, 9) };
   logs.push(newLog);
-  
-  const machineIndex = MACHINES.findIndex(m => m.id === log.machineId);
-  const machine = MACHINES[machineIndex];
-
-  if (machineIndex >= 0 && log.hoursAtExecution && log.hoursAtExecution > machine.currentHours) {
-    machine.currentHours = log.hoursAtExecution;
-  }
-
-  if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
+  const machine = MACHINES.find(m => m.id === log.machineId);
+  if (machine && log.hoursAtExecution && log.hoursAtExecution > machine.currentHours) machine.currentHours = log.hoursAtExecution;
+  if (log.type === 'SCHEDULED' && log.maintenanceDefId && machine) {
       const def = machine.maintenanceDefs.find(d => d.id === log.maintenanceDefId);
       if (def) {
           if (def.maintenanceType === 'DATE') {
@@ -208,14 +203,10 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
                   next.setMonth(next.getMonth() + def.intervalMonths);
                   def.nextDate = next;
               }
-          } else {
-              def.lastMaintenanceHours = log.hoursAtExecution;
-          }
+          } else def.lastMaintenanceHours = log.hoursAtExecution;
       }
   }
-
-  updateMockMaintenanceStatus(log.machineId, machine.currentHours);
-
+  updateMockMaintenanceStatus(log.machineId, machine?.currentHours || 0);
   return new Promise(resolve => setTimeout(() => resolve(newLog), 500));
 };
 
@@ -238,18 +229,12 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
     return new Promise(resolve => {
         setTimeout(() => {
             let filtered = logs.filter(l => l.machineId === machineId);
-            
-            if (startDate) {
-                filtered = filtered.filter(l => l.date >= startDate);
-            }
+            if (startDate) filtered = filtered.filter(l => l.date >= startDate);
             if (endDate) {
-                const e = new Date(endDate);
-                e.setHours(23, 59, 59, 999);
+                const e = new Date(endDate); e.setHours(23, 59, 59, 999);
                 filtered = filtered.filter(l => l.date <= e);
             }
-            if (types && types.length > 0) {
-                filtered = filtered.filter(l => types.includes(l.type));
-            }
+            if (types && types.length > 0) filtered = filtered.filter(l => types.includes(l.type));
             filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
             resolve(filtered);
         }, 300);
@@ -261,7 +246,6 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         setTimeout(() => {
             if (cpReports.length === 0) resolve(null);
             else {
-                // Sort by date desc
                 const sorted = [...cpReports].sort((a, b) => b.date.getTime() - a.date.getTime());
                 resolve(sorted[0]);
             }
@@ -272,10 +256,8 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
 export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
     return new Promise(resolve => {
         setTimeout(() => {
-            // Filter inclusive
             const start = new Date(startDate); start.setHours(0,0,0,0);
             const end = new Date(endDate); end.setHours(23,59,59,999);
-            
             const filtered = cpReports.filter(r => r.date >= start && r.date <= end);
             resolve(filtered);
         }, 300);
@@ -290,9 +272,7 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 
 export const updateCPReportAnalysis = async (id: string, analysis: string): Promise<void> => {
     const report = cpReports.find(r => r.id === id);
-    if (report) {
-        report.aiAnalysis = analysis;
-    }
+    if (report) report.aiAnalysis = analysis;
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
@@ -309,11 +289,8 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
      return new Promise(resolve => {
         setTimeout(() => {
             const idx = cpPlanning.findIndex(p => p.mondayDate === plan.mondayDate);
-            if (idx >= 0) {
-                cpPlanning[idx] = { ...plan, id: cpPlanning[idx].id }; // Update keeping ID if existed
-            } else {
-                cpPlanning.push({ ...plan, id: Math.random().toString(36).substr(2, 9) });
-            }
+            if (idx >= 0) cpPlanning[idx] = { ...plan, id: cpPlanning[idx].id }; 
+            else cpPlanning.push({ ...plan, id: Math.random().toString(36).substr(2, 9) });
             resolve();
         }, 300);
     });
@@ -324,14 +301,13 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         setTimeout(() => {
             const reports = personalReports.filter(r => r.workerId === workerId);
             reports.sort((a, b) => b.date.getTime() - a.date.getTime());
-            resolve(reports.slice(0, 5)); // Limit like DB
+            resolve(reports.slice(0, 5)); 
         }, 300);
     });
 };
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     const newReport = { ...report, id: Math.random().toString(36).substr(2, 9) };
-    // Enrich with names for mock display consistency if needed
     if (!newReport.machineName) {
         const m = MACHINES.find(mach => mach.id === report.machineId);
         if (m) {
@@ -343,8 +319,6 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
         const c = COST_CENTERS.find(cen => cen.id === newReport.costCenterId);
         if (c) newReport.costCenterName = c.name;
     }
-
     personalReports.push(newReport);
     return new Promise(resolve => setTimeout(resolve, 300));
 };
-
