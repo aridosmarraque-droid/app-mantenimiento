@@ -10,7 +10,8 @@ export interface Worker {
   dni: string; // We use this for auth (first 4 digits)
   phone: string;
   positionIds: string[];
-  role: 'admin' | 'worker' | 'cp'; // Añadido 'cp'
+  role: 'admin' | 'worker' | 'cp';
+  active?: boolean; // Nuevo campo para gestión
 }
 
 export interface CostCenter {
@@ -134,4 +135,3 @@ export interface PersonalReport {
     description?: string; // Optional now?
     location?: string; // Legacy/Optional
 }
-
