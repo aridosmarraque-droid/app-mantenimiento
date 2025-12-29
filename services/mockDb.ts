@@ -33,7 +33,7 @@ export const SERVICE_PROVIDERS: ServiceProvider[] = [
 
 let logs: OperationLog[] = [];
 let cpReports: CPDailyReport[] = [];
-let crReports: CRDailyReport[] = []; // Nuevo
+let crReports: CRDailyReport[] = []; 
 let personalReports: PersonalReport[] = []; 
 let cpPlanning: CPWeeklyPlan[] = [];
 
@@ -168,7 +168,6 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
-// --- MOCK CR ---
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     return new Promise(resolve => {
         if (crReports.length === 0) resolve(null);
@@ -204,4 +203,8 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     return;
+};
+
+export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[] }> => {
+    return { ops: [], personal: [] };
 };
