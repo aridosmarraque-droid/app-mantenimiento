@@ -12,6 +12,7 @@ import { CreateCenterForm } from './components/admin/CreateCenterForm';
 import { CreateMachineForm } from './components/admin/CreateMachineForm';
 import { EditMachineForm } from './components/admin/EditMachineForm';
 import { MachineLogsViewer } from './components/admin/MachineLogsViewer';
+import { DailyAuditViewer } from './components/admin/DailyAuditViewer';
 import { WorkerManager } from './components/admin/WorkerManager';
 import { ProviderManager } from './components/admin/ProviderManager';
 import { CPSelection } from './components/cp/CPSelection';
@@ -28,7 +29,7 @@ import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send, AlertTriangle, Users, BookOpen } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send, AlertTriangle, Users, BookOpen, SearchCheck } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -46,6 +47,7 @@ enum ViewState {
   ADMIN_SELECT_MACHINE_TO_EDIT,
   ADMIN_EDIT_MACHINE,
   ADMIN_VIEW_LOGS,
+  ADMIN_DAILY_AUDIT,
   ADMIN_CP_PLANNING,
   ADMIN_PRODUCTION_DASHBOARD,
   ADMIN_MANAGE_WORKERS,
@@ -245,21 +247,48 @@ function App() {
           </div>
           
           {isMenuOpen && isUserAdmin && (
-              <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-hidden border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
+              <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
+                  {/* CATEGORÍA: ACTIVOS */}
                   <div className="bg-slate-50 px-4 py-2 border-b border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gestión de Activos</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Factory className="w-4 h-4 text-blue-500" /><span className="text-sm">Canteras / Grupos</span></button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Truck className="w-4 h-4 text-blue-500" /><span className="text-sm">Nueva Máquina</span></button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Modificar Máquina</span></button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <Factory className="w-4 h-4 text-blue-500" /><span className="text-sm">Canteras / Grupos</span>
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <Truck className="w-4 h-4 text-blue-500" /><span className="text-sm">Nueva Máquina</span>
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Modificar Máquina</span>
+                  </button>
 
+                  {/* CATEGORÍA: PRODUCCIÓN */}
                   <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producción</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación Cantera</span></button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Informes Producción</span></button>
-                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-green-50 text-green-700 flex items-center gap-3 border-b border-slate-50 bg-green-50/50"><Send className="w-4 h-4" /><span className="text-sm font-semibold">Forzar Envío Email PDF</span></button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación Cantera</span>
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Informes Producción</span>
+                  </button>
+                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-green-50 text-green-700 flex items-center gap-3 border-b border-slate-50">
+                    <Send className="w-4 h-4 text-green-600" /><span className="text-sm">Re-enviar Email Producción</span>
+                  </button>
 
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Configuración General</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Users className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión de Personal</span></button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><BookOpen className="w-4 h-4 text-red-500" /><span className="text-sm">Proveedores / Reparadores</span></button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 transition-colors"><FileSearch className="w-4 h-4 text-green-600" /><span className="text-sm">Consultar Registros</span></button>
+                  {/* CATEGORÍA: CONSULTAS Y AUDITORÍA */}
+                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consultas y Auditoría</p></div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 bg-blue-50/30">
+                    <SearchCheck className="w-4 h-4 text-indigo-600" /><span className="text-sm font-semibold">Auditoría Diaria (Todo)</span>
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <FileSearch className="w-4 h-4 text-green-600" /><span className="text-sm">Registros por Máquina</span>
+                  </button>
+
+                  {/* CATEGORÍA: CONFIGURACIÓN */}
+                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Configuración</p></div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <Users className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión de Personal</span>
+                  </button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                    <BookOpen className="w-4 h-4 text-red-500" /><span className="text-sm">Proveedores / Talleres</span>
+                  </button>
                   
                   <div className="p-4 border-t border-slate-100 mt-2"><button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left hover:text-red-700 flex items-center gap-2"><LogOut size={16} /> Cerrar Sesión</button></div>
               </div>
@@ -291,6 +320,7 @@ function App() {
               {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_PRODUCTION_DASHBOARD && <ProductionDashboard onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+              {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ACTION_MENU && selectedContext && <MainMenu machineName={selectedContext.machine.name} onSelect={handleActionSelect} onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
