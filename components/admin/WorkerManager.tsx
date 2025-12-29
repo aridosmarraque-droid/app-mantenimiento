@@ -18,7 +18,6 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
     const [name, setName] = useState('');
     const [dni, setDni] = useState('');
     const [phone, setPhone] = useState('');
-    // Added 'cr' to the allowed role types in state to match the Worker type in types.ts
     const [role, setRole] = useState<'worker' | 'admin' | 'cp' | 'cr'>('worker');
     const [active, setActive] = useState(true);
 
@@ -28,9 +27,14 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
 
     const loadWorkers = async () => {
         setLoading(true);
-        const data = await getWorkers(false); // Get all, including inactive
-        setWorkers(data);
-        setLoading(false);
+        try {
+            const data = await getWorkers(false); // Get all, including inactive
+            setWorkers(data);
+        } catch (error) {
+            console.error("Error loading workers", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const resetForm = () => {
@@ -46,9 +50,9 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         setEditingId(w.id);
         setName(w.name);
         setDni(w.dni);
-        setPhone(w.phone);
-        // Fix: w.role can be 'cr', which is now supported by the updated role state
-        setRole(w.role);
+        setPhone(w.phone || '');
+        // Forzamos el cast para asegurar que el select reconozca el valor
+        setRole(w.role as any);
         setActive(w.active ?? true);
     };
 
@@ -56,12 +60,11 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         e.preventDefault();
         setSaving(true);
         try {
-            // Fix: Worker interface requires positionIds, so it must be included in the creation payload
             const payload: Omit<Worker, 'id'> = {
                 name,
                 dni,
                 phone,
-                role,
+                role, // Usamos el estado local 'role' que es 'worker' | 'admin' | 'cp' | 'cr'
                 active,
                 positionIds: []
             };
@@ -73,9 +76,11 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
             }
             
             resetForm();
-            loadWorkers();
-        } catch (error) {
-            alert("Error al guardar trabajador");
+            await loadWorkers();
+            alert("Trabajador guardado con éxito");
+        } catch (error: any) {
+            console.error("Error saving worker", error);
+            alert("Error al guardar trabajador: " + (error.message || "Error desconocido"));
         } finally {
             setSaving(false);
         }
@@ -115,7 +120,12 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rol / Permisos *</label>
-                            <select required className="w-full p-2 border rounded shadow-sm bg-white" value={role} onChange={e => setRole(e.target.value as any)}>
+                            <select 
+                                required 
+                                className="w-full p-2 border rounded shadow-sm bg-white" 
+                                value={role} 
+                                onChange={e => setRole(e.target.value as any)}
+                            >
                                 <option value="worker">Operario (Solo Mantenimiento)</option>
                                 <option value="cp">Cantera Pura (Mantenimiento + Producción)</option>
                                 <option value="cr">Canto Rodado (Mantenimiento + Producción)</option>
@@ -131,7 +141,7 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                         </button>
                     </div>
 
-                    <button type="submit" disabled={saving} className="w-full py-3 bg-slate-800 text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-slate-900 shadow-lg">
+                    <button type="submit" disabled={saving} className="w-full py-3 bg-slate-800 text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-slate-900 shadow-lg disabled:opacity-70">
                         {saving ? <Loader2 className="animate-spin" /> : editingId ? <Save size={18}/> : <UserPlus size={18}/>}
                         {editingId ? 'Actualizar Trabajador' : 'Registrar Trabajador'}
                     </button>
