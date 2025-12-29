@@ -95,6 +95,47 @@ function App() {
       } else if (res.errors > 0) alert(`Hubo errores al sincronizar ${res.errors} elementos.`);
   };
 
+  const handleForceLastReportEmail = async () => {
+      setIsMenuOpen(false);
+      if (!navigator.onLine) { alert("Necesitas conexión a internet."); return; }
+      setSuccessMsg('Generando PDF y enviando...');
+      try {
+          const lastReport = await getLastCPReport();
+          if (!lastReport) { alert("No hay reportes."); setSuccessMsg(''); return; }
+          const d = new Date(lastReport.date);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const monday = new Date(d); monday.setDate(diff);
+          const mondayStr = monday.toISOString().split('T')[0];
+          const [plan, globalStats] = await Promise.all([getCPWeeklyPlan(mondayStr), getProductionEfficiencyStats()]);
+          let plannedHours = 8;
+          if (plan) {
+              switch(day) {
+                  case 1: plannedHours = plan.hoursMon; break;
+                  case 2: plannedHours = plan.hoursTue; break;
+                  case 3: plannedHours = plan.hoursWed; break;
+                  case 4: plannedHours = plan.hoursThu; break;
+                  case 5: plannedHours = plan.hoursFri; break;
+                  default: plannedHours = 0;
+              }
+          }
+          const actualHours = lastReport.millsEnd - lastReport.millsStart;
+          const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
+          const { weekly, monthly } = globalStats;
+          const pdfBase64 = generateCPReportPDF(lastReport, currentUser?.name || 'Administrador', plannedHours, efficiency, weekly, monthly);
+          const emailSubject = `[REENVÍO] Parte Producción - ${lastReport.date.toLocaleDateString()}`;
+          const formatTrend = (trend: 'up'|'down'|'equal', diff: number) => {
+               const arrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '=';
+               const color = trend === 'up' ? 'green' : trend === 'down' ? 'red' : 'gray';
+               return `<span style="color:${color}; font-weight:bold;">${arrow} ${diff > 0 ? '+' : ''}${diff}%</span>`;
+          };
+          const emailHtml = `<h2>Parte Diario de Producción</h2><p><strong>Fecha:</strong> ${lastReport.date.toLocaleDateString()}</p><p>Eficiencia: ${efficiency.toFixed(1)}%</p><p>Tendencia Semanal: ${formatTrend(weekly.trend, weekly.diff)}</p>`;
+          const { success } = await sendEmail(['aridos@marraque.es'], emailSubject, emailHtml, pdfBase64, `Parte_${lastReport.date.toISOString().split('T')[0]}.pdf`);
+          if (success) setSuccessMsg('Email Enviado ✅'); else alert("Error al enviar email.");
+          setTimeout(() => setSuccessMsg(''), 2000);
+      } catch (e) { alert("Error inesperado."); setSuccessMsg(''); }
+  };
+
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
     if (worker.role === 'cp') setViewState(ViewState.CP_SELECTION);
@@ -210,6 +251,11 @@ function App() {
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Truck className="w-4 h-4 text-blue-500" /><span className="text-sm">Nueva Máquina</span></button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Modificar Máquina</span></button>
 
+                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producción</p></div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación Cantera</span></button>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Informes Producción</span></button>
+                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-green-50 text-green-700 flex items-center gap-3 border-b border-slate-50 bg-green-50/50"><Send className="w-4 h-4" /><span className="text-sm font-semibold">Forzar Envío Email PDF</span></button>
+
                   <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Configuración General</p></div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Users className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión de Personal</span></button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><BookOpen className="w-4 h-4 text-red-500" /><span className="text-sm">Proveedores / Reparadores</span></button>
@@ -242,6 +288,8 @@ function App() {
               {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada')}/>}
               {viewState === ViewState.ADMIN_CREATE_MACHINE && <CreateMachineForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Máquina creada')}/>}
               {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => handleAdminSuccess('Actualizada')}/>}
+              {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+              {viewState === ViewState.ADMIN_PRODUCTION_DASHBOARD && <ProductionDashboard onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
