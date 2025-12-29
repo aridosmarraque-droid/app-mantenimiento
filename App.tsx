@@ -29,7 +29,7 @@ import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send, AlertTriangle, Users, BookOpen, SearchCheck } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send, AlertTriangle, Users, BookOpen, SearchCheck, ClipboardCheck, LayoutGrid, HardHat } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -248,60 +248,77 @@ function App() {
           
           {isMenuOpen && isUserAdmin && (
               <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
+                  
                   {/* CATEGORÍA: ACTIVOS */}
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gestión de Activos</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <Factory className="w-4 h-4 text-blue-500" /><span className="text-sm">Canteras / Grupos</span>
+                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
+                    <Truck className="w-3.5 h-3.5 text-blue-400" />
+                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Maquinaria y Activos</p>
+                  </div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <Factory className="w-4 h-4 text-blue-500" /><span className="text-sm">Centros de Coste</span>
                   </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <Truck className="w-4 h-4 text-blue-500" /><span className="text-sm">Nueva Máquina</span>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <LayoutGrid className="w-4 h-4 text-blue-500" /><span className="text-sm">Alta de Máquina</span>
                   </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Modificar Máquina</span>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Editar Máquina</span>
                   </button>
 
                   {/* CATEGORÍA: PRODUCCIÓN */}
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producción</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación Cantera</span>
+                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Gestión Producción</p>
+                  </div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación</span>
                   </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Informes Producción</span>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Dashboard Eficiencia</span>
                   </button>
-                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-green-50 text-green-700 flex items-center gap-3 border-b border-slate-50">
-                    <Send className="w-4 h-4 text-green-600" /><span className="text-sm">Re-enviar Email Producción</span>
+                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-amber-50 text-amber-700 flex items-center gap-3 border-b border-slate-100">
+                    <Send className="w-4 h-4 text-amber-600" /><span className="text-sm font-medium">Re-enviar Reporte Diario</span>
                   </button>
 
-                  {/* CATEGORÍA: CONSULTAS Y AUDITORÍA */}
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Consultas y Auditoría</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50 bg-blue-50/30">
-                    <SearchCheck className="w-4 h-4 text-indigo-600" /><span className="text-sm font-semibold">Auditoría Diaria (Todo)</span>
+                  {/* CATEGORÍA: AUDITORÍA */}
+                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
+                    <SearchCheck className="w-3.5 h-3.5 text-indigo-400" />
+                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Auditoría y Registros</p>
+                  </div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left px-4 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 flex items-center gap-3 border-b border-indigo-100">
+                    <ClipboardCheck className="w-4 h-4 text-indigo-600" /><span className="text-sm font-bold">Auditoría Diaria</span>
                   </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <FileSearch className="w-4 h-4 text-green-600" /><span className="text-sm">Registros por Máquina</span>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <FileSearch className="w-4 h-4 text-indigo-500" /><span className="text-sm">Log por Máquina</span>
                   </button>
 
                   {/* CATEGORÍA: CONFIGURACIÓN */}
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Configuración</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
-                    <Users className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión de Personal</span>
+                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
+                    <Users className="w-3.5 h-3.5 text-red-400" />
+                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Personal y Config.</p>
+                  </div>
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
+                    <HardHat className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión Plantilla</span>
                   </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50">
+                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
                     <BookOpen className="w-4 h-4 text-red-500" /><span className="text-sm">Proveedores / Talleres</span>
                   </button>
                   
-                  <div className="p-4 border-t border-slate-100 mt-2"><button onClick={handleLogout} className="text-red-500 text-sm font-medium w-full text-left hover:text-red-700 flex items-center gap-2"><LogOut size={16} /> Cerrar Sesión</button></div>
+                  <div className="p-4 bg-slate-50 border-t border-slate-200 mt-auto">
+                    <button onClick={handleLogout} className="text-red-600 text-sm font-bold w-full text-left hover:text-red-800 flex items-center gap-2">
+                        <LogOut size={16} /> Cerrar Sesión
+                    </button>
+                  </div>
               </div>
           )}
         </header>
         
-        {isMenuOpen && <div className="fixed inset-0 bg-black/20 z-10" onClick={() => setIsMenuOpen(false)}></div>}
+        {isMenuOpen && <div className="fixed inset-0 bg-black/40 z-10 backdrop-blur-[1px]" onClick={() => setIsMenuOpen(false)}></div>}
 
         <main className="flex-1 p-4 overflow-y-auto">
           {successMsg && (
-            <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in absolute inset-0 bg-white/90 z-50">
-              <CheckCircle2 className="w-20 h-20 mb-4" />
-              <h2 className="text-xl font-bold text-center">{successMsg}</h2>
+            <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in absolute inset-0 bg-white/95 z-50">
+              <CheckCircle2 className="w-24 h-24 mb-4" />
+              <h2 className="text-2xl font-bold text-center px-6">{successMsg}</h2>
             </div>
           )}
 
