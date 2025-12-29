@@ -18,6 +18,31 @@ const isValidUUID = (id: string) => {
     return regex.test(id);
 };
 
+// Mapeo de tipos de operación UI -> SQL
+const toDbOperationType = (type: OperationType): string => {
+    switch (type) {
+        case 'BREAKDOWN': return 'AVERIA';
+        case 'LEVELS': return 'NIVELES';
+        case 'MAINTENANCE': return 'MANTENIMIENTO';
+        case 'SCHEDULED': return 'PROGRAMADO';
+        case 'REFUELING': return 'REPOSTAJE';
+        default: return type;
+    }
+};
+
+// Mapeo de tipos de operación SQL -> UI
+const fromDbOperationType = (type: string): OperationType => {
+    switch (type) {
+        case 'AVERIA': return 'BREAKDOWN';
+        case 'DESINTEGRACION': return 'BREAKDOWN'; // Manejar valor antiguo reportado
+        case 'NIVELES': return 'LEVELS';
+        case 'MANTENIMIENTO': return 'MAINTENANCE';
+        case 'PROGRAMADO': return 'SCHEDULED';
+        case 'REPOSTAJE': return 'REFUELING';
+        default: return type as OperationType;
+    }
+};
+
 // --- MAPPERS ---
 
 const mapWorker = (w: any): Worker => ({
@@ -69,7 +94,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   workerId: dbLog.trabajador_id,
   machineId: dbLog.maquina_id,
   hoursAtExecution: Number(dbLog.horas_registro),
-  type: dbLog.tipo_operacion,
+  type: fromDbOperationType(dbLog.tipo_operacion),
   motorOil: dbLog.aceite_motor_l,
   hydraulicOil: dbLog.aceite_hidraulico_l,
   coolant: dbLog.refrigerante_l,
@@ -275,7 +300,7 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 
 export const getLastMaintenanceLog = async (machineId: string, defId: string): Promise<OperationLog | undefined> => {
     if (!isConfigured) return mock.getLastMaintenanceLog(machineId, defId);
-    const { data, error } = await supabase.from('mant_registros').select('*').eq('maquina_id', machineId).eq('tipo_operacion', 'SCHEDULED').eq('mantenimiento_def_id', defId).order('horas_registro', { ascending: false }).limit(1).maybeSingle(); 
+    const { data, error } = await supabase.from('mant_registros').select('*').eq('maquina_id', machineId).eq('tipo_operacion', 'PROGRAMADO').order('horas_registro', { ascending: false }).limit(1).maybeSingle(); 
     if (error || !data) return undefined;
     return mapLogFromDb(data);
 };
@@ -292,7 +317,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
             trabajador_id: log.workerId,
             maquina_id: log.machineId,
             horas_registro: log.hoursAtExecution,
-            tipo_operacion: log.type,
+            tipo_operacion: toDbOperationType(log.type), // Mapeo a SQL
             aceite_motor_l: log.motorOil,
             aceite_hidraulico_l: log.hydraulicOil,
             refrigerante_l: log.coolant,
@@ -385,7 +410,10 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
             e.setHours(23, 59, 59, 999);
             query = query.lte('fecha', e.toISOString());
         }
-        if (types && types.length > 0) query = query.in('tipo_operacion', types);
+        if (types && types.length > 0) {
+            const dbTypes = types.map(toDbOperationType);
+            query = query.in('tipo_operacion', dbTypes);
+        }
         const { data, error } = await query.order('fecha', { ascending: false });
         if (error) throw error;
         return data.map(mapLogFromDb);
@@ -493,7 +521,7 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
         try {
             if (item.type === 'LOG') {
                 const log = item.payload;
-                const dbLog = { fecha: log.date, trabajador_id: log.workerId, maquina_id: log.machineId, horas_registro: log.hoursAtExecution, tipo_operacion: log.type, aceite_motor_l: log.motorOil, aceite_hidraulico_l: log.hydraulicOil, refrigerante_l: log.coolant, causa_averia: log.breakdownCause, solucion_averia: log.breakdownSolution, reparador_id: log.repairerId, tipo_mantenimiento: log.maintenanceType, descripcion: log.description, materiales: log.materials, mantenimiento_def_id: log.maintenanceDefId, litros_combustible: log.fuelLitres };
+                const dbLog = { fecha: log.date, trabajador_id: log.workerId, maquina_id: log.machineId, horas_registro: log.hoursAtExecution, tipo_operacion: toDbOperationType(log.type), aceite_motor_l: log.motorOil, aceite_hidraulico_l: log.hydraulicOil, refrigerante_l: log.coolant, causa_averia: log.breakdownCause, solucion_averia: log.breakdownSolution, reparador_id: log.repairerId, tipo_mantenimiento: log.maintenanceType, descripcion: log.description, materiales: log.materials, mantenimiento_def_id: log.maintenanceDefId, litros_combustible: log.fuelLitres };
                  const { error } = await supabase.from('mant_registros').insert(dbLog);
                  if (error) throw error;
                  const { data: mData } = await supabase.from('mant_maquinas').select('horas_actuales').eq('id', log.machineId).single();
@@ -520,4 +548,3 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
     }
     return { synced, errors };
 };
-
