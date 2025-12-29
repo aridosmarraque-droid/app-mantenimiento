@@ -10,58 +10,50 @@ export interface Worker {
   dni: string; // We use this for auth (first 4 digits)
   phone: string;
   positionIds: string[];
-  role: 'admin' | 'worker' | 'cp';
-  active?: boolean; // Nuevo campo para gestión
+  role: 'admin' | 'worker' | 'cp' | 'cr'; // Nuevo rol 'cr'
+  active?: boolean;
 }
 
 export interface CostCenter {
   id: string;
-  name: string; // e.g., "Cantera Pura Machacadora"
+  name: string;
 }
 
 export interface MaintenanceDefinition {
-  id?: string; // Optional for creation
+  id?: string;
   machineId?: string;
-  name: string; // e.g., "Mantenimiento 500h"
-  
-  // Logic Config
-  maintenanceType: 'HOURS' | 'DATE'; // Nuevo: Tipo de mantenimiento
-  
-  // Hours Logic
-  intervalHours?: number; // 500
-  warningHours?: number; // 50
-  lastMaintenanceHours?: number | null; // Cuándo se hizo por última vez
-  remainingHours?: number; // Horas hasta el próximo
-
-  // Date Logic
-  intervalMonths?: number; // Nuevo: Intervalo en meses
-  nextDate?: Date; // Nuevo: Próxima fecha programada
-  lastMaintenanceDate?: Date; // Nuevo: Fecha última realización
-  
-  tasks: string; // "Cambio aceite y filtros"
-  pending?: boolean; // Check "Mantenimiento Pendiente"
+  name: string;
+  maintenanceType: 'HOURS' | 'DATE';
+  intervalHours?: number;
+  warningHours?: number;
+  lastMaintenanceHours?: number | null;
+  remainingHours?: number;
+  intervalMonths?: number;
+  nextDate?: Date;
+  lastMaintenanceDate?: Date;
+  tasks: string;
+  pending?: boolean;
 }
 
 export interface Machine {
   id: string;
   costCenterId: string;
   name: string;
-  companyCode?: string; // Código Interno
+  companyCode?: string;
   currentHours: number;
   requiresHours: boolean;
-  adminExpenses: boolean; // "Gastos de Administración"
-  transportExpenses: boolean; // "Gastos de Transporte"
+  adminExpenses: boolean;
+  transportExpenses: boolean;
   maintenanceDefs: MaintenanceDefinition[];
-  selectableForReports?: boolean; // Para partes de trabajo personal
-  responsibleWorkerId?: string; // Nuevo: Responsable de la máquina
+  selectableForReports?: boolean;
+  responsibleWorkerId?: string;
 }
 
 export interface ServiceProvider {
   id: string;
-  name: string; // "Volvo Service", "IDESA"
+  name: string;
 }
 
-// Logs for operations
 export type OperationType = 'LEVELS' | 'BREAKDOWN' | 'MAINTENANCE' | 'SCHEDULED' | 'REFUELING';
 
 export interface OperationLog {
@@ -71,31 +63,20 @@ export interface OperationLog {
   machineId: string;
   hoursAtExecution: number;
   type: OperationType;
-  
-  // Levels Specific
   motorOil?: number;
   hydraulicOil?: number;
   coolant?: number;
-
-  // Breakdown Specific
   breakdownCause?: string;
   breakdownSolution?: string;
   repairerId?: string;
-
-  // Maintenance Specific
-  maintenanceType?: string; // Cambiado a string para mayor flexibilidad
+  maintenanceType?: string;
   description?: string;
   materials?: string;
-  
-  // Scheduled Specific
   maintenanceDefId?: string;
-  
-  // Refueling Specific
   fuelLitres?: number;
 }
 
 // --- CANTERA PURA TYPES ---
-
 export interface CPDailyReport {
     id: string;
     date: Date;
@@ -105,12 +86,25 @@ export interface CPDailyReport {
     millsStart: number;
     millsEnd: number;
     comments?: string;
-    aiAnalysis?: string; // Nuevo: Análisis de Gemini
+    aiAnalysis?: string;
+}
+
+// --- CANTO RODADO TYPES ---
+export interface CRDailyReport {
+    id: string;
+    date: Date;
+    workerId: string;
+    washingStart: number;
+    washingEnd: number;
+    triturationStart: number;
+    triturationEnd: number;
+    comments?: string;
+    aiAnalysis?: string;
 }
 
 export interface CPWeeklyPlan {
     id: string;
-    mondayDate: string; // YYYY-MM-DD
+    mondayDate: string;
     hoursMon: number;
     hoursTue: number;
     hoursWed: number;
@@ -119,19 +113,15 @@ export interface CPWeeklyPlan {
 }
 
 // --- PERSONAL REPORT TYPES ---
-
 export interface PersonalReport {
     id: string;
     date: Date;
     workerId: string;
     hours: number;
-    
-    // New Fields for Machine flow
     costCenterId?: string;
     machineId?: string;
-    machineName?: string; // Helper for display
-    costCenterName?: string; // Helper for display
-
-    description?: string; // Optional now?
-    location?: string; // Legacy/Optional
+    machineName?: string;
+    costCenterName?: string;
+    description?: string;
+    location?: string;
 }
