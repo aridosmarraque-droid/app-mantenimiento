@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport, PersonalReport } from './types';
+import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport, PersonalReport, CRDailyReport } from './types';
 import { Login } from './components/Login';
 import { MachineSelector } from './components/MachineSelector';
 import { MainMenu } from './components/MainMenu';
@@ -16,11 +16,13 @@ import { WorkerManager } from './components/admin/WorkerManager';
 import { ProviderManager } from './components/admin/ProviderManager';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
+import { CRSelection } from './components/cr/CRSelection';
+import { DailyReportFormCR } from './components/cr/DailyReportFormCR';
 import { WorkerSelection } from './components/personal/WorkerSelection';
 import { PersonalReportForm } from './components/personal/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
-import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, syncPendingData, getCPWeeklyPlan, savePersonalReport, getLastCPReport } from './services/db';
+import { saveOperationLog, calculateAndSyncMachineStatus, saveCPReport, saveCRReport, syncPendingData, getCPWeeklyPlan, savePersonalReport, getLastCPReport } from './services/db';
 import { getProductionEfficiencyStats } from './services/stats'; 
 import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
@@ -34,6 +36,8 @@ enum ViewState {
   PERSONAL_REPORT,
   CP_SELECTION,
   CP_DAILY_REPORT,
+  CR_SELECTION,
+  CR_DAILY_REPORT,
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
@@ -91,50 +95,10 @@ function App() {
       } else if (res.errors > 0) alert(`Hubo errores al sincronizar ${res.errors} elementos.`);
   };
 
-  const handleForceLastReportEmail = async () => {
-      setIsMenuOpen(false);
-      if (!navigator.onLine) { alert("Necesitas conexión a internet."); return; }
-      setSuccessMsg('Generando PDF y enviando...');
-      try {
-          const lastReport = await getLastCPReport();
-          if (!lastReport) { alert("No hay reportes."); setSuccessMsg(''); return; }
-          const d = new Date(lastReport.date);
-          const day = d.getDay();
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-          const monday = new Date(d); monday.setDate(diff);
-          const mondayStr = monday.toISOString().split('T')[0];
-          const [plan, globalStats] = await Promise.all([getCPWeeklyPlan(mondayStr), getProductionEfficiencyStats()]);
-          let plannedHours = 8;
-          if (plan) {
-              switch(day) {
-                  case 1: plannedHours = plan.hoursMon; break;
-                  case 2: plannedHours = plan.hoursTue; break;
-                  case 3: plannedHours = plan.hoursWed; break;
-                  case 4: plannedHours = plan.hoursThu; break;
-                  case 5: plannedHours = plan.hoursFri; break;
-                  default: plannedHours = 0;
-              }
-          }
-          const actualHours = lastReport.millsEnd - lastReport.millsStart;
-          const efficiency = plannedHours > 0 ? (actualHours / plannedHours) * 100 : 0;
-          const { weekly, monthly } = globalStats;
-          const pdfBase64 = generateCPReportPDF(lastReport, currentUser?.name || 'Administrador', plannedHours, efficiency, weekly, monthly);
-          const emailSubject = `[REENVÍO] Parte Producción - ${lastReport.date.toLocaleDateString()}`;
-          const formatTrend = (trend: 'up'|'down'|'equal', diff: number) => {
-               const arrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '=';
-               const color = trend === 'up' ? 'green' : trend === 'down' ? 'red' : 'gray';
-               return `<span style="color:${color}; font-weight:bold;">${arrow} ${diff > 0 ? '+' : ''}${diff}%</span>`;
-          };
-          const emailHtml = `<h2>Parte Diario de Producción</h2><p><strong>Fecha:</strong> ${lastReport.date.toLocaleDateString()}</p><p>Eficiencia: ${efficiency.toFixed(1)}%</p><p>Tendencia Semanal: ${formatTrend(weekly.trend, weekly.diff)}</p>`;
-          const { success } = await sendEmail(['aridos@marraque.es'], emailSubject, emailHtml, pdfBase64, `Parte_${lastReport.date.toISOString().split('T')[0]}.pdf`);
-          if (success) setSuccessMsg('Email Enviado ✅'); else alert("Error al enviar email.");
-          setTimeout(() => setSuccessMsg(''), 2000);
-      } catch (e) { alert("Error inesperado."); setSuccessMsg(''); }
-  };
-
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
     if (worker.role === 'cp') setViewState(ViewState.CP_SELECTION);
+    else if (worker.role === 'cr') setViewState(ViewState.CR_SELECTION);
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
@@ -148,42 +112,28 @@ function App() {
       try {
           await savePersonalReport(data);
           setSuccessMsg('Guardado Correctamente ✅');
-          setTimeout(() => { setSuccessMsg(''); if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION); else setViewState(ViewState.WORKER_SELECTION); }, 1500);
+          setTimeout(() => { 
+            setSuccessMsg(''); 
+            if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION); 
+            else if (currentUser?.role === 'cr') setViewState(ViewState.CR_SELECTION);
+            else setViewState(ViewState.WORKER_SELECTION); 
+          }, 1500);
       } catch (e) { setSuccessMsg('Error al guardar'); setTimeout(() => setSuccessMsg(''), 2000); }
   };
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
       try {
           await saveCPReport(data);
-          setSuccessMsg('Guardando...');
-          if (currentUser && navigator.onLine) {
-              setSuccessMsg('Analizando datos...');
-              const d = new Date(data.date);
-              const day = d.getDay();
-              const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-              const monday = new Date(d); monday.setDate(diff);
-              const mondayStr = monday.toISOString().split('T')[0];
-              const plan = await getCPWeeklyPlan(mondayStr);
-              let plannedHours = 8;
-              if (plan) {
-                  switch(day) {
-                      case 1: plannedHours = plan.hoursMon; break;
-                      case 2: plannedHours = plan.hoursTue; break;
-                      case 3: plannedHours = plan.hoursWed; break;
-                      case 4: plannedHours = plan.hoursThu; break;
-                      case 5: plannedHours = plan.hoursFri; break;
-                      default: plannedHours = 0;
-                  }
-              }
-              const efficiency = plannedHours > 0 ? ((data.millsEnd - data.millsStart) / plannedHours) * 100 : 0;
-              const globalStats = await getProductionEfficiencyStats();
-              const pdfBase64 = generateCPReportPDF(data, currentUser.name, plannedHours, efficiency, globalStats.weekly, globalStats.monthly);
-              const emailSubject = `Parte Producción - ${data.date.toLocaleDateString()}`;
-              const emailHtml = `<h2>Parte Diario</h2><p>Eficiencia Diaria: <strong>${efficiency.toFixed(1)}%</strong></p>`;
-              const { success } = await sendEmail(['aridos@marraque.es'], emailSubject, emailHtml, pdfBase64, `Parte_${data.date.toISOString().split('T')[0]}.pdf`);
-              if (success) setSuccessMsg('Guardado y Enviado ✅'); else setSuccessMsg('Guardado (Email falló) ⚠️');
-          } else setSuccessMsg(navigator.onLine ? 'Guardado ✅' : 'En cola (Offline) 📡');
-          setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CP_SELECTION); }, 2500);
+          setSuccessMsg('Guardado ✅');
+          setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CP_SELECTION); }, 2000);
+      } catch (e) { setSuccessMsg('Error'); setTimeout(() => setSuccessMsg(''), 2000); }
+  };
+
+  const handleCRReportSubmit = async (data: Omit<CRDailyReport, 'id'>) => {
+      try {
+          await saveCRReport(data);
+          setSuccessMsg('Guardado ✅');
+          setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CR_SELECTION); }, 2000);
       } catch (e) { setSuccessMsg('Error'); setTimeout(() => setSuccessMsg(''), 2000); }
   };
 
@@ -206,6 +156,12 @@ function App() {
   const handleAdminSuccess = (msg: string) => {
       setSuccessMsg(msg);
       setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CONTEXT_SELECTION); }, 1500);
+  };
+
+  const navigateBack = () => {
+    if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION);
+    else if (currentUser?.role === 'cr') setViewState(ViewState.CR_SELECTION);
+    else setViewState(ViewState.WORKER_SELECTION);
   };
 
   if (viewState === ViewState.LOGIN) {
@@ -241,8 +197,8 @@ function App() {
                 ) : (
                     <button onClick={handleLogout} className="p-1 hover:bg-slate-700 rounded transition-colors text-slate-300 hover:text-white" title="Cerrar Sesión"><LogOut className="w-5 h-5" /></button>
                 )}
-                {viewState !== ViewState.WORKER_SELECTION && viewState !== ViewState.CP_SELECTION && (
-                   <button onClick={() => { if (currentUser?.role === 'cp') setViewState(ViewState.CP_SELECTION); else setViewState(ViewState.WORKER_SELECTION); }} className="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">Volver</button>
+                {viewState !== ViewState.WORKER_SELECTION && viewState !== ViewState.CP_SELECTION && viewState !== ViewState.CR_SELECTION && (
+                   <button onClick={navigateBack} className="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">Volver</button>
                 )}
             </div>
           </div>
@@ -253,11 +209,6 @@ function App() {
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Factory className="w-4 h-4 text-blue-500" /><span className="text-sm">Canteras / Grupos</span></button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Truck className="w-4 h-4 text-blue-500" /><span className="text-sm">Nueva Máquina</span></button>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Modificar Máquina</span></button>
-
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Producción</p></div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación Cantera</span></button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Informes Producción</span></button>
-                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-green-50 text-green-700 flex items-center gap-3 border-b border-slate-50 bg-green-50/50"><Send className="w-4 h-4" /><span className="text-sm font-semibold">Forzar Envío Email PDF</span></button>
 
                   <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 border-t"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Configuración General</p></div>
                   <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-50"><Users className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión de Personal</span></button>
@@ -274,23 +225,23 @@ function App() {
         <main className="flex-1 p-4 overflow-y-auto">
           {successMsg && (
             <div className="flex flex-col items-center justify-center h-full text-green-600 animate-fade-in absolute inset-0 bg-white/90 z-50">
-              {successMsg.includes('Enviando') || successMsg.includes('Generando') ? <Mail className="w-20 h-20 mb-4 animate-pulse text-blue-500" /> : <CheckCircle2 className="w-20 h-20 mb-4" />}
+              <CheckCircle2 className="w-20 h-20 mb-4" />
               <h2 className="text-xl font-bold text-center">{successMsg}</h2>
             </div>
           )}
 
             {viewState === ViewState.WORKER_SELECTION && currentUser && <WorkerSelection workerName={currentUser.name} onSelectMachines={() => setViewState(ViewState.CONTEXT_SELECTION)} onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} onLogout={handleLogout} />}
             {viewState === ViewState.CP_SELECTION && currentUser && <CPSelection workerName={currentUser.name} onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)} onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)} onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} onLogout={handleLogout} />}
-            {viewState === ViewState.PERSONAL_REPORT && currentUser && <PersonalReportForm workerId={currentUser.id} onBack={() => { if (currentUser.role === 'cp') setViewState(ViewState.CP_SELECTION); else setViewState(ViewState.WORKER_SELECTION); }} onSubmit={handlePersonalReportSubmit} />}
+            {viewState === ViewState.CR_SELECTION && currentUser && <CRSelection workerName={currentUser.name} onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)} onSelectProduction={() => setViewState(ViewState.CR_DAILY_REPORT)} onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} onLogout={handleLogout} />}
+            {viewState === ViewState.PERSONAL_REPORT && currentUser && <PersonalReportForm workerId={currentUser.id} onBack={navigateBack} onSubmit={handlePersonalReportSubmit} />}
             {viewState === ViewState.CP_DAILY_REPORT && currentUser && <DailyReportForm workerId={currentUser.id} onBack={() => setViewState(ViewState.CP_SELECTION)} onSubmit={handleCPReportSubmit} />}
+            {viewState === ViewState.CR_DAILY_REPORT && currentUser && <DailyReportFormCR workerId={currentUser.id} onBack={() => setViewState(ViewState.CR_SELECTION)} onSubmit={handleCRReportSubmit} />}
 
               {viewState === ViewState.CONTEXT_SELECTION && <MachineSelector selectedDate={selectedDate} onChangeDate={setSelectedDate} onSelect={handleContextSelect} />}
               {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && <div className="space-y-4"><div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-center mb-4"><p className="text-blue-800 font-bold">Modo Admin: Modificar Máquina</p></div><MachineSelector selectedDate={new Date()} onChangeDate={() => {}} onSelect={handleEditSelection}/><button onClick={() => setViewState(ViewState.CONTEXT_SELECTION)} className="w-full py-3 text-slate-500 font-medium">Cancelar</button></div>}
               {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada')}/>}
               {viewState === ViewState.ADMIN_CREATE_MACHINE && <CreateMachineForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Máquina creada')}/>}
               {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => handleAdminSuccess('Actualizada')}/>}
-              {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
-              {viewState === ViewState.ADMIN_PRODUCTION_DASHBOARD && <ProductionDashboard onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
               {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
@@ -317,11 +268,11 @@ function App() {
                       >
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
-                          <input name="hours" type="number" className="w-full border p-3 rounded-lg" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
+                          <input name="hours" type="number" step="0.01" className="w-full border p-3 rounded-lg" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">Litros</label>
-                          <input name="litres" type="number" className="w-full border p-3 rounded-lg" required />
+                          <input name="litres" type="number" step="0.1" className="w-full border p-3 rounded-lg" required />
                         </div>
                         <button className="bg-green-600 text-white w-full py-3 rounded font-bold">Guardar</button>
                         <button type="button" onClick={() => setViewState(ViewState.ACTION_MENU)} className="w-full text-slate-500 py-2">Cancelar</button>
