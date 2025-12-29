@@ -410,7 +410,7 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
  * Obtiene todos los registros relevantes para una auditoría diaria.
  */
 export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[] }> => {
-    if (!isConfigured) return { ops: [], personal: [] };
+    if (!isConfigured) return mock.getDailyAuditLogs(date);
     
     const dateStr = date.toISOString().split('T')[0];
     const start = new Date(dateStr);
@@ -503,7 +503,7 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
             lavado_inicio: report.washingStart, 
             lavado_fin: report.washingEnd, 
             trituracion_inicio: report.triturationStart, 
-            trituration_fin: report.triturationEnd, 
+            trituracion_fin: report.triturationEnd, 
             comentarios: report.comments, 
             ai_analisis: report.aiAnalysis 
         });
