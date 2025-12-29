@@ -14,7 +14,7 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
   const [hours, setHours] = useState<number | ''>(machine.currentHours || '');
   const [providerId, setProviderId] = useState('');
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
-  const [type, setType] = useState<'CLEANING' | 'GREASING' | 'OTHER'>('GREASING');
+  const [type, setType] = useState<string>('Engrase General');
   
   // For 'Other'
   const [description, setDescription] = useState('');
@@ -30,8 +30,8 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
       hoursAtExecution: Number(hours),
       repairerId: providerId,
       maintenanceType: type,
-      description: type === 'OTHER' ? description : undefined,
-      materials: type === 'OTHER' ? materials : undefined,
+      description: type === 'Otros Mantenimientos' ? description : undefined,
+      materials: type === 'Otros Mantenimientos' ? materials : undefined,
     });
   };
 
@@ -71,22 +71,22 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
       <div className="space-y-2">
         <label className="block text-sm font-medium text-slate-700">Tipo de trabajo *</label>
         <div className="flex flex-col gap-2">
-            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'CLEANING' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
-                <input type="radio" name="mType" className="mr-3" checked={type === 'CLEANING'} onChange={() => setType('CLEANING')} />
+            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'Limpieza / Soplado Filtros' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
+                <input type="radio" name="mType" className="mr-3" checked={type === 'Limpieza / Soplado Filtros'} onChange={() => setType('Limpieza / Soplado Filtros')} />
                 Limpieza / Soplado Filtros
             </label>
-            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'GREASING' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
-                <input type="radio" name="mType" className="mr-3" checked={type === 'GREASING'} onChange={() => setType('GREASING')} />
+            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'Engrase General' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
+                <input type="radio" name="mType" className="mr-3" checked={type === 'Engrase General'} onChange={() => setType('Engrase General')} />
                 Engrase General
             </label>
-            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'OTHER' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
-                <input type="radio" name="mType" className="mr-3" checked={type === 'OTHER'} onChange={() => setType('OTHER')} />
+            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'Otros Mantenimientos' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
+                <input type="radio" name="mType" className="mr-3" checked={type === 'Otros Mantenimientos'} onChange={() => setType('Otros Mantenimientos')} />
                 Otros Mantenimientos
             </label>
         </div>
       </div>
 
-      {type === 'OTHER' && (
+      {type === 'Otros Mantenimientos' && (
         <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200 mt-2">
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Descripción del Mantenimiento *</label>
