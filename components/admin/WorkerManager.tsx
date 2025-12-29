@@ -18,7 +18,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
     const [name, setName] = useState('');
     const [dni, setDni] = useState('');
     const [phone, setPhone] = useState('');
-    const [role, setRole] = useState<'worker' | 'admin' | 'cp'>('worker');
+    // Added 'cr' to the allowed role types in state to match the Worker type in types.ts
+    const [role, setRole] = useState<'worker' | 'admin' | 'cp' | 'cr'>('worker');
     const [active, setActive] = useState(true);
 
     useEffect(() => {
@@ -46,6 +47,7 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         setName(w.name);
         setDni(w.dni);
         setPhone(w.phone);
+        // Fix: w.role can be 'cr', which is now supported by the updated role state
         setRole(w.role);
         setActive(w.active ?? true);
     };
@@ -115,7 +117,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rol / Permisos *</label>
                             <select required className="w-full p-2 border rounded shadow-sm bg-white" value={role} onChange={e => setRole(e.target.value as any)}>
                                 <option value="worker">Operario (Solo Mantenimiento)</option>
-                                <option value="cp">Cantera (Mantenimiento + Producción)</option>
+                                <option value="cp">Cantera Pura (Mantenimiento + Producción)</option>
+                                <option value="cr">Canto Rodado (Mantenimiento + Producción)</option>
                                 <option value="admin">Administrador (Acceso Total)</option>
                             </select>
                         </div>
@@ -145,7 +148,12 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                     {workers.map(w => (
                         <div key={w.id} className={`p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-colors ${w.active ? 'bg-white' : 'bg-red-50 opacity-60'}`}>
                             <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${w.role === 'admin' ? 'bg-red-100 text-red-600' : w.role === 'cp' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                    w.role === 'admin' ? 'bg-red-100 text-red-600' : 
+                                    w.role === 'cp' ? 'bg-amber-100 text-amber-600' : 
+                                    w.role === 'cr' ? 'bg-teal-100 text-teal-600' : 
+                                    'bg-blue-100 text-blue-600'
+                                }`}>
                                     <UserCircle size={24} />
                                 </div>
                                 <div>
@@ -156,7 +164,12 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
                                         <span className="text-xs text-slate-500 flex items-center gap-1"><CreditCard size={12}/> {w.dni}</span>
                                         {w.phone && <span className="text-xs text-slate-500 flex items-center gap-1"><Phone size={12}/> {w.phone}</span>}
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${w.role === 'admin' ? 'bg-red-600 text-white' : w.role === 'cp' ? 'bg-amber-500 text-white' : 'bg-slate-500 text-white'}`}>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                            w.role === 'admin' ? 'bg-red-600 text-white' : 
+                                            w.role === 'cp' ? 'bg-amber-500 text-white' : 
+                                            w.role === 'cr' ? 'bg-teal-600 text-white' : 
+                                            'bg-slate-500 text-white'
+                                        }`}>
                                             {w.role}
                                         </span>
                                     </div>
