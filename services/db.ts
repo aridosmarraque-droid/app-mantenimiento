@@ -406,6 +406,46 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
     } catch (error) { console.error("Error fetching logs", error); return []; }
 };
 
+/**
+ * Obtiene todos los registros relevantes para una auditoría diaria.
+ */
+export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[] }> => {
+    if (!isConfigured) return { ops: [], personal: [] };
+    
+    const dateStr = date.toISOString().split('T')[0];
+    const start = new Date(dateStr);
+    start.setHours(0,0,0,0);
+    const end = new Date(dateStr);
+    end.setHours(23,59,59,999);
+
+    try {
+        const [opsRes, personalRes] = await Promise.all([
+            supabase.from('mant_registros').select('*').gte('fecha', start.toISOString()).lte('fecha', end.toISOString()),
+            supabase.from('partes_trabajo').select(`*, maquina:mant_maquinas(nombre, centro_id)`).gte('fecha', dateStr).lte('fecha', dateStr)
+        ]);
+
+        if (opsRes.error) throw opsRes.error;
+        if (personalRes.error) throw personalRes.error;
+
+        return {
+            ops: opsRes.data.map(mapLogFromDb),
+            personal: personalRes.data.map((d: any) => ({
+                id: d.id,
+                date: new Date(d.fecha),
+                workerId: d.trabajador_id,
+                hours: d.horas,
+                machineId: d.maquina_id,
+                machineName: d.maquina?.nombre,
+                description: d.comentarios,
+                costCenterId: d.maquina?.centro_id
+            }))
+        };
+    } catch (e) {
+        console.error("Error en auditoría diaria:", e);
+        return { ops: [], personal: [] };
+    }
+}
+
 // --- CANTERA PURA REPORTS ---
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (!isConfigured) return mock.getLastCPReport();
@@ -444,8 +484,8 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
             workerId: report.trabajador_id, 
             washingStart: Number(report.lavado_inicio), 
             washingEnd: Number(report.lavado_fin), 
-            triturationStart: Number(report.trituracion_inicio), 
-            triturationEnd: Number(report.trituracion_fin), 
+            triturationStart: Number(report.trituration_inicio), 
+            triturationEnd: Number(report.trituration_fin), 
             comments: report.comentarios, 
             aiAnalysis: report.ai_analisis 
         };
@@ -463,7 +503,7 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
             lavado_inicio: report.washingStart, 
             lavado_fin: report.washingEnd, 
             trituracion_inicio: report.triturationStart, 
-            trituracion_fin: report.triturationEnd, 
+            trituration_fin: report.triturationEnd, 
             comentarios: report.comments, 
             ai_analisis: report.aiAnalysis 
         });
