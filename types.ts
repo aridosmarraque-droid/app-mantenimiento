@@ -83,7 +83,7 @@ export interface OperationLog {
   repairerId?: string;
 
   // Maintenance Specific
-  maintenanceType?: 'CLEANING' | 'GREASING' | 'OTHER';
+  maintenanceType?: string; // Cambiado a string para mayor flexibilidad
   description?: string;
   materials?: string;
   
