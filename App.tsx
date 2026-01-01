@@ -29,7 +29,7 @@ import { getQueue } from './services/offlineQueue';
 import { isConfigured } from './services/client';
 import { sendEmail } from './services/api'; 
 import { generateCPReportPDF } from './services/pdf'; 
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send, AlertTriangle, Users, BookOpen, SearchCheck, ClipboardCheck, LayoutGrid, HardHat } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, FileSearch, CalendarDays, TrendingUp, Mail, WifiOff, RefreshCcw, LogOut, Send, AlertTriangle, Users, BookOpen, SearchCheck, ClipboardCheck, LayoutGrid, HardHat, ChevronDown, ChevronUp } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -54,6 +54,8 @@ enum ViewState {
   ADMIN_MANAGE_PROVIDERS
 }
 
+type MenuCategory = 'activos' | 'produccion' | 'auditoria' | 'configuracion' | null;
+
 function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
   const [currentUser, setCurrentUser] = useState<Worker | null>(null);
@@ -68,6 +70,7 @@ function App() {
   const [pendingItems, setPendingItems] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [openCategory, setOpenCategory] = useState<MenuCategory>(null);
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
   
@@ -145,11 +148,19 @@ function App() {
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
-  const handleLogout = () => { setCurrentUser(null); setViewState(ViewState.LOGIN); setIsMenuOpen(false); }
+  const handleLogout = () => { setCurrentUser(null); setViewState(ViewState.LOGIN); setIsMenuOpen(false); setOpenCategory(null); }
   const handleContextSelect = (machine: Machine, center: CostCenter) => { setSelectedContext({ machine, center }); setViewState(ViewState.ACTION_MENU); };
   const handleEditSelection = (machine: Machine, center: CostCenter) => { setMachineToEdit(machine); setViewState(ViewState.ADMIN_EDIT_MACHINE); }
   const handleActionSelect = (type: OperationType) => { setSelectedAction(type); setViewState(ViewState.FORM); };
-  const handleAdminNavigate = (view: ViewState) => { setViewState(view); setIsMenuOpen(false); };
+  
+  const handleAdminNavigate = (view: ViewState) => { 
+    setViewState(view); 
+    setIsMenuOpen(false); 
+  };
+
+  const toggleCategory = (cat: MenuCategory) => {
+    setOpenCategory(openCategory === cat ? null : cat);
+  };
 
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
       try {
@@ -249,61 +260,109 @@ function App() {
           {isMenuOpen && isUserAdmin && (
               <div className="absolute top-full right-0 w-72 bg-white shadow-2xl rounded-bl-xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30 animate-in slide-in-from-top-5">
                   
-                  {/* CATEGORÍA: ACTIVOS */}
-                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
-                    <Truck className="w-3.5 h-3.5 text-blue-400" />
-                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Maquinaria y Activos</p>
+                  {/* ACORDEÓN: ACTIVOS */}
+                  <div className="border-b border-slate-100">
+                    <button 
+                        onClick={() => toggleCategory('activos')}
+                        className={`w-full px-4 py-4 flex items-center justify-between transition-colors ${openCategory === 'activos' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <Truck className={`w-4 h-4 ${openCategory === 'activos' ? 'text-blue-400' : 'text-blue-600'}`} />
+                            <span className="text-sm font-bold uppercase tracking-wider">Maquinaria y Activos</span>
+                        </div>
+                        {openCategory === 'activos' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'activos' && (
+                        <div className="bg-slate-50/50 animate-in slide-in-from-top-1 duration-200">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3 border-b border-slate-100/50">
+                                <Factory className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Centros de Coste</span>
+                            </button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3 border-b border-slate-100/50">
+                                <LayoutGrid className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Alta de Máquina</span>
+                            </button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3">
+                                <Settings className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Editar Máquina</span>
+                            </button>
+                        </div>
+                    )}
                   </div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <Factory className="w-4 h-4 text-blue-500" /><span className="text-sm">Centros de Coste</span>
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <LayoutGrid className="w-4 h-4 text-blue-500" /><span className="text-sm">Alta de Máquina</span>
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <Settings className="w-4 h-4 text-blue-500" /><span className="text-sm">Editar Máquina</span>
-                  </button>
 
-                  {/* CATEGORÍA: PRODUCCIÓN */}
-                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
-                    <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Gestión Producción</p>
+                  {/* ACORDEÓN: PRODUCCIÓN */}
+                  <div className="border-b border-slate-100">
+                    <button 
+                        onClick={() => toggleCategory('produccion')}
+                        className={`w-full px-4 py-4 flex items-center justify-between transition-colors ${openCategory === 'produccion' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <TrendingUp className={`w-4 h-4 ${openCategory === 'produccion' ? 'text-amber-400' : 'text-amber-600'}`} />
+                            <span className="text-sm font-bold uppercase tracking-wider">Gestión Producción</span>
+                        </div>
+                        {openCategory === 'produccion' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'produccion' && (
+                        <div className="bg-slate-50/50 animate-in slide-in-from-top-1 duration-200">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3 border-b border-slate-100/50">
+                                <CalendarDays className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Planificación</span>
+                            </button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3 border-b border-slate-100/50">
+                                <TrendingUp className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Dashboard Eficiencia</span>
+                            </button>
+                            <button onClick={handleForceLastReportEmail} className="w-full text-left pl-11 pr-4 py-3 hover:bg-amber-50 text-amber-700 flex items-center gap-3">
+                                <Send className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Re-enviar Reporte Diario</span>
+                            </button>
+                        </div>
+                    )}
                   </div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <CalendarDays className="w-4 h-4 text-amber-500" /><span className="text-sm">Planificación</span>
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <TrendingUp className="w-4 h-4 text-amber-500" /><span className="text-sm">Dashboard Eficiencia</span>
-                  </button>
-                  <button onClick={handleForceLastReportEmail} className="w-full text-left px-4 py-3 hover:bg-amber-50 text-amber-700 flex items-center gap-3 border-b border-slate-100">
-                    <Send className="w-4 h-4 text-amber-600" /><span className="text-sm font-medium">Re-enviar Reporte Diario</span>
-                  </button>
 
-                  {/* CATEGORÍA: AUDITORÍA */}
-                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
-                    <SearchCheck className="w-3.5 h-3.5 text-indigo-400" />
-                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Auditoría y Registros</p>
+                  {/* ACORDEÓN: AUDITORÍA */}
+                  <div className="border-b border-slate-100">
+                    <button 
+                        onClick={() => toggleCategory('auditoria')}
+                        className={`w-full px-4 py-4 flex items-center justify-between transition-colors ${openCategory === 'auditoria' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <SearchCheck className={`w-4 h-4 ${openCategory === 'auditoria' ? 'text-indigo-400' : 'text-indigo-600'}`} />
+                            <span className="text-sm font-bold uppercase tracking-wider">Auditoría y Registros</span>
+                        </div>
+                        {openCategory === 'auditoria' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'auditoria' && (
+                        <div className="bg-slate-50/50 animate-in slide-in-from-top-1 duration-200">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-indigo-50 text-indigo-900 flex items-center gap-3 border-b border-indigo-100/30">
+                                <ClipboardCheck className="w-3.5 h-3.5 opacity-70" /><span className="text-sm font-bold">Auditoría Diaria</span>
+                            </button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3">
+                                <FileSearch className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Registros por Máquina</span>
+                            </button>
+                        </div>
+                    )}
                   </div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left px-4 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 flex items-center gap-3 border-b border-indigo-100">
-                    <ClipboardCheck className="w-4 h-4 text-indigo-600" /><span className="text-sm font-bold">Auditoría Diaria</span>
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <FileSearch className="w-4 h-4 text-indigo-500" /><span className="text-sm">Log por Máquina</span>
-                  </button>
 
-                  {/* CATEGORÍA: CONFIGURACIÓN */}
-                  <div className="bg-slate-800 px-4 py-2 flex items-center gap-2">
-                    <Users className="w-3.5 h-3.5 text-red-400" />
-                    <p className="text-[10px] font-bold text-white uppercase tracking-wider">Personal y Config.</p>
+                  {/* ACORDEÓN: CONFIGURACIÓN */}
+                  <div className="border-b border-slate-100">
+                    <button 
+                        onClick={() => toggleCategory('configuracion')}
+                        className={`w-full px-4 py-4 flex items-center justify-between transition-colors ${openCategory === 'configuracion' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <Users className={`w-4 h-4 ${openCategory === 'configuracion' ? 'text-red-400' : 'text-red-600'}`} />
+                            <span className="text-sm font-bold uppercase tracking-wider">Personal y Config.</span>
+                        </div>
+                        {openCategory === 'configuracion' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'configuracion' && (
+                        <div className="bg-slate-50/50 animate-in slide-in-from-top-1 duration-200">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3 border-b border-slate-100/50">
+                                <HardHat className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Gestión Plantilla</span>
+                            </button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left pl-11 pr-4 py-3 hover:bg-white text-slate-600 flex items-center gap-3">
+                                <BookOpen className="w-3.5 h-3.5 opacity-70" /><span className="text-sm">Proveedores / Talleres</span>
+                            </button>
+                        </div>
+                    )}
                   </div>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <HardHat className="w-4 h-4 text-red-500" /><span className="text-sm">Gestión Plantilla</span>
-                  </button>
-                  <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left px-4 py-3 hover:bg-slate-50 text-slate-700 flex items-center gap-3 border-b border-slate-100">
-                    <BookOpen className="w-4 h-4 text-red-500" /><span className="text-sm">Proveedores / Talleres</span>
-                  </button>
                   
-                  <div className="p-4 bg-slate-50 border-t border-slate-200 mt-auto">
+                  <div className="p-4 bg-slate-50 mt-auto">
                     <button onClick={handleLogout} className="text-red-600 text-sm font-bold w-full text-left hover:text-red-800 flex items-center gap-2">
                         <LogOut size={16} /> Cerrar Sesión
                     </button>
