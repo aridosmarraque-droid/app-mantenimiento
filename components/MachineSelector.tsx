@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { CostCenter, Machine } from '../types';
-import { getCostCenters, getMachinesByCenter, calculateAndSyncMachineStatus } from '../services/db'; // Importar nueva función
+import { getCostCenters, getMachinesByCenter, calculateAndSyncMachineStatus } from '../services/db'; 
 import { Factory, Truck, ChevronRight, Loader2 } from 'lucide-react';
 
 interface MachineSelectorProps {
@@ -23,14 +23,15 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   useEffect(() => {
     if (selectedCenterId) {
-      getMachinesByCenter(selectedCenterId).then(data => {
+      // Cargamos solo las máquinas activas
+      getMachinesByCenter(selectedCenterId, true).then(data => {
           // Ordenar: Primero Código (si existe), luego Nombre
           data.sort((a, b) => {
              const codeA = a.companyCode || '';
              const codeB = b.companyCode || '';
              if (codeA && codeB) return codeA.localeCompare(codeB);
-             if (codeA) return -1; // A tiene código, va antes
-             if (codeB) return 1;  // B tiene código, va antes
+             if (codeA) return -1; 
+             if (codeB) return 1;  
              return a.name.localeCompare(b.name);
           });
           setMachines(data);
@@ -47,13 +48,12 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
     
     if (m && c) {
       setLoadingSelection(true);
-      // Recalcular estado de mantenimientos antes de continuar
       try {
           const updatedMachine = await calculateAndSyncMachineStatus(m);
           onSelect(updatedMachine, c);
       } catch (error) {
           console.error("Error syncing machine status", error);
-          onSelect(m, c); // Fallback to loaded data
+          onSelect(m, c); 
       } finally {
           setLoadingSelection(false);
       }
@@ -124,4 +124,3 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
     </div>
   );
 };
-
