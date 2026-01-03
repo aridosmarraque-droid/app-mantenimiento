@@ -235,9 +235,6 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (error) throw error;
 };
 
-/**
- * Obtiene el número de registros vinculados a una máquina para advertir antes de un borrado.
- */
 export const getMachineDependencyCount = async (id: string): Promise<{ logs: number, reports: number }> => {
     if (!isConfigured) return { logs: 0, reports: 0 };
     try {
@@ -473,7 +470,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
                 id: d.id,
                 date: new Date(d.fecha),
                 workerId: d.trabajador_id,
-                hours: d.hours,
+                hours: d.horas,
                 machineId: d.maquina_id,
                 machineName: d.maquina?.nombre,
                 description: d.comentarios,
@@ -556,7 +553,7 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
             lavado_inicio: report.washingStart, 
             lavado_fin: report.washingEnd, 
             trituracion_inicio: report.triturationStart, 
-            trituracion_fin: report.triturationEnd, 
+            trituration_fin: report.triturationEnd, 
             comentarios: report.comments, 
             ai_analisis: report.aiAnalysis 
         });
@@ -592,7 +589,7 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
         if (error) return null;
         const plan = data && data.length > 0 ? data[0] : null;
         if (!plan) return null;
-        return { id: plan.id, mondayDate: plan.fecha_lunes, hoursMon: plan.horas_lunes, hoursTue: plan.horas_martes, hoursWed: plan.horas_miercoles, hours Thu: plan.horas_jueves, hoursFri: plan.horas_viernes };
+        return { id: plan.id, mondayDate: plan.fecha_lunes, hoursMon: plan.horas_lunes, hoursTue: plan.horas_martes, hoursWed: plan.horas_miercoles, hoursThu: plan.horas_jueves, hoursFri: plan.horas_viernes };
     } catch (e) { return null; }
 };
 
@@ -600,7 +597,7 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
     if (!navigator.onLine) { offline.addToQueue('CP_PLAN', plan); return; }
     try {
-        const { error } = await supabase.from('cp_planificacion').upsert({ fecha_lunes: plan.mondayDate, horas_lunes: plan.hoursMon, horas_martes: plan.hoursTue, horas_miercoles: plan.hoursWed, horas_jueves: plan.hoursThu, horas_viernes: plan.hoursFri }, { onConflict: 'fecha_lunes' });
+        const { error } = await supabase.from('cp_planificacion').upsert({ fecha_lunes: plan.mondayDate, hours_lunes: plan.hoursMon, hours_martes: plan.hoursTue, hours_miercoles: plan.hoursWed, hours_jueves: plan.hoursThu, hours_viernes: plan.hoursFri }, { onConflict: 'fecha_lunes' });
         if (error) throw error;
     } catch (e) { offline.addToQueue('CP_PLAN', plan); }
 };
@@ -631,7 +628,7 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
         try {
             if (item.type === 'LOG') {
                 const log = item.payload;
-                const dbLog = { fecha: log.date, trabajador_id: log.workerId, maquina_id: log.machineId, horas_registro: log.hoursAtExecution, tipo_operacion: toDbOperationType(log.type), aceite_motor_l: log.motorOil, aceite_hidraulico_l: log.hydraulicOil, refrigerante_l: log.coolant, causa_averia: log.breakdownCause, solucion_averia: log.breakdownSolution, reparador_id: log.repairerId, tipo_mantenimiento: log.maintenanceType, descripcion: log.description, materiales: log.materials, mantenimiento_def_id: log.maintenanceDefId, litros_combustible: log.fuelLitres };
+                const dbLog = { fecha: log.date, trabajador_id: log.workerId, maquina_id: log.machineId, hours_registro: log.hoursAtExecution, tipo_operacion: toDbOperationType(log.type), aceite_motor_l: log.motorOil, aceite_hidraulico_l: log.hydraulicOil, refrigerante_l: log.coolant, causa_averia: log.breakdownCause, solucion_averia: log.breakdownSolution, reparador_id: log.repairerId, tipo_mantenimiento: log.maintenanceType, descripcion: log.description, materiales: log.materials, mantenimiento_def_id: log.maintenanceDefId, litros_combustible: log.fuelLitres };
                  const { error } = await supabase.from('mant_registros').insert(dbLog);
                  if (error) throw error;
             } else if (item.type === 'CP_REPORT') {
