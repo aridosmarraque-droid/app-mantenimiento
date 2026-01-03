@@ -83,7 +83,7 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: defs ? defs.map(mapDef) : [],
         selectableForReports: m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo ?? true
+        active: m.activo !== undefined ? m.activo : true // Si no existe en DB, asumimos activo
     };
 };
 
@@ -112,7 +112,12 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
     if (!isConfigured) return mock.getWorkers();
     let query = supabase.from('mant_trabajadores').select('*');
-    if (onlyActive) query = query.eq('activo', true);
+    if (onlyActive) {
+        // En trabajadores solemos tener la columna ya creada, pero filtramos en JS para ser 100% seguros
+        const { data, error } = await query;
+        if (error) return [];
+        return data.map(mapWorker).filter(w => !onlyActive || w.active !== false);
+    }
     const { data, error } = await query;
     if (error) { console.error("DB Error getWorkers:", error); return []; }
     return data ? data.map(mapWorker) : [];
@@ -168,22 +173,40 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
     if (error) throw error;
 };
 
+/**
+ * Versión resiliente: Si la columna 'activo' no existe en DB, no fallará.
+ */
 export const getMachinesByCenter = async (centerId: string, onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
+    // IMPORTANTE: Eliminamos el .eq('activo', true) de la query para evitar el error 400 si la columna no existe.
+    // En su lugar, filtramos en el cliente (mapMachine maneja la ausencia de valor).
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
-    if (onlyActive) query = query.eq('activo', true);
+    
     const { data, error } = await query;
-    if (error) { console.error("getMachinesByCenter", error); return []; }
-    return data.map(mapMachine);
+    if (error) { 
+        console.error("getMachinesByCenter Error:", error); 
+        return []; 
+    }
+    
+    const all = data.map(mapMachine);
+    return onlyActive ? all.filter(m => m.active !== false) : all;
 };
 
+/**
+ * Versión resiliente para todos los activos.
+ */
 export const getAllMachines = async (onlyActive: boolean = false): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
-    if (onlyActive) query = query.eq('activo', true);
+    
     const { data, error } = await query;
-    if (error) { console.error("getAllMachines", error); return []; }
-    return data.map(mapMachine);
+    if (error) { 
+        console.error("getAllMachines Error:", error); 
+        return []; 
+    }
+    
+    const all = data.map(mapMachine);
+    return onlyActive ? all.filter(m => m.active !== false) : all;
 };
 
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
@@ -470,7 +493,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
                 id: d.id,
                 date: new Date(d.fecha),
                 workerId: d.trabajador_id,
-                hours: d.horas,
+                hours: d.hours,
                 machineId: d.maquina_id,
                 machineName: d.maquina?.nombre,
                 description: d.comentarios,
@@ -501,8 +524,7 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
     if (!navigator.onLine) { offline.addToQueue('CP_REPORT', report); return; }
     try {
         const dateStr = toLocalDateString(report.date);
-        // Cast supabase.from() call to any to bypass incorrect type inference that uses 
-        // frontend models (like CPDailyReport) instead of database column names.
+        // Cast supabase.from() call to any to bypass incorrect type inference
         const { error } = await (supabase.from('cp_partes_diarios') as any).insert({ 
             fecha: dateStr, 
             trabajador_id: report.workerId, 
@@ -517,7 +539,7 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
     } catch (e) { offline.addToQueue('CP_REPORT', report); }
 };
 
-// --- CANTO RODADO REPORTS (NUEVO) ---
+// --- CANTO RODADO REPORTS ---
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return mock.getLastCRReport();
     if (!navigator.onLine) return null;
@@ -545,15 +567,14 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
     if (!navigator.onLine) { offline.addToQueue('CR_REPORT', report); return; }
     try {
         const dateStr = toLocalDateString(report.date);
-        // Cast supabase.from() call to any to bypass incorrect type inference that uses 
-        // frontend models (like CRDailyReport) instead of database column names.
+        // Cast supabase.from() call to any to bypass incorrect type inference
         const { error } = await (supabase.from('cr_partes_diarios') as any).insert({ 
             fecha: dateStr, 
             trabajador_id: report.workerId, 
             lavado_inicio: report.washingStart, 
             lavado_fin: report.washingEnd, 
             trituracion_inicio: report.triturationStart, 
-            trituration_fin: report.triturationEnd, 
+            trituracion_fin: report.triturationEnd, 
             comentarios: report.comments, 
             ai_analisis: report.aiAnalysis 
         });
@@ -597,7 +618,7 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
     if (!navigator.onLine) { offline.addToQueue('CP_PLAN', plan); return; }
     try {
-        const { error } = await supabase.from('cp_planificacion').upsert({ fecha_lunes: plan.mondayDate, hours_lunes: plan.hoursMon, hours_martes: plan.hoursTue, hours_miercoles: plan.hoursWed, hours_jueves: plan.hoursThu, hours_viernes: plan.hoursFri }, { onConflict: 'fecha_lunes' });
+        const { error } = await supabase.from('cp_planificacion').upsert({ fecha_lunes: plan.mondayDate, horas_lunes: plan.hoursMon, horas_martes: plan.hoursTue, horas_miercoles: plan.hoursWed, horas_jueves: plan.hoursThu, horas_viernes: plan.hoursFri }, { onConflict: 'fecha_lunes' });
         if (error) throw error;
     } catch (e) { offline.addToQueue('CP_PLAN', plan); }
 };
@@ -628,14 +649,12 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
         try {
             if (item.type === 'LOG') {
                 const log = item.payload;
-                const dbLog = { fecha: log.date, trabajador_id: log.workerId, maquina_id: log.machineId, hours_registro: log.hoursAtExecution, tipo_operacion: toDbOperationType(log.type), aceite_motor_l: log.motorOil, aceite_hidraulico_l: log.hydraulicOil, refrigerante_l: log.coolant, causa_averia: log.breakdownCause, solucion_averia: log.breakdownSolution, reparador_id: log.repairerId, tipo_mantenimiento: log.maintenanceType, descripcion: log.description, materiales: log.materials, mantenimiento_def_id: log.maintenanceDefId, litros_combustible: log.fuelLitres };
+                const dbLog = { fecha: log.date, trabajador_id: log.workerId, maquina_id: log.machineId, horas_registro: log.hoursAtExecution, tipo_operacion: toDbOperationType(log.type), aceite_motor_l: log.motorOil, aceite_hidraulico_l: log.hydraulicOil, refrigerante_l: log.coolant, causa_averia: log.breakdownCause, solucion_averia: log.breakdownSolution, reparador_id: log.repairerId, tipo_mantenimiento: log.maintenanceType, descripcion: log.description, materiales: log.materials, mantenimiento_def_id: log.maintenanceDefId, litros_combustible: log.fuelLitres };
                  const { error } = await supabase.from('mant_registros').insert(dbLog);
                  if (error) throw error;
             } else if (item.type === 'CP_REPORT') {
                 const report = item.payload;
                 const dateStr = toLocalDateString(new Date(report.date));
-                // Cast supabase.from() call to any to bypass incorrect type inference that uses 
-                // frontend models (like CPDailyReport) instead of database column names.
                 const { error } = await (supabase.from('cp_partes_diarios') as any).insert({ 
                     fecha: dateStr, 
                     trabajador_id: report.workerId, 
@@ -650,15 +669,13 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
             } else if (item.type === 'CR_REPORT') {
                 const report = item.payload;
                 const dateStr = toLocalDateString(new Date(report.date));
-                // Cast supabase.from() call to any to bypass incorrect type inference that uses 
-                // frontend models (like CRDailyReport) instead of database column names.
                 const { error } = await (supabase.from('cr_partes_diarios') as any).insert({ 
                     fecha: dateStr, 
                     trabajador_id: report.workerId, 
                     lavado_inicio: report.washingStart, 
                     lavado_fin: report.washingEnd, 
                     trituracion_inicio: report.triturationStart, 
-                    trituration_fin: report.triturationEnd, 
+                    trituracion_fin: report.triturationEnd, 
                     comentarios: report.comments, 
                     ai_analisis: report.aiAnalysis 
                 });
