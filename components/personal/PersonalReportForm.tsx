@@ -37,13 +37,12 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             const [centersData, historyData, machinesData] = await Promise.all([
                 getCostCenters(),
                 getPersonalReports(workerId),
-                getAllMachines()
+                getAllMachines(true) // Solo máquinas activas
             ]);
             setCenters(centersData);
             setHistory(historyData);
             
             // Filtrar y Ordenar máquinas seleccionables
-            // NOTA: Se cargan TODAS las máquinas seleccionables, independientemente del centro
             const selectable = machinesData.filter(m => m.selectableForReports === true);
             selectable.sort((a, b) => {
                  const codeA = a.companyCode || '';
@@ -70,7 +69,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
         }
 
         setIsSaving(true);
-        // Submit logic
         onSubmit({
             date: new Date(date),
             workerId,
@@ -92,8 +90,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             </div>
 
             <div className="p-4 space-y-6 max-w-lg mx-auto w-full pb-20">
-                
-                {/* 1. Date */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <Calendar size={16} className="text-green-600"/> Fecha
@@ -107,7 +103,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     />
                 </div>
                 
-                {/* 2. Center Selection (Ahora es el primero y manual) */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <Factory size={16} className="text-green-600"/> Centro de Trabajo
@@ -124,7 +119,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     </select>
                 </div>
 
-                {/* 3. Machine Selection (Muestra TODAS las disponibles, sin filtrar por centro) */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                     <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <Truck size={16} className="text-green-600"/> Máquina / Tajo
@@ -136,7 +130,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     >
                         <option value="">-- Seleccionar Máquina --</option>
                         {allSelectableMachines.map(m => {
-                             // Mostramos el centro "original" de la máquina como referencia visual
                              const defaultCenterName = centers.find(c => c.id === m.costCenterId)?.name || '';
                              return (
                                 <option key={m.id} value={m.id}>
@@ -147,7 +140,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     </select>
                 </div>
 
-                {/* 4. Hours */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                      <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <Clock size={16} className="text-green-600"/> Horas Trabajadas
@@ -172,7 +164,6 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     {isSaving ? "Guardando..." : "Guardar Parte"}
                 </button>
 
-                {/* History Section */}
                 <div className="pt-6 border-t border-slate-200">
                     <h3 className="text-sm font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                         <ClipboardList size={16}/> Últimos Registros
@@ -188,12 +179,9 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                                 <div className="text-xs text-slate-400">{item.costCenterName}</div>
                             </div>
                         ))}
-                        {history.length === 0 && <p className="text-center text-slate-400 text-sm italic">Sin registros recientes.</p>}
                     </div>
                 </div>
-
             </div>
         </form>
     );
 };
-
