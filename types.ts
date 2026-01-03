@@ -47,7 +47,7 @@ export interface Machine {
   maintenanceDefs: MaintenanceDefinition[];
   selectableForReports?: boolean;
   responsibleWorkerId?: string;
-  active?: boolean; // Nuevo: Control de estado activo/inactivo
+  active?: boolean; // Control de estado activo/inactivo
 }
 
 export interface ServiceProvider {
