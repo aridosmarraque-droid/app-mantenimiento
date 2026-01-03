@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { createMachine, getCostCenters, getWorkers } from '../../services/db';
 import { CostCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -23,23 +23,18 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [requiresHours, setRequiresHours] = useState(true);
     const [adminExpenses, setAdminExpenses] = useState(false);
     const [transportExpenses, setTransportExpenses] = useState(false);
-    const [selectableForReports, setSelectableForReports] = useState(true); // Default true
+    const [selectableForReports, setSelectableForReports] = useState(true); 
+    const [active, setActive] = useState(true); // Nuevo estado
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
     
-    // Temp State for new Def
     const [newDefName, setNewDefName] = useState('');
     const [newDefType, setNewDefType] = useState<'HOURS' | 'DATE'>('HOURS');
-    
-    // Hours Inputs
     const [newDefInterval, setNewDefInterval] = useState<number | ''>('');
     const [newDefWarning, setNewDefWarning] = useState<number | ''>('');
-    
-    // Date Inputs
     const [newDefIntervalMonths, setNewDefIntervalMonths] = useState<number | ''>('');
     const [newDefNextDate, setNewDefNextDate] = useState('');
-
     const [newDefTasks, setNewDefTasks] = useState('');
 
     useEffect(() => {
@@ -59,7 +54,6 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
 
     const addMaintenanceDef = () => {
         if (!newDefName) return;
-
         const newDef: MaintenanceDefinition = {
             name: newDefName,
             tasks: newDefTasks,
@@ -67,21 +61,16 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             intervalHours: 0,
             warningHours: 0
         };
-
         if (newDefType === 'HOURS') {
             if (!newDefInterval || !newDefWarning) return;
             newDef.intervalHours = Number(newDefInterval);
             newDef.warningHours = Number(newDefWarning);
         } else {
-            // DATE
             if (!newDefNextDate) return;
             newDef.intervalMonths = newDefIntervalMonths ? Number(newDefIntervalMonths) : 0;
             newDef.nextDate = new Date(newDefNextDate);
         }
-        
         setDefs([...defs, newDef]);
-        
-        // Reset inputs
         setNewDefName('');
         setNewDefInterval('');
         setNewDefWarning('');
@@ -110,19 +99,20 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 adminExpenses,
                 transportExpenses,
                 selectableForReports,
-                maintenanceDefs: defs
+                maintenanceDefs: defs,
+                active // Pasamos el estado activo
             });
             onSuccess();
         } catch (error) {
             console.error(error);
-            alert("Error al crear máquina. Revisa la consola para más detalles.");
+            alert("Error al crear máquina.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-md space-y-6">
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-md space-y-6 pb-20">
             <div className="flex items-center gap-2 border-b pb-2">
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                     <ArrowLeft className="w-5 h-5" />
@@ -130,237 +120,55 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 <h3 className="text-xl font-bold text-slate-800">Nueva Máquina</h3>
             </div>
 
-            {/* Basic Info */}
             <div className="space-y-4">
+                <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <span className="text-sm font-bold text-slate-600 uppercase">Estado inicial</span>
+                    <button type="button" onClick={() => setActive(!active)} className="flex items-center gap-2 text-green-600 font-bold">
+                        <ToggleRight size={32} className={active ? 'text-green-500' : 'text-slate-300 rotate-180'} />
+                        {active ? 'ACTIVO' : 'INACTIVO'}
+                    </button>
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Máquina *</label>
-                    <input
-                        type="text"
-                        required
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                    <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno</label>
-                        <input
-                            type="text"
-                            value={companyCode}
-                            onChange={e => setCompanyCode(e.target.value)}
-                            placeholder="Ej. RETRO-01"
-                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
+                        <input type="text" value={companyCode} onChange={e => setCompanyCode(e.target.value)} placeholder="Ej. RETRO-01" className="w-full p-3 border border-slate-300 rounded-lg" />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kilómetros Iniciales</label>
-                        <input
-                            type="number"
-                            value={currentHours}
-                            onChange={e => setCurrentHours(Number(e.target.value))}
-                            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kms Iniciales</label>
+                        <input type="number" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} className="w-full p-3 border border-slate-300 rounded-lg" />
                     </div>
                 </div>
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Cantera / Grupo *</label>
-                    <select
-                        required
-                        value={centerId}
-                        onChange={e => setCenterId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
+                    <select required value={centerId} onChange={e => setCenterId(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                         <option value="">-- Seleccionar --</option>
-                        {centers.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                    </select>
-                </div>
-                
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Responsable</label>
-                    <select
-                        value={responsibleId}
-                        onChange={e => setResponsibleId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="">-- Sin Responsable Asignado --</option>
-                        {workers.map(w => (
-                            <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
+                        {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 </div>
             </div>
 
-            {/* Checkboxes */}
+            {/* Config Checkboxes */}
             <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                <h4 className="font-semibold text-sm text-slate-500 uppercase">Configuración</h4>
-                
-                <div className="flex items-center gap-3 mb-2">
-                    <input 
-                        type="checkbox" 
-                        id="reqHours"
-                        checked={requiresHours}
-                        onChange={e => setRequiresHours(e.target.checked)}
-                        className="w-5 h-5 text-blue-600 rounded"
-                    />
+                <div className="flex items-center gap-3">
+                    <input type="checkbox" id="reqHours" checked={requiresHours} onChange={e => setRequiresHours(e.target.checked)} className="w-5 h-5 text-blue-600 rounded" />
                     <label htmlFor="reqHours" className="text-slate-700 font-medium">Controlar Horas/Kms</label>
                 </div>
-
-                <div className="flex items-center gap-3 mb-2">
-                    <input 
-                        type="checkbox" 
-                        id="selectableReports"
-                        checked={selectableForReports}
-                        onChange={e => setSelectableForReports(e.target.checked)}
-                        className="w-5 h-5 text-green-600 rounded"
-                    />
-                    <label htmlFor="selectableReports" className="text-slate-700 font-medium">Seleccionable para Partes de Trabajo</label>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-4 mt-2 border-t pt-2">
-                    <div className="flex items-center gap-2">
-                        <input 
-                            type="checkbox" 
-                            id="adminExp"
-                            checked={adminExpenses}
-                            onChange={() => handleExpenseChange('admin')}
-                            className="w-5 h-5 text-blue-600 rounded"
-                        />
-                        <label htmlFor="adminExp" className="text-slate-700 font-medium">Gastos de Administración</label>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                        <input 
-                            type="checkbox" 
-                            id="transExp"
-                            checked={transportExpenses}
-                            onChange={() => handleExpenseChange('transport')}
-                            className="w-5 h-5 text-blue-600 rounded"
-                        />
-                        <label htmlFor="transExp" className="text-slate-700 font-medium">Gastos de Transporte</label>
-                    </div>
+                <div className="flex items-center gap-3">
+                    <input type="checkbox" id="selectableReports" checked={selectableForReports} onChange={e => setSelectableForReports(e.target.checked)} className="w-5 h-5 text-green-600 rounded" />
+                    <label htmlFor="selectableReports" className="text-slate-700 font-medium">Seleccionable en Partes de Trabajo</label>
                 </div>
             </div>
 
-            {/* Maintenance Definitions */}
-            <div className="space-y-4">
-                <div className="flex justify-between items-center border-b pb-1">
-                    <h4 className="font-bold text-slate-700">Mantenimientos Programados</h4>
-                </div>
-
-                {/* List of added defs */}
-                {defs.length > 0 && (
-                    <div className="space-y-2 mb-4">
-                        {defs.map((def, idx) => (
-                            <div key={idx} className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
-                                <div>
-                                    <p className="font-bold text-blue-900">{def.name}</p>
-                                    <p className="text-xs text-blue-700">
-                                        {def.maintenanceType === 'HOURS' 
-                                            ? `Cada ${def.intervalHours}h (Aviso ${def.warningHours}h)`
-                                            : `Por Fecha: ${def.nextDate?.toLocaleDateString()} (Cada ${def.intervalMonths || 0} meses)`
-                                        }
-                                    </p>
-                                </div>
-                                <button type="button" onClick={() => removeDef(idx)} className="text-red-500 hover:bg-red-100 p-1 rounded">
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Add New Def Form */}
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-                    <div className="flex gap-2 mb-2">
-                        <button 
-                            type="button"
-                            onClick={() => setNewDefType('HOURS')}
-                            className={`flex-1 py-1 text-sm font-bold rounded ${newDefType === 'HOURS' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}
-                        >
-                            Por Horas
-                        </button>
-                        <button 
-                            type="button"
-                            onClick={() => setNewDefType('DATE')}
-                            className={`flex-1 py-1 text-sm font-bold rounded ${newDefType === 'DATE' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}
-                        >
-                            Por Fecha
-                        </button>
-                    </div>
-
-                    <input 
-                        placeholder="Nombre (ej. Mantenimiento 500h)" 
-                        className="w-full p-2 border rounded"
-                        value={newDefName}
-                        onChange={e => setNewDefName(e.target.value)}
-                    />
-                    
-                    {newDefType === 'HOURS' ? (
-                        <div className="flex gap-2">
-                            <input 
-                                type="number" 
-                                placeholder="Intervalo (horas)" 
-                                className="w-1/2 p-2 border rounded"
-                                value={newDefInterval}
-                                onChange={e => setNewDefInterval(Number(e.target.value))}
-                            />
-                            <input 
-                                type="number" 
-                                placeholder="Preaviso (horas)" 
-                                className="w-1/2 p-2 border rounded"
-                                value={newDefWarning}
-                                onChange={e => setNewDefWarning(Number(e.target.value))}
-                            />
-                        </div>
-                    ) : (
-                        <div className="flex gap-2">
-                            <input 
-                                type="date" 
-                                className="w-1/2 p-2 border rounded"
-                                value={newDefNextDate}
-                                onChange={e => setNewDefNextDate(e.target.value)}
-                            />
-                             <input 
-                                type="number" 
-                                placeholder="Repetir cada X meses (0 = No)" 
-                                className="w-1/2 p-2 border rounded"
-                                value={newDefIntervalMonths}
-                                onChange={e => setNewDefIntervalMonths(Number(e.target.value))}
-                            />
-                        </div>
-                    )}
-
-                    <textarea 
-                        placeholder="Tareas a realizar..." 
-                        className="w-full p-2 border rounded"
-                        rows={2}
-                        value={newDefTasks}
-                        onChange={e => setNewDefTasks(e.target.value)}
-                    />
-                    <button 
-                        type="button" 
-                        onClick={addMaintenanceDef}
-                        disabled={!newDefName || (newDefType === 'HOURS' && !newDefInterval) || (newDefType === 'DATE' && !newDefNextDate)}
-                        className="w-full py-2 bg-slate-200 text-slate-700 font-bold rounded hover:bg-slate-300 disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                        <Plus size={16} /> Añadir Mantenimiento
-                    </button>
-                </div>
-            </div>
-
-            <button 
-                type="submit" 
-                disabled={loading}
-                className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400"
-            >
+            <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400 shadow-lg">
                 <Save className="w-5 h-5" /> {loading ? 'Guardando...' : 'Crear Máquina Completa'}
             </button>
         </form>
     );
 };
-
