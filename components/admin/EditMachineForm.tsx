@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus, getWorkers } from '../../services/db';
+import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, calculateAndSyncMachineStatus, getWorkers, deleteMachine, getMachineDependencyCount } from '../../services/db';
 import { CostCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, Edit2, X } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, FileText, Hammer } from 'lucide-react';
 
 interface Props {
     machine: Machine;
@@ -16,6 +16,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     const [centers, setCenters] = useState<CostCenter[]>([]);
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     
     // --- EDITING STATES ---
     const [name, setName] = useState(machine.name);
@@ -27,6 +28,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     const [adminExpenses, setAdminExpenses] = useState(machine.adminExpenses);
     const [transportExpenses, setTransportExpenses] = useState(machine.transportExpenses);
     const [selectableForReports, setSelectableForReports] = useState(machine.selectableForReports ?? true);
+    const [active, setActive] = useState(machine.active ?? true);
 
     // --- MAINT DEF FORM STATE ---
     const [editingDefId, setEditingDefId] = useState<string | null>(null);
@@ -63,12 +65,48 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 requiresHours,
                 adminExpenses,
                 transportExpenses,
-                selectableForReports
+                selectableForReports,
+                active
             });
             alert("Datos generales actualizados.");
         } catch (e) {
             alert("Error al actualizar datos.");
         } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteMachine = async () => {
+        setLoading(true);
+        try {
+            // 1. Verificar dependencias
+            const deps = await getMachineDependencyCount(machine.id);
+            const hasHistory = deps.logs > 0 || deps.reports > 0;
+
+            if (hasHistory) {
+                const confirmMsg = `ADVERTENCIA DE INTEGRIDAD:\n\nEste activo no puede borrarse directamente sin afectar al histórico.\n\n- Registros de Mantenimiento: ${deps.logs}\n- Partes de Trabajo: ${deps.reports}\n\nSi borras el activo, se eliminarán TAMBIÉN todos estos registros. ¿Deseas proceder con el borrado TOTAL o prefieres simplemente DESACTIVAR el activo?`;
+                
+                const choice = confirm(confirmMsg);
+                if (!choice) {
+                   setLoading(false);
+                   return;
+                }
+            } else {
+                if (!confirm(`¿Estás seguro de eliminar "${machine.name}"? No tiene historial vinculado.`)) {
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            setDeleting(true);
+            await deleteMachine(machine.id);
+            alert("Activo y su historial eliminados correctamente.");
+            onSuccess(); 
+        } catch (error) {
+            console.error("Error al eliminar:", error);
+            alert("Error al intentar eliminar el activo.");
+        } finally {
+            setDeleting(false);
             setLoading(false);
         }
     };
@@ -150,18 +188,31 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     };
 
     return (
-        <div className="space-y-6 pb-10">
+        <div className="space-y-6 pb-20 animate-in fade-in duration-500">
             {/* Header */}
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                     <ArrowLeft className="w-6 h-6" />
                 </button>
-                <h3 className="text-xl font-bold text-slate-800">Modificar Máquina: {machine.name}</h3>
+                <div>
+                    <h3 className="text-xl font-bold text-slate-800">Modificar: {machine.name}</h3>
+                    {!active && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-black uppercase">Activo en Baja</span>}
+                </div>
             </div>
 
             {/* Basic Info Form */}
             <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
-                <h4 className="font-bold text-slate-700 border-b pb-2">Datos Generales</h4>
+                <div className="flex justify-between items-center border-b pb-2">
+                    <h4 className="font-bold text-slate-700">Datos Generales</h4>
+                    <button 
+                        type="button" 
+                        onClick={() => setActive(!active)} 
+                        className={`flex items-center gap-2 text-xs font-black px-3 py-1.5 rounded-full transition-all ${active ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}
+                    >
+                        {active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                        {active ? 'ACTIVO' : 'INACTIVO'}
+                    </button>
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -203,19 +254,19 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </label>
 
                     <div className="flex gap-4 mt-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-500">
                             <input type="checkbox" checked={adminExpenses} onChange={e => setAdminExpenses(e.target.checked)} />
-                            <span>Gastos Admin</span>
+                            GASTOS ADMIN
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-500">
                             <input type="checkbox" checked={transportExpenses} onChange={e => setTransportExpenses(e.target.checked)} />
-                            <span>Gastos Transporte</span>
+                            GASTOS TRANSPORTE
                         </label>
                     </div>
                 </div>
 
-                <button onClick={handleUpdateBasicInfo} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">
-                    Guardar Datos Generales
+                <button onClick={handleUpdateBasicInfo} disabled={loading || deleting} className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:bg-slate-300">
+                    {loading ? 'Guardando...' : 'Guardar Datos Generales'}
                 </button>
             </div>
 
@@ -246,7 +297,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                             </div>
                         </div>
                     ))}
-                    {machine.maintenanceDefs.length === 0 && <p className="text-slate-400 text-sm text-center">Sin mantenimientos definidos.</p>}
+                    {machine.maintenanceDefs.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Sin mantenimientos definidos.</p>}
                 </div>
 
                 {/* Add/Edit Form */}
@@ -325,7 +376,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                         <button 
                             onClick={handleSaveDef} 
                             disabled={loading || !defName}
-                            className={`w-full py-2 rounded font-bold flex items-center justify-center gap-2 ${editingDefId ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+                            className={`w-full py-2 rounded font-bold flex items-center justify-center gap-2 ${editingDefId ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'} disabled:bg-slate-300`}
                         >
                             {editingDefId ? <Save size={18}/> : <Plus size={18}/>}
                             {editingDefId ? 'Actualizar Definición' : 'Añadir Definición'}
@@ -333,7 +384,26 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                 </div>
             </div>
+
+            {/* DANGER ZONE: DELETE MACHINE */}
+            <div className="bg-red-50 p-6 rounded-xl border-2 border-red-100 shadow-sm mx-1">
+                <div className="flex items-center gap-2 text-red-700 font-bold mb-2">
+                    <AlertTriangle size={20} />
+                    <h4>Zona de Peligro</h4>
+                </div>
+                <p className="text-xs text-red-600 mb-4 font-medium leading-relaxed">
+                    Si el activo ya tiene historial, te recomendamos usar la opción <strong>DESACTIVAR</strong> en la sección de datos generales. <br/>
+                    Al eliminar este activo permanentemente, se borrarán también todos sus mantenimientos y partes de trabajo vinculados.
+                </p>
+                <button 
+                    onClick={handleDeleteMachine}
+                    disabled={deleting || loading}
+                    className="w-full py-3 bg-white border-2 border-red-500 text-red-600 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-red-500 hover:text-white transition-all disabled:opacity-50"
+                >
+                    {deleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+                    {deleting ? 'Calculando impacto...' : 'Borrado Físico y de Historial'}
+                </button>
+            </div>
         </div>
     );
 };
-
