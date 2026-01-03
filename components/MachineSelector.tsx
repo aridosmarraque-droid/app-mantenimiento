@@ -23,9 +23,8 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   useEffect(() => {
     if (selectedCenterId) {
-      // Cargamos solo las máquinas activas
+      // Cargamos solo las máquinas activas para evitar errores de selección
       getMachinesByCenter(selectedCenterId, true).then(data => {
-          // Ordenar: Primero Código (si existe), luego Nombre
           data.sort((a, b) => {
              const codeA = a.companyCode || '';
              const codeB = b.companyCode || '';
