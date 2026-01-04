@@ -113,7 +113,12 @@ export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> 
     if (!isConfigured) return mock.getWorkers();
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
     if (error) { console.error("DB Error getWorkers:", error); return []; }
-    const workers = data ? data.map(mapWorker) : [];
+    
+    // ORDEN ALFABÉTICO POR NOMBRE
+    const workers = (data || [])
+        .map(mapWorker)
+        .sort((a, b) => a.name.localeCompare(b.name));
+        
     return onlyActive ? workers.filter(w => w.active !== false) : workers;
 };
 
@@ -146,7 +151,11 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
     const { data, error } = await supabase.from('mant_centros').select('*');
     if (error) { console.error("getCostCenters", error); return []; }
-    return data.map((c: any) => ({ id: c.id, name: c.nombre }));
+    
+    // ORDEN ALFABÉTICO POR NOMBRE
+    return (data || [])
+        .map((c: any) => ({ id: c.id, name: c.nombre }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 };
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
@@ -168,20 +177,38 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
     if (error) throw error;
 };
 
+// HELPER PARA ORDENAR MÁQUINAS (CÓDIGO LUEGO NOMBRE)
+const sortMachines = (machines: Machine[]) => {
+    return machines.sort((a, b) => {
+        const codeA = a.companyCode || '';
+        const codeB = b.companyCode || '';
+        if (codeA && codeB) return codeA.localeCompare(codeB);
+        if (codeA) return -1;
+        if (codeB) return 1;
+        return a.name.localeCompare(b.name);
+    });
+};
+
 export const getMachinesByCenter = async (centerId: string, onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
     const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
     if (error) { console.error("getMachinesByCenter", error); return []; }
+    
     const machines = data.map(mapMachine);
-    return onlyActive ? machines.filter(m => m.active !== false) : machines;
+    const sorted = sortMachines(machines);
+    
+    return onlyActive ? sorted.filter(m => m.active !== false) : sorted;
 };
 
 export const getAllMachines = async (onlyActive: boolean = false): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
     const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
     if (error) { console.error("getAllMachines", error); return []; }
+    
     const machines = data.map(mapMachine);
-    return onlyActive ? machines.filter(m => m.active !== false) : machines;
+    const sorted = sortMachines(machines);
+    
+    return onlyActive ? sorted.filter(m => m.active !== false) : sorted;
 };
 
 export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machine> => {
@@ -493,7 +520,7 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         if (error) return null;
         const report = data && data.length > 0 ? data[0] : null;
         if (!report) return null;
-        return { id: report.id, date: new Date(report.fecha), workerId: report.trabajador_id, crusherStart: report.machacadora_inicio, crusherEnd: report.machacadora_fin, millsStart: report.molinos_inicio, millsEnd: report.molinos_fin, comments: report.comentarios, aiAnalysis: report.ai_analisis };
+        return { id: report.id, date: new Date(report.fecha), workerId: report.trabajador_id, crusherStart: report.machacadora_inicio, crusherEnd: report.machacadora_fin, millsStart: report.molinos_inicio, millsEnd: report.molinos_fin, comments: report.comments, aiAnalysis: report.ai_analisis };
     } catch (e) { return null; }
 };
 
@@ -658,7 +685,7 @@ export const syncPendingData = async (): Promise<{ synced: number, errors: numbe
                 if (error) throw error;
             } else if (item.type === 'CP_PLAN') {
                 const plan = item.payload;
-                 const { error } = await supabase.from('cp_planificacion').upsert({ fecha_lunes: plan.mondayDate, horas_lunes: plan.hoursMon, horas_martes: plan.hoursTue, horas_miercoles: plan.hoursWed, horas_jueves: plan.hoursThu, horas_viernes: plan.hoursFri }, { onConflict: 'fecha_lunes' });
+                 const { error } = await supabase.from('cp_planificacion').upsert({ fecha_lunes: plan.mondayDate, hours_lunes: plan.hoursMon, hours_martes: plan.hoursTue, hours_miercoles: plan.hoursWed, hours_jueves: plan.hoursThu, hours_viernes: plan.hoursFri }, { onConflict: 'fecha_lunes' });
                 if (error) throw error;
             } else if (item.type === 'PERSONAL_REPORT') {
                 const report = item.payload;
