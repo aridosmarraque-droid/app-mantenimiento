@@ -389,7 +389,20 @@ function App() {
             {viewState === ViewState.CR_DAILY_REPORT && currentUser && <DailyReportFormCR workerId={currentUser.id} onBack={() => setViewState(ViewState.CR_SELECTION)} onSubmit={handleCRReportSubmit} />}
 
               {viewState === ViewState.CONTEXT_SELECTION && <MachineSelector selectedDate={selectedDate} onChangeDate={setSelectedDate} onSelect={handleContextSelect} />}
-              {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && <div className="space-y-4"><div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-center mb-4"><p className="text-blue-800 font-bold">Modo Admin: Modificar Máquina</p></div><MachineSelector selectedDate={new Date()} onChangeDate={() => {}} onSelect={handleEditSelection}/><button onClick={() => setViewState(ViewState.CONTEXT_SELECTION)} className="w-full py-3 text-slate-500 font-medium">Cancelar</button></div>}
+              {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-center mb-4">
+                    <p className="text-blue-800 font-bold">Modo Admin: Modificar Máquina</p>
+                  </div>
+                  <MachineSelector 
+                    selectedDate={new Date()} 
+                    onChangeDate={() => {}} 
+                    onSelect={handleEditSelection}
+                    showInactive={true} // Obligatorio para poder reactivarlas
+                  />
+                  <button onClick={() => setViewState(ViewState.CONTEXT_SELECTION)} className="w-full py-3 text-slate-500 font-medium">Cancelar</button>
+                </div>
+              )}
               {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada')}/>}
               {viewState === ViewState.ADMIN_CREATE_MACHINE && <CreateMachineForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Máquina creada')}/>}
               {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => handleAdminSuccess('Actualizada')}/>}
