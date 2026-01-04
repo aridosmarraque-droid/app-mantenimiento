@@ -24,17 +24,8 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   useEffect(() => {
     if (selectedCenterId) {
-      // Si showInactive es true, pedimos todas (onlyActive = false)
-      // Si showInactive es false, pedimos solo activas (onlyActive = true)
+      // El servicio ya devuelve los datos ordenados alfabéticamente
       getMachinesByCenter(selectedCenterId, !showInactive).then(data => {
-          data.sort((a, b) => {
-             const codeA = a.companyCode || '';
-             const codeB = b.companyCode || '';
-             if (codeA && codeB) return codeA.localeCompare(codeB);
-             if (codeA) return -1; 
-             if (codeB) return 1;  
-             return a.name.localeCompare(b.name);
-          });
           setMachines(data);
       });
       setSelectedMachineId('');
