@@ -2,15 +2,16 @@
 import React, { useEffect, useState } from 'react';
 import { CostCenter, Machine } from '../types';
 import { getCostCenters, getMachinesByCenter, calculateAndSyncMachineStatus } from '../services/db'; 
-import { Factory, Truck, ChevronRight, Loader2 } from 'lucide-react';
+import { Factory, Truck, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 
 interface MachineSelectorProps {
   onSelect: (machine: Machine, center: CostCenter) => void;
   selectedDate: Date;
   onChangeDate: (date: Date) => void;
+  showInactive?: boolean; // Nueva prop para admin
 }
 
-export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, selectedDate, onChangeDate }) => {
+export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, selectedDate, onChangeDate, showInactive = false }) => {
   const [centers, setCenters] = useState<CostCenter[]>([]);
   const [selectedCenterId, setSelectedCenterId] = useState('');
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -23,8 +24,9 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
 
   useEffect(() => {
     if (selectedCenterId) {
-      // Cargamos solo las máquinas activas para evitar errores de selección
-      getMachinesByCenter(selectedCenterId, true).then(data => {
+      // Si showInactive es true, pedimos todas (onlyActive = false)
+      // Si showInactive es false, pedimos solo activas (onlyActive = true)
+      getMachinesByCenter(selectedCenterId, !showInactive).then(data => {
           data.sort((a, b) => {
              const codeA = a.companyCode || '';
              const codeB = b.companyCode || '';
@@ -39,7 +41,7 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
     } else {
       setMachines([]);
     }
-  }, [selectedCenterId]);
+  }, [selectedCenterId, showInactive]);
 
   const handleContinue = async () => {
     const m = machines.find(mac => mac.id === selectedMachineId);
@@ -96,7 +98,7 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 animate-fade-in">
           <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <Truck className="w-5 h-5 text-blue-600" />
-            Máquina
+            Máquina {showInactive && <span className="text-xs font-normal text-slate-400 ml-1">(Incluye inactivas)</span>}
           </h2>
           <select
             value={selectedMachineId}
@@ -105,11 +107,19 @@ export const MachineSelector: React.FC<MachineSelectorProps> = ({ onSelect, sele
           >
             <option value="">-- Seleccione Máquina --</option>
             {machines.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} {m.adminExpenses ? '(Gastos Admin)' : ''}
+              <option key={m.id} value={m.id} className={m.active === false ? 'text-red-500' : ''}>
+                {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} 
+                {m.active === false ? ' (INACTIVA)' : ''}
+                {m.adminExpenses ? ' (Gastos Admin)' : ''}
               </option>
             ))}
           </select>
+          
+          {selectedMachineId && machines.find(m => m.id === selectedMachineId)?.active === false && (
+            <div className="flex items-center gap-2 p-2 bg-red-50 text-red-600 text-xs rounded border border-red-100 mb-2 font-medium">
+                <AlertCircle size={14} /> Máquina dada de baja. Podrás reactivarla en la siguiente pantalla.
+            </div>
+          )}
         </div>
       )}
 
