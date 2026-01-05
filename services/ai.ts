@@ -7,22 +7,26 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // @ts-ignore
-    const apiKey = import.meta.env.VITE_API_KEY;
+    /**
+     * The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+     */
+    const apiKey = process.env.API_KEY;
 
     // Si no hay key configurada
     if (!apiKey) {
-        console.warn("⚠️ API Key no encontrada (VITE_API_KEY).");
+        console.warn("⚠️ API Key no encontrada (process.env.API_KEY).");
         return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
-               "No se ha detectado la API Key de Google Gemini.\n" +
-               "Si estás en Vercel: Ve a Settings > Environment Variables y añade 'VITE_API_KEY'.\n\n" +
+               "No se ha detectado la API Key de Google Gemini.\n\n" +
                "**Simulación (Modo Demo):** \n" +
                "Basado en los comentarios, parece haber un problema mecánico recurrente. " +
                `La eficiencia del ${efficiency.toFixed(1)}% es baja. Revise los molinos.`;
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey });
+        /**
+         * Initialize GoogleGenAI with the named parameter apiKey.
+         */
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         
         const prompt = `
             Actúa como un Gerente de Mantenimiento y Producción Industrial senior con 20 años de experiencia en plantas de áridos y canteras.
@@ -40,16 +44,22 @@ export const analyzeProductionReport = async (
             5. Formato de respuesta en Markdown limpio (sin bloques de código JSON).
         `;
 
+        /**
+         * Use ai.models.generateContent to query GenAI with the model name and prompt.
+         * Model 'gemini-3-flash-preview' is chosen for basic summarization and analysis.
+         */
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
         });
 
+        /**
+         * Access the text output via the .text property of the response object.
+         */
         return response.text || "No se pudo generar el análisis.";
 
     } catch (error) {
-        console.error("Error llamando a Gemini:", error);
-        return "Error al conectar con el servicio de IA. Verifique su API Key en Vercel.";
+        console.error("Error calling Gemini API:", error);
+        return "Error al conectar con el servicio de IA. Verifique su API Key.";
     }
 };
-
