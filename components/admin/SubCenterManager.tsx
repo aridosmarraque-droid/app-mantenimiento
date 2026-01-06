@@ -39,7 +39,6 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Validación: si marca producción, debe elegir campo
         if (tracksProd && !prodField) {
             alert("Debe seleccionar un campo de producción para vincular.");
             return;
@@ -54,10 +53,8 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
 
             if (editingId) {
                 await updateSubCenter(editingId, payload);
-                alert("Subcentro actualizado");
             } else {
                 await createSubCenter({ centerId: selectedCenterId, ...payload });
-                alert("Subcentro creado");
             }
             
             // Reset
@@ -69,9 +66,10 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
             // Reload list
             const data = await getSubCentersByCenter(selectedCenterId);
             setSubCenters(data);
-        } catch (error) { 
+            alert("Operación realizada con éxito");
+        } catch (error: any) { 
             console.error(error);
-            alert("Error al procesar la solicitud. Verifique los datos."); 
+            alert("Error al procesar la solicitud: " + (error.message || "Verifique los datos")); 
         }
     };
 
@@ -173,14 +171,12 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
                                                 <option value="TRITURACION">Trituración (Inicio/Fin)</option>
                                             </optgroup>
                                         </select>
-                                        <p className="text-[9px] text-indigo-400 mt-2 font-medium italic">
-                                            * Las máquinas de esta planta heredarán automáticamente las horas del parte diario seleccionado.
-                                        </p>
                                     </div>
                                 )}
                             </div>
 
                             <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all">
+                                <Save size={18} className="inline mr-2"/>
                                 {editingId ? 'Actualizar Planta' : 'Crear Planta'}
                             </button>
                         </div>
@@ -188,7 +184,7 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
 
                     <div className="bg-white rounded-2xl shadow-md divide-y border border-slate-100 overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b">
-                            <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest">Plantas registradas en esta cantera</h4>
+                            <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest">Plantas registradas</h4>
                         </div>
                         {subCenters.length === 0 ? (
                             <div className="p-10 text-center text-slate-400 italic text-sm">No hay subcentros creados para esta cantera.</div>
@@ -209,20 +205,19 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
                                                     </span>
                                                 </div>
                                             ) : (
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase">Sin vinculación de horas</span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">Sin vinculación</span>
                                             )}
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <button onClick={() => handleEdit(s)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Edit2 size={20}/></button>
+                                        <button onClick={() => handleEdit(s)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={20}/></button>
                                         <button 
                                             onClick={() => {
-                                                if(confirm("¿Borrar planta? Las máquinas perderán su asociación.")) {
+                                                if(confirm("¿Borrar planta?")) {
                                                     deleteSubCenter(s.id).then(() => getSubCentersByCenter(selectedCenterId).then(setSubCenters));
                                                 }
                                             }} 
-                                            className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" 
-                                            title="Eliminar"
+                                            className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                         >
                                             <Trash2 size={20}/>
                                         </button>
