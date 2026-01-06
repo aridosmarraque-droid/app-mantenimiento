@@ -53,7 +53,7 @@ const mapSubCenter = (s: any): SubCenter => ({
     centerId: s.centro_id,
     name: s.nombre,
     tracksProduction: s.registra_produccion || false,
-    productionField: s.produccion_campo || undefined
+    productionField: s.campo_produccion || undefined
 });
 
 const mapDef = (d: any): MaintenanceDefinition => ({
@@ -171,7 +171,7 @@ export const createSubCenter = async (sub: Omit<SubCenter, 'id'>): Promise<void>
         centro_id: sub.centerId,
         nombre: sub.name,
         registra_produccion: sub.tracksProduction,
-        produccion_campo: sub.tracksProduction ? sub.productionField : null
+        campo_produccion: sub.tracksProduction ? sub.productionField : null
     });
     if (error) throw error;
 };
@@ -186,18 +186,14 @@ export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): 
     if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.tracksProduction !== undefined) dbUpdates.registra_produccion = updates.tracksProduction;
     
-    // Si no registra producción, obligamos a null para evitar fallos de integridad
     if (updates.tracksProduction === false) {
-        dbUpdates.produccion_campo = null;
+        dbUpdates.campo_produccion = null;
     } else if (updates.productionField !== undefined) {
-        dbUpdates.produccion_campo = updates.productionField;
+        dbUpdates.campo_produccion = updates.productionField;
     }
 
     const { error } = await supabase.from('mant_subcentros').update(dbUpdates).eq('id', id);
-    if (error) {
-        console.error("DB Error updateSubCenter:", error);
-        throw error;
-    }
+    if (error) throw error;
 };
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
@@ -282,10 +278,8 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
             maquina_id: mData.id,
             nombre: d.name,
             tipo_programacion: d.maintenanceType,
-            // FIX: Use intervalHours instead of intervalo_horas for MaintenanceDefinition object
             intervalo_horas: d.intervalHours,
             horas_preaviso: d.warningHours,
-            // FIX: Use intervalMonths instead of intervalo_meses for MaintenanceDefinition object
             intervalo_meses: d.intervalMonths,
             proxima_fecha: d.nextDate ? toLocalDateString(d.nextDate) : null,
             tareas: d.tasks,
@@ -422,11 +416,11 @@ const syncMachineHoursWithProduction = async (report: CPDailyReport | CRDailyRep
         let newHoursValue = 0;
         
         if ('crusherEnd' in report) { 
-            if (sub.produccion_campo === 'MACHACADORA') newHoursValue = report.crusherEnd;
-            if (sub.produccion_campo === 'MOLINOS') newHoursValue = report.millsEnd;
+            if (sub.campo_produccion === 'MACHACADORA') newHoursValue = report.crusherEnd;
+            if (sub.campo_produccion === 'MOLINOS') newHoursValue = report.millsEnd;
         } else if ('washingEnd' in report) { 
-            if (sub.produccion_campo === 'LAVADO') newHoursValue = report.washingEnd;
-            if (sub.produccion_campo === 'TRITURACION') newHoursValue = report.triturationEnd;
+            if (sub.campo_produccion === 'LAVADO') newHoursValue = report.washingEnd;
+            if (sub.campo_produccion === 'TRITURACION') newHoursValue = report.triturationEnd;
         }
 
         if (newHoursValue > 0) {
