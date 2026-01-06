@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { getCostCenters, getSubCentersByCenter, createSubCenter, deleteSubCenter, updateSubCenter } from '../../services/db';
 import { CostCenter, SubCenter } from '../../types';
-import { ArrowLeft, Plus, Trash2, Edit2, LayoutGrid, Factory, Save, Database } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit2, LayoutGrid, Factory, Save, Database, X } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -18,7 +18,7 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [tracksProd, setTracksProd] = useState(false);
-    const [prodField, setProdField] = useState<any>('');
+    const [prodField, setProdField] = useState<string>('');
 
     useEffect(() => {
         getCostCenters().then(setCenters);
@@ -31,20 +31,48 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
                 setSubCenters(data);
                 setLoading(false);
             });
+        } else {
+            setSubCenters([]);
         }
     }, [selectedCenterId]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Validación: si marca producción, debe elegir campo
+        if (tracksProd && !prodField) {
+            alert("Debe seleccionar un campo de producción para vincular.");
+            return;
+        }
+
         try {
+            const payload = { 
+                name, 
+                tracksProduction: tracksProd, 
+                productionField: tracksProd ? (prodField as any) : null 
+            };
+
             if (editingId) {
-                await updateSubCenter(editingId, { name, tracksProduction: tracksProd, productionField: prodField || undefined });
+                await updateSubCenter(editingId, payload);
+                alert("Subcentro actualizado");
             } else {
-                await createSubCenter({ centerId: selectedCenterId, name, tracksProduction: tracksProd, productionField: prodField || undefined });
+                await createSubCenter({ centerId: selectedCenterId, ...payload });
+                alert("Subcentro creado");
             }
-            setName(''); setTracksProd(false); setProdField(''); setEditingId(null);
-            getSubCentersByCenter(selectedCenterId).then(setSubCenters);
-        } catch (e) { alert("Error"); }
+            
+            // Reset
+            setName(''); 
+            setTracksProd(false); 
+            setProdField(''); 
+            setEditingId(null);
+            
+            // Reload list
+            const data = await getSubCentersByCenter(selectedCenterId);
+            setSubCenters(data);
+        } catch (error) { 
+            console.error(error);
+            alert("Error al procesar la solicitud. Verifique los datos."); 
+        }
     };
 
     const handleEdit = (s: SubCenter) => {
@@ -54,76 +82,154 @@ export const SubCenterManager: React.FC<Props> = ({ onBack }) => {
         setProdField(s.productionField || '');
     };
 
+    const cancelEdit = () => {
+        setEditingId(null);
+        setName('');
+        setTracksProd(false);
+        setProdField('');
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in duration-500">
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
-                <button onClick={onBack} className="text-slate-500"><ArrowLeft /></button>
-                <h3 className="text-xl font-bold">Plantas y Subcentros</h3>
+                <button onClick={onBack} className="text-slate-500 hover:text-slate-800 transition-colors"><ArrowLeft /></button>
+                <h3 className="text-xl font-bold text-slate-800">Plantas y Subcentros</h3>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2"><Factory size={16}/> Cantera Matriz</label>
-                <select value={selectedCenterId} onChange={e => setSelectedCenterId(e.target.value)} className="w-full p-3 border rounded-lg">
-                    <option value="">-- Seleccionar Cantera --</option>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mx-1">
+                <label className="block text-xs font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-2">
+                    <Factory size={14} className="text-blue-500"/> 1. Seleccionar Cantera Matriz
+                </label>
+                <select 
+                    value={selectedCenterId} 
+                    onChange={e => {
+                        setSelectedCenterId(e.target.value);
+                        setEditingId(null);
+                    }} 
+                    className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all"
+                >
+                    <option value="">-- Elija Cantera --</option>
                     {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
             </div>
 
             {selectedCenterId && (
-                <div className="animate-in fade-in slide-in-from-top-4">
-                    <form onSubmit={handleSave} className="bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm space-y-4 mb-6">
-                        <h4 className="font-bold text-blue-900 flex items-center gap-2">
-                            {editingId ? <Edit2 size={18}/> : <Plus size={18}/>}
-                            {editingId ? 'Editar Subcentro' : 'Nueva Planta / Sección'}
-                        </h4>
-                        <div className="space-y-3">
-                            <input required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border rounded-lg" placeholder="Nombre (ej. Planta de Lavado)"/>
+                <div className="px-1 space-y-6">
+                    <form onSubmit={handleSave} className={`p-6 rounded-2xl border-2 shadow-lg space-y-5 transition-all ${editingId ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100'}`}>
+                        <div className="flex justify-between items-center">
+                            <h4 className="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2">
+                                {editingId ? <Edit2 size={16} className="text-blue-600"/> : <Plus size={16} className="text-green-600"/>}
+                                {editingId ? 'Modificar Planta' : 'Nueva Planta / Sección'}
+                            </h4>
+                            {editingId && (
+                                <button type="button" onClick={cancelEdit} className="text-[10px] font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                                    <X size={14}/> CANCELAR
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Nombre de la Instalación</label>
+                                <input 
+                                    required 
+                                    value={name} 
+                                    onChange={e => setName(e.target.value)} 
+                                    className="w-full p-4 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-blue-500" 
+                                    placeholder="Ej. Planta de Trituración Secundaria"
+                                />
+                            </div>
                             
-                            <div className="bg-white p-4 rounded-lg border border-blue-200">
-                                <label className="flex items-center gap-2 font-bold text-sm text-slate-700 cursor-pointer">
-                                    <input type="checkbox" checked={tracksProd} onChange={e => setTracksProd(e.target.checked)} className="w-5 h-5"/>
-                                    Registra producción propia
+                            <div className={`p-4 rounded-xl border transition-colors ${tracksProd ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
+                                <label className="flex items-center gap-3 font-bold text-sm text-slate-700 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={tracksProd} 
+                                        onChange={e => {
+                                            setTracksProd(e.target.checked);
+                                            if (!e.target.checked) setProdField('');
+                                        }} 
+                                        className="w-5 h-5 rounded border-slate-300 text-blue-600"
+                                    />
+                                    Registra producción propia (Mantenimiento sincronizado)
                                 </label>
+                                
                                 {tracksProd && (
-                                    <div className="mt-3">
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Vincular a campo de parte diario:</label>
-                                        <select required value={prodField} onChange={e => setProdField(e.target.value)} className="w-full p-2 border rounded font-bold text-blue-700">
-                                            <option value="">-- Vincular a --</option>
-                                            <option value="MACHACADORA">CP: Machacadora</option>
-                                            <option value="MOLINOS">CP: Molinos / Planta Principal</option>
-                                            <option value="LAVADO">CR: Planta de Lavado</option>
-                                            <option value="TRITURACION">CR: Trituración Secundario</option>
+                                    <div className="mt-4 animate-in slide-in-from-top-2 duration-300">
+                                        <label className="block text-[10px] font-black text-indigo-400 uppercase mb-1 tracking-widest">Vincular a campo de parte diario:</label>
+                                        <select 
+                                            required 
+                                            value={prodField} 
+                                            onChange={e => setProdField(e.target.value)} 
+                                            className="w-full p-3 border border-indigo-100 rounded-xl font-black text-indigo-700 bg-white shadow-sm"
+                                        >
+                                            <option value="">-- Seleccionar Campo --</option>
+                                            <optgroup label="Cantera Pura (CP)">
+                                                <option value="MACHACADORA">Machacadora (Inicio/Fin)</option>
+                                                <option value="MOLINOS">Molinos / Planta (Inicio/Fin)</option>
+                                            </optgroup>
+                                            <optgroup label="Canto Rodado (CR)">
+                                                <option value="LAVADO">Planta de Lavado (Inicio/Fin)</option>
+                                                <option value="TRITURACION">Trituración (Inicio/Fin)</option>
+                                            </optgroup>
                                         </select>
+                                        <p className="text-[9px] text-indigo-400 mt-2 font-medium italic">
+                                            * Las máquinas de esta planta heredarán automáticamente las horas del parte diario seleccionado.
+                                        </p>
                                     </div>
                                 )}
                             </div>
 
-                            <button type="submit" className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold shadow-lg">
-                                {editingId ? 'Actualizar Subcentro' : 'Añadir Subcentro'}
+                            <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all">
+                                {editingId ? 'Actualizar Planta' : 'Crear Planta'}
                             </button>
                         </div>
                     </form>
 
-                    <div className="bg-white rounded-xl shadow-md divide-y overflow-hidden">
-                        {subCenters.map(s => (
-                            <div key={s.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-slate-100 text-slate-500 rounded"><LayoutGrid size={20}/></div>
-                                    <div>
-                                        <p className="font-bold text-slate-800">{s.name}</p>
-                                        {s.tracksProduction && (
-                                            <p className="text-[10px] font-bold text-blue-600 uppercase flex items-center gap-1">
-                                                <Database size={10}/> Sync: {s.productionField}
-                                            </p>
-                                        )}
+                    <div className="bg-white rounded-2xl shadow-md divide-y border border-slate-100 overflow-hidden">
+                        <div className="p-4 bg-slate-50 border-b">
+                            <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest">Plantas registradas en esta cantera</h4>
+                        </div>
+                        {subCenters.length === 0 ? (
+                            <div className="p-10 text-center text-slate-400 italic text-sm">No hay subcentros creados para esta cantera.</div>
+                        ) : (
+                            subCenters.map(s => (
+                                <div key={s.id} className="p-5 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-3 rounded-xl ${s.tracksProduction ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                                            <LayoutGrid size={24}/>
+                                        </div>
+                                        <div>
+                                            <p className="font-black text-slate-800 tracking-tight leading-none mb-1">{s.name}</p>
+                                            {s.tracksProduction ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] font-black bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase">Sincronizado</span>
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1">
+                                                        <Database size={10}/> {s.productionField}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">Sin vinculación de horas</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleEdit(s)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Edit2 size={20}/></button>
+                                        <button 
+                                            onClick={() => {
+                                                if(confirm("¿Borrar planta? Las máquinas perderán su asociación.")) {
+                                                    deleteSubCenter(s.id).then(() => getSubCentersByCenter(selectedCenterId).then(setSubCenters));
+                                                }
+                                            }} 
+                                            className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" 
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 size={20}/>
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => handleEdit(s)} className="p-2 text-blue-600"><Edit2 size={18}/></button>
-                                    <button onClick={() => deleteSubCenter(s.id).then(() => getSubCentersByCenter(selectedCenterId).then(setSubCenters))} className="p-2 text-red-600"><Trash2 size={18}/></button>
-                                </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 </div>
             )}
