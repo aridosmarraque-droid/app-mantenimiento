@@ -13,11 +13,6 @@ const toLocalDateString = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
-const isValidUUID = (id: string) => {
-    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return regex.test(id);
-};
-
 const toDbOperationType = (type: OperationType): string => {
     switch (type) {
         case 'BREAKDOWN': return 'AVERIA';
@@ -57,8 +52,8 @@ const mapSubCenter = (s: any): SubCenter => ({
     id: s.id,
     centerId: s.centro_id,
     name: s.nombre,
-    tracksProduction: s.registra_produccion,
-    productionField: s.produccion_campo
+    tracksProduction: s.registra_produccion || false,
+    productionField: s.produccion_campo || undefined
 });
 
 const mapDef = (d: any): MaintenanceDefinition => ({
@@ -117,7 +112,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   fuelLitres: dbLog.litros_combustible
 });
 
-// --- SERVICES ---
+// --- TRABAJADORES ---
 
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
     if (!isConfigured) return mock.getWorkers();
@@ -153,7 +148,7 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
     if (error) throw error;
 };
 
-// --- COST CENTERS & SUBCENTERS ---
+// --- CENTROS Y SUBCENTROS ---
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
@@ -176,7 +171,7 @@ export const createSubCenter = async (sub: Omit<SubCenter, 'id'>): Promise<void>
         centro_id: sub.centerId,
         nombre: sub.name,
         registra_produccion: sub.tracksProduction,
-        produccion_campo: sub.productionField
+        produccion_campo: sub.tracksProduction ? sub.productionField : null
     });
     if (error) throw error;
 };
@@ -188,11 +183,21 @@ export const deleteSubCenter = async (id: string): Promise<void> => {
 
 export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): Promise<void> => {
     const dbUpdates: any = {};
-    if (updates.name) dbUpdates.nombre = updates.name;
+    if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.tracksProduction !== undefined) dbUpdates.registra_produccion = updates.tracksProduction;
-    if (updates.productionField !== undefined) dbUpdates.produccion_campo = updates.productionField;
+    
+    // Si no registra producción, obligamos a null para evitar fallos de integridad
+    if (updates.tracksProduction === false) {
+        dbUpdates.produccion_campo = null;
+    } else if (updates.productionField !== undefined) {
+        dbUpdates.produccion_campo = updates.productionField;
+    }
+
     const { error } = await supabase.from('mant_subcentros').update(dbUpdates).eq('id', id);
-    if (error) throw error;
+    if (error) {
+        console.error("DB Error updateSubCenter:", error);
+        throw error;
+    }
 };
 
 export const createCostCenter = async (name: string): Promise<CostCenter> => {
@@ -214,7 +219,7 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
     if (error) throw error;
 };
 
-// --- MACHINES ---
+// --- MÁQUINAS ---
 
 const sortMachines = (machines: Machine[]) => {
     return machines.sort((a, b) => {
@@ -277,8 +282,10 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
             maquina_id: mData.id,
             nombre: d.name,
             tipo_programacion: d.maintenanceType,
+            // FIX: Use intervalHours instead of intervalo_horas for MaintenanceDefinition object
             intervalo_horas: d.intervalHours,
             horas_preaviso: d.warningHours,
+            // FIX: Use intervalMonths instead of intervalo_meses for MaintenanceDefinition object
             intervalo_meses: d.intervalMonths,
             proxima_fecha: d.nextDate ? toLocalDateString(d.nextDate) : null,
             tareas: d.tasks,
@@ -295,20 +302,20 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.companyCode !== undefined) dbUpdates.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) dbUpdates.centro_id = updates.costCenterId;
-    if (updates.subCenterId !== undefined) dbUpdates.subcentro_id = updates.subCenterId;
+    if (updates.subCenterId !== undefined) dbUpdates.subcentro_id = updates.subCenterId || null;
     if (updates.currentHours !== undefined) dbUpdates.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) dbUpdates.requiere_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) dbUpdates.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) dbUpdates.gastos_transporte = updates.transportExpenses;
     if (updates.selectableForReports !== undefined) dbUpdates.es_parte_trabajo = updates.selectableForReports;
-    if (updates.responsibleWorkerId !== undefined) dbUpdates.responsable_id = updates.responsibleWorkerId;
+    if (updates.responsibleWorkerId !== undefined) dbUpdates.responsable_id = updates.responsibleWorkerId || null;
     if (updates.active !== undefined) dbUpdates.activo = updates.active;
     if (updates.vinculadaProduccion !== undefined) dbUpdates.vinculada_produccion = updates.vinculadaProduccion;
     const { error } = await supabase.from('mant_maquinas').update(dbUpdates).eq('id', id);
     if (error) throw error;
 };
 
-// --- LOGS & MAINTENANCE ---
+// --- LOGS Y MANTENIMIENTOS ---
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
@@ -348,9 +355,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     }
 };
 
-/**
- * Adds a new maintenance definition to a machine.
- */
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
     const { data, error } = await supabase.from('mant_mantenimientos_def').insert({
@@ -368,9 +372,6 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
     return mapDef(data);
 };
 
-/**
- * Updates an existing maintenance definition.
- */
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
     if (!isConfigured) return mock.updateMaintenanceDef(def);
     const { error } = await supabase.from('mant_mantenimientos_def').update({
@@ -385,27 +386,18 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
     if (error) throw error;
 };
 
-/**
- * Deletes a maintenance definition.
- */
 export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
     if (!isConfigured) return mock.deleteMaintenanceDef(defId);
     const { error } = await supabase.from('mant_mantenimientos_def').delete().eq('id', defId);
     if (error) throw error;
 };
 
-/**
- * Deletes a machine.
- */
 export const deleteMachine = async (id: string): Promise<void> => {
     if (!isConfigured) return mock.deleteMachine(id);
     const { error } = await supabase.from('mant_maquinas').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Gets the number of logs and reports linked to a machine.
- */
 export const getMachineDependencyCount = async (machineId: string): Promise<{ logs: number, reports: number }> => {
     if (!isConfigured) return { logs: 0, reports: 0 };
     const [logsRes, reportsRes] = await Promise.all([
@@ -418,34 +410,26 @@ export const getMachineDependencyCount = async (machineId: string): Promise<{ lo
     };
 };
 
-// --- PRODUCTION SYNC LOGIC ---
+// --- SINCRONIZACIÓN DE PRODUCCIÓN ---
 
-/**
- * Cuando se guarda un parte de producción (Cantera Pura o Canto Rodado),
- * buscamos todas las máquinas que pertenezcan a subcentros vinculados a esos campos
- * y actualizamos sus horas de forma masiva.
- */
 const syncMachineHoursWithProduction = async (report: CPDailyReport | CRDailyReport) => {
     if (!isConfigured) return;
     
-    // Obtener todos los subcentros que registran producción
     const { data: subcenters, error: sError } = await supabase.from('mant_subcentros').select('*').eq('registra_produccion', true);
     if (sError || !subcenters) return;
 
     for (const sub of subcenters) {
         let newHoursValue = 0;
         
-        // Mapear campo de producción al valor del reporte
-        if ('crusherEnd' in report) { // Es reporte CP
+        if ('crusherEnd' in report) { 
             if (sub.produccion_campo === 'MACHACADORA') newHoursValue = report.crusherEnd;
             if (sub.produccion_campo === 'MOLINOS') newHoursValue = report.millsEnd;
-        } else if ('washingEnd' in report) { // Es reporte CR
+        } else if ('washingEnd' in report) { 
             if (sub.produccion_campo === 'LAVADO') newHoursValue = report.washingEnd;
             if (sub.produccion_campo === 'TRITURACION') newHoursValue = report.triturationEnd;
         }
 
         if (newHoursValue > 0) {
-            // Actualizar todas las máquinas vinculadas a este subcentro que tengan 'vinculada_produccion' = true
             const { error: uError } = await supabase.from('mant_maquinas')
                 .update({ horas_actuales: newHoursValue })
                 .eq('subcentro_id', sub.id)
@@ -472,8 +456,6 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
             ai_analisis: report.aiAnalysis 
         }).select().single();
         if (error) throw error;
-        
-        // Auto-sincronizar máquinas vinculadas
         await syncMachineHoursWithProduction(data);
     } catch (e) { offline.addToQueue('CP_REPORT', report); }
 };
@@ -494,15 +476,10 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
             ai_analisis: report.aiAnalysis 
         }).select().single();
         if (error) throw error;
-
-        // Auto-sincronizar máquinas vinculadas
         await syncMachineHoursWithProduction(data);
     } catch (e) { offline.addToQueue('CR_REPORT', report); }
 };
 
-/**
- * Updates AI analysis for a CP Daily Report.
- */
 export const updateCPReportAnalysis = async (id: string, analysis: string): Promise<void> => {
     if (!isConfigured) return mock.updateCPReportAnalysis(id, analysis);
     const { error } = await supabase.from('cp_partes_diarios').update({ ai_analisis: analysis }).eq('id', id);
@@ -532,10 +509,10 @@ export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<M
                     const nextDue = Number(lastHours) + Number(def.intervalHours);
                     remaining = nextDue - machine.currentHours;
                 } else {
-                    const hoursInCycle = machine.currentHours % def.intervalHours;
-                    remaining = def.intervalHours - (machine.currentHours % def.intervalHours);
+                    const hoursInCycle = machine.currentHours % (def.intervalHours || 1);
+                    remaining = (def.intervalHours || 0) - hoursInCycle;
                 }
-                const pending = remaining <= def.warningHours;
+                const pending = remaining <= (def.warningHours || 0);
                 if (navigator.onLine) await supabase.from('mant_mantenimientos_def').update({ horas_restantes: remaining, pendiente: pending }).eq('id', def.id);
                 return { ...def, lastMaintenanceHours: lastHours, remainingHours: remaining, pending };
             }
@@ -640,7 +617,7 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
     const { data, error } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).limit(1).maybeSingle();
     if (error || !data) return null;
-    return { id: data.id, mondayDate: data.fecha_lunes, hoursMon: data.hoursMon, hoursTue: data.hoursTue, hoursWed: data.hoursWed, hoursThu: data.hoursThu, hoursFri: data.hoursFri };
+    return { id: data.id, mondayDate: data.fecha_lunes, hoursMon: data.hours_lunes, hoursTue: data.hours_martes, hoursWed: data.hours_miercoles, hoursThu: data.hours_jueves, hoursFri: data.hours_viernes };
 };
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
