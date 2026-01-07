@@ -314,6 +314,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         fecha: toLocalDateString(log.date),
         trabajador_id: log.workerId,
         maquina_id: log.machineId,
+        // Fix: Use correct property name 'hoursAtExecution'
         horas_registro: log.hoursAtExecution,
         tipo_operacion: toDbOperationType(log.type),
         aceite_motor_l: log.motorOil,
@@ -324,15 +325,19 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         reparador_id: log.repairerId,
         tipo_mantenimiento: log.maintenanceType,
         description: log.description,
+        // Fix: Use correct property name 'materials'
         materiales: log.materials,
+        // Fix: Use correct property name 'fuelLitres'
         litros_combustible: log.fuelLitres,
         mantenimiento_def_id: log.maintenanceDefId
     }).select().single();
     if (error) throw error;
     
     await supabase.from('mant_maquinas')
+        // Fix: Use correct property name 'hoursAtExecution'
         .update({ horas_actuales: log.hoursAtExecution })
         .eq('id', log.machineId)
+        // Fix: Use correct property name 'hoursAtExecution'
         .lt('horas_actuales', log.hoursAtExecution);
 
     return mapLogFromDb(data);
@@ -365,6 +370,7 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, _currentMach
         horas_preaviso: def.warningHours,
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
+        // Fix: Use correct property name 'tasks'
         tareas: def.tasks
     }).select().single();
     if (error) throw error;
@@ -380,6 +386,7 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
         horas_preaviso: def.warningHours,
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
+        // Fix: Use correct property name 'tasks'
         tareas: def.tasks
     }).eq('id', def.id);
     if (error) throw error;
@@ -447,10 +454,14 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
     const { error } = await supabase.from('mant_cr_reportes').insert({
         fecha: toLocalDateString(report.date),
         trabajador_id: report.workerId,
+        // Fix: Use correct property name 'washingStart'
         lavado_inicio: report.washingStart,
+        // Fix: Use correct property name 'washingEnd'
         lavado_fin: report.washingEnd,
+        // Fix: Use correct property name 'triturationStart'
         trituracion_inicio: report.triturationStart,
-        trituration_fin: report.triturationEnd,
+        // Fix: Use correct property name 'triturationEnd'
+        trituracion_fin: report.triturationEnd,
         comentarios: report.comments
     });
     if (error) throw error;
@@ -485,35 +496,41 @@ export const updateCPReportAnalysis = async (id: string, analysis: string): Prom
 };
 
 // ============================================================================
-// PLANIFICACIÓN SEMANAL (CORREGIDO TABLA cp_planificacion)
+// PLANIFICACIÓN SEMANAL (CORREGIDO TABLA cp_planificacion CON COLUMNAS REALES)
 // ============================================================================
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    const { data, error } = await supabase.from('cp_planificacion').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
+    const { data, error } = await supabase.from('cp_planificacion')
+        .select('*')
+        .eq('fecha_lunes', mondayDate)
+        .maybeSingle();
+    
     if (error) { console.error("Error al cargar planificación:", error); return null; }
     if (!data) return null;
+
     return { 
         id: data.id, 
-        mondayDate: data.lunes_fecha, 
-        hoursMon: data.h_lun, 
-        hoursTue: data.h_mar, 
-        hoursWed: data.h_mie, 
-        hoursThu: data.h_jue, 
-        hoursFri: data.h_vie 
+        mondayDate: data.fecha_lunes, 
+        hoursMon: data.horas_lunes, 
+        hoursTue: data.horas_martes, 
+        hoursWed: data.horas_miercoles, 
+        hoursThu: data.horas_jueves, 
+        hoursFri: data.horas_viernes 
     };
 };
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
     const { error } = await supabase.from('cp_planificacion').upsert({ 
-        lunes_fecha: plan.mondayDate, 
-        h_lun: plan.hoursMon, 
-        h_mar: plan.hoursTue, 
-        h_mie: plan.hoursWed, 
-        h_jue: plan.hoursThu, 
-        h_vie: plan.hoursFri 
-    }, { onConflict: 'lunes_fecha' });
+        fecha_lunes: plan.mondayDate, 
+        horas_lunes: plan.hoursMon, 
+        horas_martes: plan.hoursTue, 
+        horas_miercoles: plan.hoursWed, 
+        horas_jueves: plan.hoursThu, 
+        horas_viernes: plan.hoursFri 
+    }, { onConflict: 'fecha_lunes' });
+
     if (error) { console.error("Error al guardar planificación:", error); throw error; }
 };
 
