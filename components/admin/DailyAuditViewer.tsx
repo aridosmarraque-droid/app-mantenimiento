@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDailyAuditLogs, getWorkers, getAllMachines, getCostCenters, getServiceProviders, getCPReportsByRange, getLastCRReport } from '../../services/db';
+import { getDailyAuditLogs, getWorkers, getAllMachines, getCostCenters, getServiceProviders, getCPReportsByRange, getCRReportsByRange } from '../../services/db';
 import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvider, CPDailyReport, CRDailyReport } from '../../types';
-import { ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, Mountain, Waves, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, Mountain, Waves, ChevronRight, Droplets, Factory } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -43,15 +42,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         
         try {
             const selectedDate = new Date(date);
-            const data = await getDailyAuditLogs(selectedDate);
-            
-            // Obtenemos también reportes de producción para auditoría integral
-            // Simulamos filtro por fecha para CP y CR
-            const cpData = await getCPReportsByRange(selectedDate, selectedDate);
-            // Para CR simplificamos o extendemos db.ts en producción real
+            const [data, cpData, crData] = await Promise.all([
+                getDailyAuditLogs(selectedDate),
+                getCPReportsByRange(selectedDate, selectedDate),
+                getCRReportsByRange(selectedDate, selectedDate)
+            ]);
             
             // --- LÓGICA DE DE-DUPLICACIÓN POR CONTENIDO (FINGERPRINT) ---
-            // Esto elimina duplicados aunque tengan IDs diferentes en DB
             const getOpFingerprint = (op: OperationLog) => 
                 `${op.machineId}-${op.workerId}-${op.hoursAtExecution}-${op.type}-${new Date(op.date).getTime()}`;
             
@@ -74,7 +71,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 ops: Array.from(uniqueOpsMap.values()), 
                 personal: Array.from(uniquePersonalMap.values()),
                 cp: cpData,
-                cr: [] // Ampliable según necesidad
+                cr: crData
             });
         } catch (e) {
             console.error(e);
@@ -152,6 +149,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             1. Producción y Plantas
                         </h4>
                         <div className="grid gap-3">
+                            {/* CANTERA PURA */}
                             {auditData.cp.map(report => (
                                 <div key={`cp-${report.id}`} className="bg-white border border-amber-100 rounded-2xl p-5 shadow-sm">
                                     <div className="flex justify-between items-center mb-3">
@@ -182,7 +180,44 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     )}
                                 </div>
                             ))}
-                            {auditData.cp.length === 0 && <div className="text-center py-6 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">No hay reportes de producción registrados.</div>}
+
+                            {/* CANTO RODADO */}
+                            {auditData.cr.map(report => (
+                                <div key={`cr-${report.id}`} className="bg-white border border-teal-100 rounded-2xl p-5 shadow-sm">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-2 bg-teal-50 text-teal-600 rounded-lg"><Waves size={20}/></div>
+                                            <div>
+                                                <div className="font-bold text-slate-800">Canto Rodado</div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-lg font-black text-teal-600">{(report.washingEnd - report.washingStart + report.triturationEnd - report.triturationStart).toFixed(2)}h</div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Tot. Planta</div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <div>
+                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
+                                            <p className="font-mono font-bold">{report.washingStart} → {report.washingEnd}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
+                                            <p className="font-mono font-bold">{report.triturationStart} → {report.triturationEnd}</p>
+                                        </div>
+                                    </div>
+                                    {report.comments && (
+                                        <p className="mt-3 text-xs text-slate-600 italic border-l-2 border-teal-200 pl-3">"{report.comments}"</p>
+                                    )}
+                                </div>
+                            ))}
+
+                            {auditData.cp.length === 0 && auditData.cr.length === 0 && (
+                                <div className="text-center py-6 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">
+                                    No hay reportes de producción registrados hoy.
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -259,7 +294,9 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             <div className="p-2.5 bg-green-50 text-green-600 rounded-xl border border-green-100"><ClipboardList size={22} /></div>
                                             <div>
                                                 <div className="font-black text-slate-900 leading-tight">{getWorkerName(p.workerId)}</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">{getCenterName(p.costCenterId)}</div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
+                                                    <Factory size={10} className="text-green-600"/> {getCenterName(p.costCenterId)}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="bg-green-600 text-white px-3 py-1.5 rounded-xl text-center shadow-sm">
