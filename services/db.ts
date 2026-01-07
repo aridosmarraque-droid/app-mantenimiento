@@ -68,7 +68,6 @@ const mapSubCenter = (s: any): SubCenter => ({
     id: s.id,
     centerId: s.centro_id,
     name: s.nombre,
-    // Usamos los campos reales confirmados por SQL: es_produccion y campo_produccion
     tracksProduction: s.es_produccion || false,
     productionField: s.campo_produccion || undefined
 });
@@ -130,7 +129,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
 });
 
 // ============================================================================
-// TRABAJADORES (GESTIÓN DE PERSONAL)
+// TRABAJADORES
 // ============================================================================
 
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
@@ -168,7 +167,7 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
 };
 
 // ============================================================================
-// CENTROS Y SUBCENTROS (PLANTAS)
+// CENTROS Y SUBCENTROS
 // ============================================================================
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
@@ -192,7 +191,6 @@ export const createSubCenter = async (sub: Omit<SubCenter, 'id'>): Promise<void>
     const { error } = await supabase.from('mant_subcentros').insert({
         centro_id: sub.centerId,
         nombre: sub.name,
-        // Usamos campos exactos del esquema
         es_produccion: sub.tracksProduction,
         campo_produccion: sub.tracksProduction ? sub.productionField : null
     });
@@ -241,7 +239,7 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// MÁQUINAS (INVENTARIO Y ESTADO)
+// MÁQUINAS
 // ============================================================================
 
 export const getMachinesBySubCenter = async (subCenterId: string, onlyActive: boolean = true): Promise<Machine[]> => {
@@ -307,7 +305,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
 };
 
 // ============================================================================
-// LOGS DE OPERACIONES Y MANTENIMIENTOS
+// LOGS
 // ============================================================================
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
@@ -332,7 +330,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     }).select().single();
     if (error) throw error;
     
-    // Auto-actualizar horas de la máquina si el reporte tiene horas mayores
     await supabase.from('mant_maquinas')
         .update({ horas_actuales: log.hoursAtExecution })
         .eq('id', log.machineId)
@@ -355,7 +352,7 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
 };
 
 // ============================================================================
-// DEFINICIONES DE MANTENIMIENTO PROGRAMADO
+// DEFINICIONES DE MANTENIMIENTO
 // ============================================================================
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, _currentMachineHours: number): Promise<MaintenanceDefinition> => {
@@ -395,7 +392,7 @@ export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
 };
 
 // ============================================================================
-// PRODUCCIÓN Y REPORTES INDUSTRIALES (CP / CR)
+// PRODUCCIÓN (CP / CR)
 // ============================================================================
 
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
@@ -488,13 +485,14 @@ export const updateCPReportAnalysis = async (id: string, analysis: string): Prom
 };
 
 // ============================================================================
-// PLANIFICACIÓN SEMANAL (EFICIENCIA)
+// PLANIFICACIÓN SEMANAL (CORREGIDO TABLA cp_planificacion)
 // ============================================================================
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    const { data, error } = await supabase.from('mant_cp_plan_semanal').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
-    if (error || !data) return null;
+    const { data, error } = await supabase.from('cp_planificacion').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
+    if (error) { console.error("Error al cargar planificación:", error); return null; }
+    if (!data) return null;
     return { 
         id: data.id, 
         mondayDate: data.lunes_fecha, 
@@ -508,7 +506,7 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
-    const { error } = await supabase.from('mant_cp_plan_semanal').upsert({ 
+    const { error } = await supabase.from('cp_planificacion').upsert({ 
         lunes_fecha: plan.mondayDate, 
         h_lun: plan.hoursMon, 
         h_mar: plan.hoursTue, 
@@ -516,11 +514,11 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
         h_jue: plan.hoursThu, 
         h_vie: plan.hoursFri 
     }, { onConflict: 'lunes_fecha' });
-    if (error) throw error;
+    if (error) { console.error("Error al guardar planificación:", error); throw error; }
 };
 
 // ============================================================================
-// PROVEEDORES DE SERVICIOS (TALLERES EXTERNOS)
+// PROVEEDORES
 // ============================================================================
 
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
@@ -546,7 +544,7 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// REPORTES PERSONALES DE TRABAJO (JORNADAS)
+// REPORTES PERSONALES
 // ============================================================================
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
@@ -585,7 +583,7 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
 };
 
 // ============================================================================
-// AUDITORÍA Y SINCRONIZACIÓN (SISTEMA)
+// AUDITORÍA Y SISTEMA
 // ============================================================================
 
 export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[] }> => {
@@ -656,4 +654,3 @@ export const syncPendingData = async () => {
     }
     return { synced, errors };
 };
-
