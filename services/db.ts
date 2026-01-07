@@ -41,7 +41,6 @@ const toDbOperationType = (type: OperationType): string => {
 const fromDbOperationType = (type: string): OperationType => {
     switch (type) {
         case 'AVERIA': return 'BREAKDOWN';
-        case 'DESINTEGRACION': return 'BREAKDOWN'; // Legacy compatibility
         case 'NIVELES': return 'LEVELS';
         case 'MANTENIMIENTO': return 'MAINTENANCE';
         case 'PROGRAMADO': return 'SCHEDULED';
@@ -96,7 +95,7 @@ const mapMachine = (m: any): Machine => {
         subCenterId: m.subcentro_id,
         name: m.nombre,
         companyCode: m.codigo_empresa,
-        currentHours: m.horas_actuales,
+        currentHours: Number(m.horas_actuales || 0),
         requiresHours: m.requiere_horas, 
         adminExpenses: m.gastos_admin,
         transportExpenses: m.gastos_transporte,
@@ -122,11 +121,32 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   breakdownSolution: dbLog.solucion_averia,
   repairerId: dbLog.reparador_id,
   maintenanceType: dbLog.tipo_mantenimiento,
-  description: dbLog.description,
+  description: dbLog.descripcion, // Corregido: era description
   materials: dbLog.materiales,
   maintenanceDefId: dbLog.mantenimiento_def_id,
   fuelLitres: dbLog.litros_combustible
 });
+
+// ============================================================================
+// DIAGNÓSTICO (MANTENIDO PARA SEGURIDAD)
+// ============================================================================
+
+export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
+    if (!isConfigured) return [];
+    const results = [];
+    for (const table of tables) {
+        try {
+            const { data, error, status } = await supabase.from(table).select('*').limit(1);
+            if (status === 404) { results.push({ name: table, status: 'NOT_FOUND', columns: [] }); }
+            else if (error) { results.push({ name: table, status: 'ERROR', message: error.message, columns: [] }); }
+            else {
+                const cols = data && data[0] ? Object.keys(data[0]) : [];
+                results.push({ name: table, status: 'FOUND', columns: cols });
+            }
+        } catch (e) { results.push({ name: table, status: 'EXCEPTION', message: (e as Error).message }); }
+    }
+    return results;
+};
 
 // ============================================================================
 // TRABAJADORES
@@ -135,10 +155,8 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
     if (!isConfigured) return mock.getWorkers();
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
-    if (error) { console.error("DB Error getWorkers:", error); return []; }
-    const workers = (data || [])
-        .map(mapWorker)
-        .sort((a, b) => a.name.localeCompare(b.name));
+    if (error) { console.error("Error getWorkers:", error); return []; }
+    const workers = (data || []).map(mapWorker).sort((a, b) => a.name.localeCompare(b.name));
     return onlyActive ? workers.filter(w => w.active !== false) : workers;
 };
 
@@ -173,10 +191,8 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
     const { data, error } = await supabase.from('mant_centros').select('*');
-    if (error) { console.error("getCostCenters", error); return []; }
-    return (data || [])
-        .map((c: any) => ({ id: c.id, name: c.nombre }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+    if (error) return [];
+    return (data || []).map((c: any) => ({ id: c.id, name: c.nombre })).sort((a, b) => a.name.localeCompare(b.name));
 };
 
 export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter[]> => {
@@ -208,13 +224,7 @@ export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): 
     const dbUpdates: any = {};
     if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.tracksProduction !== undefined) dbUpdates.es_produccion = updates.tracksProduction;
-    
-    if (updates.tracksProduction === false) {
-        dbUpdates.campo_produccion = null;
-    } else if (updates.productionField !== undefined) {
-        dbUpdates.campo_produccion = updates.productionField;
-    }
-
+    if (updates.productionField !== undefined) dbUpdates.campo_produccion = updates.productionField;
     const { error } = await supabase.from('mant_subcentros').update(dbUpdates).eq('id', id);
     if (error) throw error;
 };
@@ -242,9 +252,9 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
 // MÁQUINAS
 // ============================================================================
 
-export const getMachinesBySubCenter = async (subCenterId: string, onlyActive: boolean = true): Promise<Machine[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subCenterId);
+export const getAllMachines = async (onlyActive: boolean = true): Promise<Machine[]> => {
+    if (!isConfigured) return mock.getAllMachines();
+    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
     if (error) return [];
     const machines = data.map(mapMachine);
     return onlyActive ? machines.filter(m => m.active !== false) : machines;
@@ -258,9 +268,9 @@ export const getMachinesByCenter = async (centerId: string, onlyActive: boolean 
     return onlyActive ? machines.filter(m => m.active !== false) : machines;
 };
 
-export const getAllMachines = async (onlyActive: boolean = true): Promise<Machine[]> => {
-    if (!isConfigured) return mock.getAllMachines();
-    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
+export const getMachinesBySubCenter = async (subCenterId: string, onlyActive: boolean = true): Promise<Machine[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subCenterId);
     if (error) return [];
     const machines = data.map(mapMachine);
     return onlyActive ? machines.filter(m => m.active !== false) : machines;
@@ -299,22 +309,21 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.active !== undefined) dbUpdates.activo = updates.active;
     if (updates.vinculadaProduccion !== undefined) dbUpdates.vinculada_produccion = updates.vinculadaProduccion;
     if (updates.selectableForReports !== undefined) dbUpdates.es_parte_trabajo = updates.selectableForReports;
-    
     const { error } = await supabase.from('mant_maquinas').update(dbUpdates).eq('id', id);
     if (error) throw error;
 };
 
 // ============================================================================
-// LOGS
+// REGISTROS (REEMPLAZADO mant_operaciones POR mant_registros)
 // ============================================================================
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
-    const { data, error } = await supabase.from('mant_operaciones_log').insert({
+    
+    const { data, error } = await supabase.from('mant_registros').insert({
         fecha: toLocalDateString(log.date),
         trabajador_id: log.workerId,
         maquina_id: log.machineId,
-        // Fix: Use correct property name 'hoursAtExecution'
         horas_registro: log.hoursAtExecution,
         tipo_operacion: toDbOperationType(log.type),
         aceite_motor_l: log.motorOil,
@@ -324,20 +333,17 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         solucion_averia: log.breakdownSolution,
         reparador_id: log.repairerId,
         tipo_mantenimiento: log.maintenanceType,
-        description: log.description,
-        // Fix: Use correct property name 'materials'
+        descripcion: log.description,
         materiales: log.materials,
-        // Fix: Use correct property name 'fuelLitres'
         litros_combustible: log.fuelLitres,
         mantenimiento_def_id: log.maintenanceDefId
     }).select().single();
+
     if (error) throw error;
-    
+
     await supabase.from('mant_maquinas')
-        // Fix: Use correct property name 'hoursAtExecution'
         .update({ horas_actuales: log.hoursAtExecution })
         .eq('id', log.machineId)
-        // Fix: Use correct property name 'hoursAtExecution'
         .lt('horas_actuales', log.hoursAtExecution);
 
     return mapLogFromDb(data);
@@ -345,19 +351,17 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
 export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return mock.getMachineLogs(machineId, startDate, endDate, types);
-    let query = supabase.from('mant_operaciones_log').select('*').eq('maquina_id', machineId);
+    let query = supabase.from('mant_registros').select('*').eq('maquina_id', machineId);
     if (startDate) query = query.gte('fecha', toLocalDateString(startDate));
     if (endDate) query = query.lte('fecha', toLocalDateString(endDate));
-    if (types && types.length > 0) {
-        query = query.in('tipo_operacion', types.map(toDbOperationType));
-    }
+    if (types && types.length > 0) query = query.in('tipo_operacion', types.map(toDbOperationType));
     const { data, error } = await query.order('fecha', { ascending: false }).order('horas_registro', { ascending: false });
     if (error) return [];
     return (data || []).map(mapLogFromDb);
 };
 
 // ============================================================================
-// DEFINICIONES DE MANTENIMIENTO
+// MANTENIMIENTOS DEFINICIÓN
 // ============================================================================
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, _currentMachineHours: number): Promise<MaintenanceDefinition> => {
@@ -370,7 +374,6 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, _currentMach
         horas_preaviso: def.warningHours,
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
-        // Fix: Use correct property name 'tasks'
         tareas: def.tasks
     }).select().single();
     if (error) throw error;
@@ -386,7 +389,6 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
         horas_preaviso: def.warningHours,
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
-        // Fix: Use correct property name 'tasks'
         tareas: def.tasks
     }).eq('id', def.id);
     if (error) throw error;
@@ -399,29 +401,29 @@ export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
 };
 
 // ============================================================================
-// PRODUCCIÓN (CP / CR)
+// PRODUCCIÓN (CP / CR) - TABLAS REALES
 // ============================================================================
 
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (!isConfigured) return mock.getLastCPReport();
-    const { data, error } = await supabase.from('mant_cp_reportes').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = await supabase.from('cp_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
     if (error || !data) return null;
     return { 
         id: data.id, 
         date: new Date(data.fecha), 
         workerId: data.trabajador_id, 
-        crusherStart: data.machacadora_inicio, 
-        crusherEnd: data.machacadora_fin, 
-        millsStart: data.molinos_inicio, 
-        millsEnd: data.molinos_fin, 
+        crusherStart: Number(data.machacadora_inicio), 
+        crusherEnd: Number(data.machacadora_fin), 
+        millsStart: Number(data.molinos_inicio), 
+        millsEnd: Number(data.molinos_fin), 
         comments: data.comentarios, 
-        aiAnalysis: data.analisis_ia 
+        aiAnalysis: data.ai_analisis 
     };
 };
 
 export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
     if (!isConfigured) return mock.saveCPReport(report);
-    const { error } = await supabase.from('mant_cp_reportes').insert({
+    const { error } = await supabase.from('cp_partes_diarios').insert({
         fecha: toLocalDateString(report.date),
         trabajador_id: report.workerId,
         machacadora_inicio: report.crusherStart,
@@ -435,32 +437,29 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return mock.getLastCRReport();
-    const { data, error } = await supabase.from('mant_cr_reportes').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
     if (error || !data) return null;
     return { 
         id: data.id, 
         date: new Date(data.fecha), 
         workerId: data.trabajador_id, 
-        washingStart: data.lavado_inicio, 
-        washingEnd: data.lavado_fin, 
-        triturationStart: data.trituracion_inicio, 
-        triturationEnd: data.trituration_fin, 
-        comments: data.comentarios 
+        washingStart: Number(data.lavado_inicio), 
+        washingEnd: Number(data.lavado_fin), 
+        triturationStart: Number(data.trituration_inicio), // Corregido: era trituracion_inicio
+        triturationEnd: Number(data.trituracion_fin), 
+        comments: data.comentarios,
+        aiAnalysis: data.ai_analisis
     };
 };
 
 export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<void> => {
     if (!isConfigured) return mock.saveCRReport(report);
-    const { error } = await supabase.from('mant_cr_reportes').insert({
+    const { error } = await supabase.from('cr_partes_diarios').insert({
         fecha: toLocalDateString(report.date),
         trabajador_id: report.workerId,
-        // Fix: Use correct property name 'washingStart'
         lavado_inicio: report.washingStart,
-        // Fix: Use correct property name 'washingEnd'
         lavado_fin: report.washingEnd,
-        // Fix: Use correct property name 'triturationStart'
-        trituracion_inicio: report.triturationStart,
-        // Fix: Use correct property name 'triturationEnd'
+        trituration_inicio: report.triturationStart,
         trituracion_fin: report.triturationEnd,
         comentarios: report.comments
     });
@@ -469,69 +468,40 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
 
 export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
     if (!isConfigured) return mock.getCPReportsByRange(startDate, endDate);
-    const { data, error } = await supabase.from('mant_cp_reportes')
-        .select('*')
-        .gte('fecha', toLocalDateString(startDate))
-        .lte('fecha', toLocalDateString(endDate))
-        .order('fecha', { ascending: true });
-    
+    const { data, error } = await supabase.from('cp_partes_diarios').select('*').gte('fecha', toLocalDateString(startDate)).lte('fecha', toLocalDateString(endDate)).order('fecha', { ascending: true });
     if (error) return [];
     return (data || []).map(r => ({ 
-        id: r.id, 
-        date: new Date(r.fecha), 
-        workerId: r.trabajador_id, 
-        crusherStart: r.machacadora_inicio, 
-        crusherEnd: r.machacadora_fin, 
-        millsStart: r.molinos_inicio, 
-        millsEnd: r.molinos_fin, 
-        comments: r.comentarios, 
-        aiAnalysis: r.analisis_ia 
+        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+        crusherStart: Number(r.machacadora_inicio), crusherEnd: Number(r.machacadora_fin), 
+        millsStart: Number(r.molinos_inicio), millsEnd: Number(r.molinos_fin), 
+        comments: r.comentarios, aiAnalysis: r.ai_analisis 
     }));
 };
 
 export const updateCPReportAnalysis = async (id: string, analysis: string): Promise<void> => {
     if (!isConfigured) return mock.updateCPReportAnalysis(id, analysis);
-    const { error } = await supabase.from('mant_cp_reportes').update({ analisis_ia: analysis }).eq('id', id);
+    const { error } = await supabase.from('cp_partes_diarios').update({ ai_analisis: analysis }).eq('id', id);
     if (error) throw error;
 };
 
 // ============================================================================
-// PLANIFICACIÓN SEMANAL (CORREGIDO TABLA cp_planificacion CON COLUMNAS REALES)
+// PLANIFICACIÓN SEMANAL
 // ============================================================================
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    const { data, error } = await supabase.from('cp_planificacion')
-        .select('*')
-        .eq('fecha_lunes', mondayDate)
-        .maybeSingle();
-    
-    if (error) { console.error("Error al cargar planificación:", error); return null; }
-    if (!data) return null;
-
-    return { 
-        id: data.id, 
-        mondayDate: data.fecha_lunes, 
-        hoursMon: data.horas_lunes, 
-        hoursTue: data.horas_martes, 
-        hoursWed: data.horas_miercoles, 
-        hoursThu: data.horas_jueves, 
-        hoursFri: data.horas_viernes 
-    };
+    const { data, error } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
+    if (error || !data) return null;
+    return { id: data.id, mondayDate: data.fecha_lunes, hoursMon: data.horas_lunes, hoursTue: data.horas_martes, hoursWed: data.horas_miercoles, hoursThu: data.horas_jueves, hoursFri: data.horas_viernes };
 };
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
     const { error } = await supabase.from('cp_planificacion').upsert({ 
-        fecha_lunes: plan.mondayDate, 
-        horas_lunes: plan.hoursMon, 
-        horas_martes: plan.hoursTue, 
-        horas_miercoles: plan.hoursWed, 
-        horas_jueves: plan.hoursThu, 
-        horas_viernes: plan.hoursFri 
+        fecha_lunes: plan.mondayDate, horas_lunes: plan.hoursMon, horas_martes: plan.hoursTue, 
+        horas_miercoles: plan.hoursWed, horas_jueves: plan.hoursThu, horas_viernes: plan.hoursFri 
     }, { onConflict: 'fecha_lunes' });
-
-    if (error) { console.error("Error al guardar planificación:", error); throw error; }
+    if (error) throw error;
 };
 
 // ============================================================================
@@ -561,40 +531,32 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 };
 
 // ============================================================================
-// REPORTES PERSONALES
+// REPORTES PERSONALES (TABLA: partes_trabajo)
 // ============================================================================
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return mock.getPersonalReports(workerId);
-    const { data, error } = await supabase.from('mant_personal_reportes')
-        .select('*, mant_maquinas(nombre, codigo_empresa), mant_centros(nombre)')
+    const { data, error } = await supabase.from('partes_trabajo')
+        .select('*, mant_maquinas(nombre, codigo_empresa)')
         .eq('trabajador_id', workerId)
         .order('fecha', { ascending: false })
         .limit(15);
     if (error) return [];
     return (data || []).map(r => ({ 
-        id: r.id, 
-        date: new Date(r.fecha), 
-        workerId: r.trabajador_id, 
-        hours: r.horas, 
-        machineId: r.maquina_id, 
-        machineName: r.mant_maquinas?.nombre, 
-        costCenterName: r.mant_centros?.nombre,
-        description: r.descripcion, 
-        location: r.ubicacion 
+        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+        hours: Number(r.horas), machineId: r.maquina_id, 
+        machineName: r.mant_maquinas?.nombre, description: r.comentarios // Corregido: es comentarios
     }));
 };
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return mock.savePersonalReport(report);
-    const { error } = await supabase.from('mant_personal_reportes').insert({ 
-        fecha: toLocalDateString(report.date), 
+    const { error } = await supabase.from('partes_trabajo').insert({ 
+        fecha: new Date(report.date).toISOString(), // Partes trabajo usa timestamp con zona horaria
         trabajador_id: report.workerId, 
         horas: report.hours, 
         maquina_id: report.machineId, 
-        centro_id: report.costCenterId,
-        descripcion: report.description, 
-        ubicacion: report.location 
+        comentarios: report.description // Corregido: se mapea description a comentarios
     });
     if (error) throw error;
 };
@@ -607,29 +569,22 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     if (!isConfigured) return mock.getDailyAuditLogs(date);
     const dateStr = toLocalDateString(date);
     const [opsRes, personalRes] = await Promise.all([
-        supabase.from('mant_operaciones_log').select('*').eq('fecha', dateStr),
-        supabase.from('mant_personal_reportes').select('*, mant_maquinas(nombre)').eq('fecha', dateStr)
+        supabase.from('mant_registros').select('*').eq('fecha', dateStr),
+        supabase.from('partes_trabajo').select('*, mant_maquinas(nombre)').eq('fecha', dateStr)
     ]);
     return {
         ops: (opsRes.data || []).map(mapLogFromDb),
         personal: (personalRes.data || []).map(r => ({ 
-            id: r.id, 
-            date: new Date(r.fecha), 
-            workerId: r.trabajador_id, 
-            hours: r.horas, 
-            machineId: r.maquina_id, 
-            machineName: r.mant_maquinas?.nombre, 
-            description: r.descripcion 
+            id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+            hours: Number(r.horas), machineId: r.maquina_id, 
+            machineName: r.mant_maquinas?.nombre, description: r.comentarios 
         }))
     };
 };
 
 export const calculateAndSyncMachineStatus = async (machine: Machine): Promise<Machine> => {
     if (!isConfigured) return machine;
-    const { data, error } = await supabase.from('mant_maquinas')
-        .select('*, mant_mantenimientos_def(*)')
-        .eq('id', machine.id)
-        .single();
+    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', machine.id).single();
     if (error || !data) return machine;
     return mapMachine(data);
 };
@@ -642,8 +597,8 @@ export const deleteMachine = async (id: string): Promise<void> => {
 
 export const getMachineDependencyCount = async (machineId: string) => {
     if (!isConfigured) return { logs: 0, reports: 0 };
-    const { count: ops } = await supabase.from('mant_operaciones_log').select('*', { count: 'exact', head: true }).eq('maquina_id', machineId);
-    const { count: reports } = await supabase.from('mant_personal_reportes').select('*', { count: 'exact', head: true }).eq('maquina_id', machineId);
+    const { count: ops } = await supabase.from('mant_registros').select('*', { count: 'exact', head: true }).eq('maquina_id', machineId);
+    const { count: reports } = await supabase.from('partes_trabajo').select('*', { count: 'exact', head: true }).eq('maquina_id', machineId);
     return { logs: ops || 0, reports: reports || 0 };
 };
 
@@ -651,23 +606,16 @@ export const syncPendingData = async () => {
     if (!isConfigured) return { synced: 0, errors: 0 };
     const queue = offline.getQueue();
     if (queue.length === 0) return { synced: 0, errors: 0 };
-    
-    let synced = 0;
-    let errors = 0;
-
+    let synced = 0, errors = 0;
     for (const item of queue) {
         try {
             if (item.type === 'LOG') await saveOperationLog(item.payload);
             else if (item.type === 'CP_REPORT') await saveCPReport(item.payload);
             else if (item.type === 'CR_REPORT') await saveCRReport(item.payload);
             else if (item.type === 'PERSONAL_REPORT') await savePersonalReport(item.payload);
-            
             offline.removeFromQueue(item.id);
             synced++;
-        } catch (e) {
-            console.error("Error syncing item", item, e);
-            errors++;
-        }
+        } catch (e) { console.error("Error syncing", item, e); errors++; }
     }
     return { synced, errors };
 };
