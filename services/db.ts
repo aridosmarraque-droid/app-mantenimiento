@@ -49,6 +49,15 @@ const fromDbOperationType = (type: string): OperationType => {
     }
 };
 
+/**
+ * Limpia un string para que sea un UUID válido o null.
+ * Supabase devuelve 400 si envías "" a una columna UUID.
+ */
+const cleanUuid = (id: string | undefined | null): string | null => {
+    if (!id || id.trim() === '' || id === 'undefined') return null;
+    return id;
+};
+
 // ============================================================================
 // MAPPERS (CONVERSIÓN DE DB A TYPES)
 // ============================================================================
@@ -76,11 +85,11 @@ const mapDef = (d: any): MaintenanceDefinition => ({
     machineId: d.maquina_id,
     name: d.nombre,
     maintenanceType: d.tipo_programacion || 'HOURS',
-    intervalHours: d.intervalo_horas || 0,
-    warningHours: d.horas_preaviso || 0, 
-    lastMaintenanceHours: d.ultimas_horas_realizadas,
-    remainingHours: d.horas_restantes !== undefined ? d.horas_restantes : 0,
-    intervalMonths: d.intervalo_meses || 0,
+    intervalHours: Number(d.intervalo_horas || 0),
+    warningHours: Number(d.horas_preaviso || 0), 
+    lastMaintenanceHours: Number(d.ultimas_horas_realizadas || 0),
+    remainingHours: Number(d.horas_restantes || 0),
+    intervalMonths: Number(d.intervalo_meses || 0),
     nextDate: d.proxima_fecha ? new Date(d.proxima_fecha) : undefined,
     lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
     tasks: d.tareas,
@@ -114,21 +123,21 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   machineId: dbLog.maquina_id,
   hoursAtExecution: Number(dbLog.horas_registro),
   type: fromDbOperationType(dbLog.tipo_operacion),
-  motorOil: dbLog.aceite_motor_l,
-  hydraulicOil: dbLog.aceite_hidraulico_l,
-  coolant: dbLog.refrigerante_l,
+  motorOil: dbLog.aceite_motor_l ? Number(dbLog.aceite_motor_l) : undefined,
+  hydraulicOil: dbLog.aceite_hidraulico_l ? Number(dbLog.aceite_hidraulico_l) : undefined,
+  coolant: dbLog.refrigerante_l ? Number(dbLog.refrigerante_l) : undefined,
   breakdownCause: dbLog.causa_averia,
   breakdownSolution: dbLog.solucion_averia,
   repairerId: dbLog.reparador_id,
   maintenanceType: dbLog.tipo_mantenimiento,
-  description: dbLog.descripcion, // Corregido: era description
+  description: dbLog.descripcion, 
   materials: dbLog.materiales,
   maintenanceDefId: dbLog.mantenimiento_def_id,
-  fuelLitres: dbLog.litros_combustible
+  fuelLitres: dbLog.litros_combustible ? Number(dbLog.litros_combustible) : undefined
 });
 
 // ============================================================================
-// DIAGNÓSTICO (MANTENIDO PARA SEGURIDAD)
+// DIAGNÓSTICO
 // ============================================================================
 
 export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
@@ -283,7 +292,7 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
         codigo_empresa: machine.companyCode,
         centro_id: machine.costCenterId,
         subcentro_id: machine.subCenterId,
-        responsable_id: machine.responsibleWorkerId,
+        responsable_id: cleanUuid(machine.responsibleWorkerId),
         horas_actuales: machine.currentHours,
         requiere_horas: machine.requiresHours,
         gastos_admin: machine.adminExpenses,
@@ -302,8 +311,8 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.name !== undefined) dbUpdates.nombre = updates.name;
     if (updates.companyCode !== undefined) dbUpdates.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) dbUpdates.centro_id = updates.costCenterId;
-    if (updates.subCenterId !== undefined) dbUpdates.subcentro_id = updates.subCenterId;
-    if (updates.responsibleWorkerId !== undefined) dbUpdates.responsable_id = updates.responsibleWorkerId;
+    if (updates.subCenterId !== undefined) dbUpdates.subcentro_id = cleanUuid(updates.subCenterId);
+    if (updates.responsibleWorkerId !== undefined) dbUpdates.responsable_id = cleanUuid(updates.responsibleWorkerId);
     if (updates.currentHours !== undefined) dbUpdates.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) dbUpdates.requiere_horas = updates.requiresHours;
     if (updates.active !== undefined) dbUpdates.activo = updates.active;
@@ -314,37 +323,44 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
 };
 
 // ============================================================================
-// REGISTROS (REEMPLAZADO mant_operaciones POR mant_registros)
+// REGISTROS (AUDITADOS CONTRA SQL REAL)
 // ============================================================================
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
     
-    const { data, error } = await supabase.from('mant_registros').insert({
+    // Limpiamos los UUIDs para evitar Error 400 (Bad Request)
+    const payload = {
         fecha: toLocalDateString(log.date),
-        trabajador_id: log.workerId,
-        maquina_id: log.machineId,
-        horas_registro: log.hoursAtExecution,
+        trabajador_id: cleanUuid(log.workerId),
+        maquina_id: cleanUuid(log.machineId),
+        horas_registro: Number(log.hoursAtExecution),
         tipo_operacion: toDbOperationType(log.type),
-        aceite_motor_l: log.motorOil,
-        aceite_hidraulico_l: log.hydraulicOil,
-        refrigerante_l: log.coolant,
-        causa_averia: log.breakdownCause,
-        solucion_averia: log.breakdownSolution,
-        reparador_id: log.repairerId,
-        tipo_mantenimiento: log.maintenanceType,
-        descripcion: log.description,
-        materiales: log.materials,
-        litros_combustible: log.fuelLitres,
-        mantenimiento_def_id: log.maintenanceDefId
-    }).select().single();
+        aceite_motor_l: log.motorOil ? Number(log.motorOil) : null,
+        aceite_hidraulico_l: log.hydraulicOil ? Number(log.hydraulicOil) : null,
+        refrigerante_l: log.coolant ? Number(log.coolant) : null,
+        causa_averia: log.breakdownCause || null,
+        solucion_averia: log.breakdownSolution || null,
+        reparador_id: cleanUuid(log.repairerId),
+        tipo_mantenimiento: log.maintenanceType || null,
+        descripcion: log.description || null,
+        materiales: log.materials || null,
+        litros_combustible: log.fuelLitres ? Number(log.fuelLitres) : null,
+        mantenimiento_def_id: cleanUuid(log.maintenanceDefId)
+    };
 
-    if (error) throw error;
+    const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
 
+    if (error) {
+        console.error("Error al guardar en mant_registros:", error);
+        throw error;
+    }
+
+    // Actualizamos las horas actuales de la máquina
     await supabase.from('mant_maquinas')
-        .update({ horas_actuales: log.hoursAtExecution })
+        .update({ horas_actuales: Number(log.hoursAtExecution) })
         .eq('id', log.machineId)
-        .lt('horas_actuales', log.hoursAtExecution);
+        .lt('horas_actuales', Number(log.hoursAtExecution));
 
     return mapLogFromDb(data);
 };
@@ -370,9 +386,9 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, _currentMach
         maquina_id: def.machineId,
         nombre: def.name,
         tipo_programacion: def.maintenanceType,
-        intervalo_horas: def.intervalHours,
-        horas_preaviso: def.warningHours,
-        intervalo_meses: def.intervalMonths,
+        intervalo_horas: Number(def.intervalHours || 0),
+        horas_preaviso: Number(def.warningHours || 0),
+        intervalo_meses: Number(def.intervalMonths || 0),
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
         tareas: def.tasks
     }).select().single();
@@ -385,9 +401,9 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
     const { error } = await supabase.from('mant_mantenimientos_def').update({
         nombre: def.name,
         tipo_programacion: def.maintenanceType,
-        intervalo_horas: def.intervalHours,
-        horas_preaviso: def.warningHours,
-        intervalo_meses: def.intervalMonths,
+        intervalo_horas: Number(def.intervalHours || 0),
+        horas_preaviso: Number(def.warningHours || 0),
+        intervalo_meses: Number(def.intervalMonths || 0),
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
         tareas: def.tasks
     }).eq('id', def.id);
@@ -401,7 +417,7 @@ export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
 };
 
 // ============================================================================
-// PRODUCCIÓN (CP / CR) - TABLAS REALES
+// PRODUCCIÓN (CP / CR)
 // ============================================================================
 
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
@@ -425,12 +441,12 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
     if (!isConfigured) return mock.saveCPReport(report);
     const { error } = await supabase.from('cp_partes_diarios').insert({
         fecha: toLocalDateString(report.date),
-        trabajador_id: report.workerId,
-        machacadora_inicio: report.crusherStart,
-        machacadora_fin: report.crusherEnd,
-        molinos_inicio: report.millsStart,
-        molinos_fin: report.millsEnd,
-        comentarios: report.comments
+        trabajador_id: cleanUuid(report.workerId),
+        machacadora_inicio: Number(report.crusherStart),
+        machacadora_fin: Number(report.crusherEnd),
+        molinos_inicio: Number(report.millsStart),
+        molinos_fin: Number(report.millsEnd),
+        comentarios: report.comments || null
     });
     if (error) throw error;
 };
@@ -445,7 +461,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         workerId: data.trabajador_id, 
         washingStart: Number(data.lavado_inicio), 
         washingEnd: Number(data.lavado_fin), 
-        triturationStart: Number(data.trituration_inicio), // Corregido: era trituracion_inicio
+        triturationStart: Number(data.trituration_inicio), 
         triturationEnd: Number(data.trituracion_fin), 
         comments: data.comentarios,
         aiAnalysis: data.ai_analisis
@@ -456,12 +472,12 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
     if (!isConfigured) return mock.saveCRReport(report);
     const { error } = await supabase.from('cr_partes_diarios').insert({
         fecha: toLocalDateString(report.date),
-        trabajador_id: report.workerId,
-        lavado_inicio: report.washingStart,
-        lavado_fin: report.washingEnd,
-        trituration_inicio: report.triturationStart,
-        trituracion_fin: report.triturationEnd,
-        comentarios: report.comments
+        trabajador_id: cleanUuid(report.workerId),
+        lavado_inicio: Number(report.washingStart),
+        lavado_fin: Number(report.washingEnd),
+        trituration_inicio: Number(report.triturationStart),
+        trituracion_fin: Number(report.triturationEnd),
+        comentarios: report.comments || null
     });
     if (error) throw error;
 };
@@ -498,8 +514,12 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return mock.saveCPWeeklyPlan(plan);
     const { error } = await supabase.from('cp_planificacion').upsert({ 
-        fecha_lunes: plan.mondayDate, horas_lunes: plan.hoursMon, horas_martes: plan.hoursTue, 
-        horas_miercoles: plan.hoursWed, horas_jueves: plan.hoursThu, horas_viernes: plan.hoursFri 
+        fecha_lunes: plan.mondayDate, 
+        horas_lunes: Number(plan.hoursMon), 
+        horas_martes: Number(plan.hoursTue), 
+        horas_miercoles: Number(plan.hoursWed), 
+        horas_jueves: Number(plan.hoursThu), 
+        horas_viernes: Number(plan.hoursFri) 
     }, { onConflict: 'fecha_lunes' });
     if (error) throw error;
 };
@@ -545,18 +565,18 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
     return (data || []).map(r => ({ 
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         hours: Number(r.horas), machineId: r.maquina_id, 
-        machineName: r.mant_maquinas?.nombre, description: r.comentarios // Corregido: es comentarios
+        machineName: r.mant_maquinas?.nombre, description: r.comentarios 
     }));
 };
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return mock.savePersonalReport(report);
     const { error } = await supabase.from('partes_trabajo').insert({ 
-        fecha: new Date(report.date).toISOString(), // Partes trabajo usa timestamp con zona horaria
-        trabajador_id: report.workerId, 
-        horas: report.hours, 
-        maquina_id: report.machineId, 
-        comentarios: report.description // Corregido: se mapea description a comentarios
+        fecha: new Date(report.date).toISOString(), 
+        trabajador_id: cleanUuid(report.workerId), 
+        horas: Number(report.hours), 
+        maquina_id: cleanUuid(report.machineId), 
+        comentarios: report.description || null
     });
     if (error) throw error;
 };
