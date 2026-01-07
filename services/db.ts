@@ -458,7 +458,6 @@ export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured || !isUuid(workerId)) return [];
-    // No usamos centro_id aquí ya que el error dice que no existe la columna
     const { data } = await supabase.from('partes_trabajo').select('*, mant_maquinas(nombre)').eq('trabajador_id', workerId).order('fecha', { ascending: false }).limit(10);
     return (data || []).map(r => ({ 
         id: r.id, 
@@ -472,11 +471,10 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    // Eliminado campo 'centro_id' por error schema cache (no existe en tabla)
     const { error } = await supabase.from('partes_trabajo').insert({ 
         fecha: toLocalDateString(report.date), 
         trabajador_id: cleanUuid(report.workerId), 
-        horas: cleanNum(report.hours), 
+        hours: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
         comentarios: report.description || null
     });
@@ -519,12 +517,11 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    return data ? { id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, washingStart: data.lavado_inicio, washingEnd: data.lavado_fin, triturationStart: data.trituracion_inicio, triturationEnd: data.trituracion_fin } : null;
+    return data ? { id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, washingStart: data.lavado_inicio, washingEnd: data.lavado_fin, triturationStart: data.trituracion_inicio, triturationEnd: data.trituracion_fin, comments: data.comentarios } : null;
 };
 
 export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    // Corregido trituracion_end -> trituracion_fin por consistencia schema
     const { error } = await supabase.from('cr_partes_diarios').insert({
         fecha: toLocalDateString(report.date),
         trabajador_id: cleanUuid(report.workerId),
@@ -541,6 +538,21 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
     if (!isConfigured) return [];
     const { data } = await supabase.from('cp_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
     return (data || []).map(r => ({ id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, crusherStart: r.machacadora_inicio, crusherEnd: r.machacadora_fin, millsStart: r.molinos_inicio, millsEnd: r.molinos_fin, aiAnalysis: r.ai_analisis }));
+};
+
+export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
+    return (data || []).map(r => ({ 
+        id: r.id, 
+        date: new Date(r.fecha), 
+        workerId: r.trabajador_id, 
+        washingStart: Number(r.lavado_inicio || 0), 
+        washingEnd: Number(r.lavado_fin || 0), 
+        triturationStart: Number(r.trituration_inicio || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
+        comments: r.comentarios 
+    }));
 };
 
 export const updateCPReportAnalysis = async (id: string, a: string) => { await supabase.from('cp_partes_diarios').update({ ai_analisis: a }).eq('id', id); };
@@ -561,9 +573,21 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     const dateStr = toLocalDateString(date);
     const [ops, pers] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        supabase.from('partes_trabajo').select('*, mant_maquinas(nombre)').eq('fecha', dateStr)
+        supabase.from('partes_trabajo').select('*, mant_maquinas(nombre, centro_id)').eq('fecha', dateStr)
     ]);
-    return { ops: (ops.data || []).map(mapLogFromDb), personal: (pers.data || []).map(r => ({ id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, hours: Number(r.horas), machineId: r.maquina_id, machineName: r.mant_maquinas?.nombre })) };
+    return { 
+        ops: (ops.data || []).map(mapLogFromDb), 
+        personal: (pers.data || []).map(r => ({ 
+            id: r.id, 
+            date: new Date(r.fecha), 
+            workerId: r.trabajador_id, 
+            hours: Number(r.horas), 
+            machineId: r.maquina_id, 
+            machineName: r.mant_maquinas?.nombre,
+            costCenterId: r.mant_maquinas?.centro_id,
+            description: r.comentarios
+        })) 
+    };
 };
 
 export const syncPendingData = async () => {
