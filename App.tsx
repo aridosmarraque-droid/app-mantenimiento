@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Worker, Machine, CostCenter, OperationType, OperationLog, CPDailyReport, PersonalReport, CRDailyReport } from './types';
 import { Login } from './components/Login';
@@ -24,9 +23,10 @@ import { WorkerSelection } from './components/personal/WorkerSelection';
 import { PersonalReportForm } from './components/personal/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
+import { DatabaseDiagnostics } from './components/admin/DatabaseDiagnostics';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -49,7 +49,8 @@ enum ViewState {
   ADMIN_CP_PLANNING,
   ADMIN_PRODUCTION_DASHBOARD,
   ADMIN_MANAGE_WORKERS,
-  ADMIN_MANAGE_PROVIDERS
+  ADMIN_MANAGE_PROVIDERS,
+  ADMIN_DIAGNOSTICS
 }
 
 type MenuCategory = 'activos' | 'produccion' | 'auditoria' | 'configuracion' | null;
@@ -72,7 +73,6 @@ function App() {
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
   
-  // Monitoreo de conexión y cola offline
   useEffect(() => {
       const handleStatusChange = () => setIsOnline(navigator.onLine);
       const checkQueue = () => setPendingItems(getQueue().length);
@@ -139,8 +139,6 @@ function App() {
     setOpenCategory(openCategory === cat ? null : cat);
   };
 
-  // --- HANDLERS DE FORMULARIOS ---
-
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
       try {
           await savePersonalReport(data);
@@ -149,7 +147,7 @@ function App() {
             setSuccessMsg(''); 
             navigateBack();
           }, 1500);
-      } catch (e) { setSuccessMsg('Error al guardar'); setTimeout(() => setSuccessMsg(''), 2000); }
+      } catch (e: any) { alert(e.message || "Error al guardar"); }
   };
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
@@ -157,7 +155,7 @@ function App() {
           await saveCPReport(data);
           setSuccessMsg('Parte Cantera Pura Guardado ✅');
           setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CP_SELECTION); }, 2000);
-      } catch (e) { setSuccessMsg('Error'); setTimeout(() => setSuccessMsg(''), 2000); }
+      } catch (e: any) { alert(e.message || "Error al guardar"); }
   };
 
   const handleCRReportSubmit = async (data: Omit<CRDailyReport, 'id'>) => {
@@ -165,7 +163,7 @@ function App() {
           await saveCRReport(data);
           setSuccessMsg('Parte Canto Rodado Guardado ✅');
           setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CR_SELECTION); }, 2000);
-      } catch (e) { setSuccessMsg('Error'); setTimeout(() => setSuccessMsg(''), 2000); }
+      } catch (e: any) { alert(e.message || "Error al guardar"); }
   };
 
   const handleFormSubmit = async (data: Partial<OperationLog>) => {
@@ -186,7 +184,10 @@ function App() {
         setViewState(ViewState.ACTION_MENU); 
         setSelectedAction(null); 
       }, 2000);
-    } catch (e) { alert("Error al registrar"); }
+    } catch (e: any) { 
+        console.error("Error capturado en App.tsx:", e);
+        alert(e.message || "Error al registrar"); 
+    }
   };
 
   const handleAdminSuccess = (msg: string) => {
@@ -209,7 +210,6 @@ function App() {
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl relative overflow-x-hidden">
         <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
-          {/* Barra Offline / Pendientes */}
           {(!isOnline || pendingItems > 0) && (
               <div className={`text-white text-[10px] text-center p-2 font-black uppercase flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
                   <div className="flex items-center gap-2">
@@ -248,11 +248,8 @@ function App() {
             </div>
           </div>
           
-          {/* MENÚ HAMBURGUESA ADMIN CATEGORIZADO */}
           {isMenuOpen && isUserAdmin && (
               <div className="absolute top-full right-0 w-80 bg-white shadow-2xl rounded-bl-3xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30 animate-in slide-in-from-right-5 duration-300">
-                  
-                  {/* BLOQUE: ACTIVOS Y PLANTAS */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('activos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'activos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                         <div className="flex items-center gap-3">
@@ -271,7 +268,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* BLOQUE: PRODUCCIÓN INDUSTRIAL */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('produccion')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'produccion' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                         <div className="flex items-center gap-3">
@@ -288,7 +284,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* BLOQUE: AUDITORÍA Y CONTROL */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('auditoria')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'auditoria' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                         <div className="flex items-center gap-3">
@@ -305,7 +300,6 @@ function App() {
                     )}
                   </div>
 
-                  {/* BLOQUE: SISTEMA Y PERSONAL */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('configuracion')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'configuracion' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                         <div className="flex items-center gap-3">
@@ -318,6 +312,7 @@ function App() {
                         <div className="bg-slate-50 divide-y divide-slate-100">
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>Gestión de Plantilla</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>Talleres y Proveedores</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DIAGNOSTICS)} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-red-600 rounded-full"></span>Diagnóstico DB</button>
                         </div>
                     )}
                   </div>
@@ -331,11 +326,9 @@ function App() {
           )}
         </header>
         
-        {/* Overlay cuando el menú admin está abierto */}
         {isMenuOpen && <div className="fixed inset-0 bg-slate-900/60 z-10 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)}></div>}
 
         <main className="flex-1 p-4 overflow-y-auto">
-          {/* Mensajes de Éxito Globales */}
           {successMsg && (
             <div className="flex flex-col items-center justify-center h-full text-green-600 animate-in zoom-in-95 duration-300 absolute inset-0 bg-white/95 z-50">
               <div className="bg-green-100 p-6 rounded-full mb-6 shadow-inner">
@@ -345,7 +338,6 @@ function App() {
             </div>
           )}
 
-            {/* VISTAS SEGÚN ROL OPERARIO */}
             {viewState === ViewState.WORKER_SELECTION && currentUser && (
               <WorkerSelection 
                 workerName={currentUser.name} 
@@ -373,7 +365,6 @@ function App() {
               />
             )}
             
-            {/* FORMULARIOS TÉCNICOS Y DE PRODUCCIÓN */}
             {viewState === ViewState.PERSONAL_REPORT && currentUser && (
               <PersonalReportForm workerId={currentUser.id} onBack={navigateBack} onSubmit={handlePersonalReportSubmit} />
             )}
@@ -384,7 +375,6 @@ function App() {
               <DailyReportFormCR workerId={currentUser.id} onBack={() => setViewState(ViewState.CR_SELECTION)} onSubmit={handleCRReportSubmit} />
             )}
 
-            {/* SELECCIÓN DE CONTEXTO (CENTRO/SUBCENTRO/MAQUINA) */}
             {viewState === ViewState.CONTEXT_SELECTION && (
               <MachineSelector 
                 selectedDate={selectedDate} 
@@ -393,7 +383,6 @@ function App() {
               />
             )}
             
-            {/* MENÚ DE ACCIONES POR MÁQUINA */}
             {viewState === ViewState.ACTION_MENU && selectedContext && (
               <MainMenu 
                 machineName={selectedContext.machine.name} 
@@ -402,7 +391,6 @@ function App() {
               />
             )}
 
-            {/* FORMULARIOS DE MANTENIMIENTO ESPECÍFICOS */}
             {viewState === ViewState.FORM && selectedContext && selectedAction && (
               <div className="animate-in slide-in-from-right duration-500">
                 {selectedAction === 'LEVELS' && <LevelsForm machine={selectedContext.machine} onSubmit={handleFormSubmit} onCancel={() => setViewState(ViewState.ACTION_MENU)}/>}
@@ -439,7 +427,6 @@ function App() {
               </div>
             )}
 
-            {/* VISTAS DE ADMINISTRACIÓN / CONFIGURACIÓN */}
             {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && (
               <div className="space-y-4">
                 <div className="bg-blue-600 p-4 rounded-2xl text-white shadow-lg flex items-center gap-3">
@@ -460,6 +447,7 @@ function App() {
             {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
 
         </main>
       </div>
