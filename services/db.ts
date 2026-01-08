@@ -118,9 +118,9 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   machineId: dbLog.maquina_id,
   hoursAtExecution: Number(dbLog.horas_registro || 0),
   type: fromDbOperationType(dbLog.tipo_operacion),
-  motorOil: dbLog.aceite_motor_l ? Number(dbLog.aceite_motor_l) : undefined,
-  hydraulicOil: dbLog.aceite_hidraulico_l ? Number(dbLog.aceite_hidraulico_l) : undefined,
-  coolant: dbLog.refrigerante_l ? Number(dbLog.refrigerante_l) : undefined,
+  motorOil: dbLog.aceite_motor_l != null ? Number(dbLog.aceite_motor_l) : undefined,
+  hydraulicOil: dbLog.aceite_hidraulico_l != null ? Number(dbLog.aceite_hidraulico_l) : undefined,
+  coolant: dbLog.refrigerante_l != null ? Number(dbLog.refrigerante_l) : undefined,
   breakdownCause: dbLog.causa_averia,
   breakdownSolution: dbLog.solucion_averia,
   repairerId: dbLog.reparador_id,
@@ -128,7 +128,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   description: dbLog.descripcion, 
   materials: dbLog.materiales,
   maintenanceDefId: dbLog.mantenimiento_def_id,
-  fuelLitres: dbLog.litros_combustible ? Number(dbLog.litros_combustible) : undefined
+  fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
 });
 
 // ============================================================================
@@ -425,7 +425,7 @@ export const updateOperationLog = async (id: string, updates: Partial<OperationL
     if (updates.materials !== undefined) payload.materiales = updates.materials;
     if (updates.fuelLitres !== undefined) payload.litros_combustible = cleanNum(updates.fuelLitres);
     
-    // Añadidos campos de niveles
+    // Soportar edición de niveles
     if (updates.motorOil !== undefined) payload.aceite_motor_l = cleanNum(updates.motorOil);
     if (updates.hydraulicOil !== undefined) payload.aceite_hidraulico_l = cleanNum(updates.hydraulicOil);
     if (updates.coolant !== undefined) payload.refrigerante_l = cleanNum(updates.coolant);
@@ -517,8 +517,6 @@ export const updatePersonalReport = async (id: string, updates: Partial<Personal
     if (updates.description !== undefined) payload.comentarios = updates.description;
     if (updates.machineId !== undefined) payload.maquina_id = cleanUuid(updates.machineId);
     if (updates.costCenterId !== undefined) payload.centro_id = cleanUuid(updates.costCenterId);
-    
-    // Permitir editar la fecha del parte
     if (updates.date !== undefined) payload.fecha = toLocalDateString(updates.date);
     
     const { error } = await supabase.from('partes_trabajo').update(payload).eq('id', id);
@@ -561,7 +559,17 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    return data ? { id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, washingStart: data.lavado_inicio, washingEnd: data.lavado_fin, triturationStart: data.trituracion_inicio, triturationEnd: data.trituracion_fin, comments: data.comentarios } : null;
+    // Mapeo correcto para Canto Rodado (ES)
+    return data ? { 
+        id: data.id, 
+        date: new Date(data.fecha), 
+        workerId: data.trabajador_id, 
+        washingStart: data.lavado_inicio, 
+        washingEnd: data.lavado_fin, 
+        triturationStart: data.trituracion_inicio, 
+        triturationEnd: data.trituracion_fin, 
+        comments: data.comentarios 
+    } : null;
 };
 
 export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<void> => {
@@ -587,6 +595,7 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
+    // CORRECCIÓN DEFINITIVA: trituracion_inicio/fin (ES) en lugar de trituration_... (EN)
     return (data || []).map(r => ({ 
         id: r.id, 
         date: new Date(r.fecha), 
@@ -594,7 +603,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios 
     }));
 };
