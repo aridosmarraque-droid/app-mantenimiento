@@ -47,12 +47,12 @@ const fromDbOperationType = (type: string): OperationType => {
     return map[upperType] || (upperType as OperationType);
 };
 
-const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 const cleanUuid = (id: any): string | null => {
     if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
     const trimmed = id.trim();
-    return isUuid(trimmed) ? trimmed : null;
+    return trimmed; 
 };
 
 const cleanNum = (val: any): number | null => {
@@ -195,7 +195,7 @@ export const deleteCostCenter = async (id: string): Promise<void> => {
 };
 
 export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter[]> => {
-    if (!isConfigured || !isUuid(centerId)) return [];
+    if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_subcentros').select('*').eq('centro_id', centerId);
     if (error) return [];
     return data.map(s => ({
@@ -244,7 +244,7 @@ export const getAllMachines = async (onlyActive: boolean = true): Promise<Machin
 };
 
 export const getMachinesByCenter = async (centerId: string, onlyActive: boolean = true): Promise<Machine[]> => {
-    if (!isConfigured || !isUuid(centerId)) return mock.getMachinesByCenter(centerId);
+    if (!isConfigured) return mock.getMachinesByCenter(centerId);
     const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
     if (error) return [];
     const machines = data.map(mapMachine);
@@ -252,7 +252,7 @@ export const getMachinesByCenter = async (centerId: string, onlyActive: boolean 
 };
 
 export const getMachinesBySubCenter = async (subCenterId: string, onlyActive: boolean = true): Promise<Machine[]> => {
-    if (!isConfigured || !isUuid(subCenterId)) return [];
+    if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subCenterId);
     if (error) return [];
     const machines = data.map(mapMachine);
@@ -416,7 +416,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 };
 
 export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
-    if (!isConfigured || !isUuid(machineId)) return [];
+    if (!isConfigured) return [];
     let query = supabase.from('mant_registros').select('*').eq('maquina_id', machineId);
     if (startDate) query = query.gte('fecha', toLocalDateString(startDate));
     if (endDate) query = query.lte('fecha', toLocalDateString(endDate));
@@ -457,13 +457,13 @@ export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine
 };
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
-    if (!isConfigured || !isUuid(workerId)) return [];
+    if (!isConfigured) return [];
     const { data } = await supabase.from('partes_trabajo').select('*, mant_maquinas(nombre)').eq('trabajador_id', workerId).order('fecha', { ascending: false }).limit(10);
     return (data || []).map(r => ({ 
         id: r.id, 
         date: new Date(r.fecha), 
         workerId: r.trabajador_id, 
-        hours: Number(r.horas || 0), // IMPORTANTE: Usamos 'horas' de la DB
+        hours: Number(r.horas || 0), 
         machineId: r.maquina_id, 
         machineName: r.mant_maquinas?.nombre 
     }));
@@ -472,11 +472,10 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     
-    // Mapeo EXPLÍCITO de claves para Supabase (horas -> horas)
     const payload = { 
         fecha: toLocalDateString(report.date), 
         trabajador_id: cleanUuid(report.workerId), 
-        horas: cleanNum(report.hours), // Enviamos 'horas' explícitamente
+        horas: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
         comentarios: report.description || null
     };
@@ -557,8 +556,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituration_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationStart: Number(r.trituracion_inicio || 0), // Corregido typo
+        triturationEnd: Number(r.trituracion_fin || 0), // Corregido typo
         comments: r.comentarios 
     }));
 };
@@ -581,7 +580,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     const dateStr = toLocalDateString(date);
     const [ops, pers] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        supabase.from('partes_trabajo').select('*, mant_maquinas(nombre, centro_id)').eq('fecha', dateStr)
+        supabase.from('partes_trabajo').select('*, mant_maquinas(nombre, centro_id, mant_centros(nombre))').eq('fecha', dateStr)
     ]);
     return { 
         ops: (ops.data || []).map(mapLogFromDb), 
@@ -593,6 +592,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             machineId: r.maquina_id, 
             machineName: r.mant_maquinas?.nombre,
             costCenterId: r.mant_maquinas?.centro_id,
+            costCenterName: r.mant_maquinas?.mant_centros?.nombre || 'Desconocido', // Obtenemos el nombre real del centro
             description: r.comentarios
         })) 
     };
