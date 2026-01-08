@@ -47,12 +47,12 @@ const fromDbOperationType = (type: string): OperationType => {
     return map[upperType] || (upperType as OperationType);
 };
 
-const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 const cleanUuid = (id: any): string | null => {
     if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
     const trimmed = id.trim();
-    return trimmed; 
+    return isUuid(trimmed) ? trimmed : null;
 };
 
 const cleanNum = (val: any): number | null => {
@@ -458,14 +458,16 @@ export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
-    const { data } = await supabase.from('partes_trabajo').select('*, mant_maquinas(nombre)').eq('trabajador_id', workerId).order('fecha', { ascending: false }).limit(10);
+    const { data } = await supabase.from('partes_trabajo').select('*, mant_maquinas(nombre), mant_centros(nombre)').eq('trabajador_id', workerId).order('fecha', { ascending: false }).limit(10);
     return (data || []).map(r => ({ 
         id: r.id, 
         date: new Date(r.fecha), 
         workerId: r.trabajador_id, 
         hours: Number(r.horas || 0), 
         machineId: r.maquina_id, 
-        machineName: r.mant_maquinas?.nombre 
+        machineName: r.mant_maquinas?.nombre,
+        costCenterId: r.centro_id,
+        costCenterName: r.mant_centros?.nombre
     }));
 };
 
@@ -477,6 +479,7 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
         trabajador_id: cleanUuid(report.workerId), 
         horas: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
+        centro_id: cleanUuid(report.costCenterId), // Guardamos el centro seleccionado
         comentarios: report.description || null
     };
 
@@ -556,8 +559,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituracion_inicio || 0), // Corregido typo
-        triturationEnd: Number(r.trituracion_fin || 0), // Corregido typo
+        triturationStart: Number(r.trituracion_inicio || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
 };
@@ -580,7 +583,8 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     const dateStr = toLocalDateString(date);
     const [ops, pers] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        supabase.from('partes_trabajo').select('*, mant_maquinas(nombre, centro_id, mant_centros(nombre))').eq('fecha', dateStr)
+        // Join con centros para el parte directamente
+        supabase.from('partes_trabajo').select('*, mant_centros(nombre), mant_maquinas(nombre, centro_id)').eq('fecha', dateStr)
     ]);
     return { 
         ops: (ops.data || []).map(mapLogFromDb), 
@@ -591,8 +595,8 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             hours: Number(r.horas || 0), 
             machineId: r.maquina_id, 
             machineName: r.mant_maquinas?.nombre,
-            costCenterId: r.mant_maquinas?.centro_id,
-            costCenterName: r.mant_maquinas?.mant_centros?.nombre || 'Desconocido', // Obtenemos el nombre real del centro
+            costCenterId: r.centro_id,
+            costCenterName: r.mant_centros?.nombre || 'Desconocido', // Prioridad al centro del parte
             description: r.comentarios
         })) 
     };
