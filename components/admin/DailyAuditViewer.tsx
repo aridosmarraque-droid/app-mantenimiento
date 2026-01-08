@@ -245,6 +245,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
                                             <div>
                                                 <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
+                                                {/* Corregida la lectura explícita de los campos trituracion_inicio/fin mapeados como triturationStart/End */}
                                                 <p className="font-mono font-bold text-xs">{report.triturationStart.toFixed(2)} → {report.triturationEnd.toFixed(2)}</p>
                                             </div>
                                             <div className="bg-amber-800 text-white px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-900">
@@ -305,7 +306,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                 <>
                                                     <div className="font-black text-red-600 uppercase text-[9px] mb-1 flex items-center gap-1"><AlertCircle size={10}/> Avería Detectada</div>
                                                     <div className="font-bold text-slate-800">{op.breakdownCause}</div>
-                                                    <div className="mt-1 opacity-80">Solución: {op.breakdownSolution}</div>
+                                                    <div className="mt-1 opacity-80">Solución: {op.breakdownSolution || 'Pendiente de registrar solución.'}</div>
                                                 </>
                                             )}
                                             {op.type === 'MAINTENANCE' && (
@@ -386,18 +387,52 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     className="w-full p-3 border rounded-xl font-bold"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Incidencia</label>
-                                <textarea 
-                                    rows={3}
-                                    value={editingOp.description || editingOp.breakdownCause || ''}
-                                    onChange={e => {
-                                        if (editingOp.type === 'BREAKDOWN') setEditingOp({...editingOp, breakdownCause: e.target.value});
-                                        else setEditingOp({...editingOp, description: e.target.value});
-                                    }}
-                                    className="w-full p-3 border rounded-xl text-sm"
-                                />
-                            </div>
+
+                            {editingOp.type === 'BREAKDOWN' ? (
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Causa de la Avería</label>
+                                        <textarea 
+                                            rows={2}
+                                            value={editingOp.breakdownCause || ''}
+                                            onChange={e => setEditingOp({...editingOp, breakdownCause: e.target.value})}
+                                            className="w-full p-3 border rounded-xl text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Solución Adoptada</label>
+                                        <textarea 
+                                            rows={2}
+                                            value={editingOp.breakdownSolution || ''}
+                                            onChange={e => setEditingOp({...editingOp, breakdownSolution: e.target.value})}
+                                            className="w-full p-3 border rounded-xl text-sm"
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Notas</label>
+                                    <textarea 
+                                        rows={3}
+                                        value={editingOp.description || ''}
+                                        onChange={e => setEditingOp({...editingOp, description: e.target.value})}
+                                        className="w-full p-3 border rounded-xl text-sm"
+                                    />
+                                </div>
+                            )}
+
+                            {editingOp.type === 'MAINTENANCE' && (
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Materiales Usados</label>
+                                    <input 
+                                        type="text"
+                                        value={editingOp.materials || ''}
+                                        onChange={e => setEditingOp({...editingOp, materials: e.target.value})}
+                                        className="w-full p-3 border rounded-xl text-sm"
+                                    />
+                                </div>
+                            )}
+
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setEditingOp(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
                                 <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
