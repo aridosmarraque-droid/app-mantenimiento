@@ -559,15 +559,15 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    // Mapeo correcto para Canto Rodado (ES)
+    // Mapeo corregido: trituracion_inicio/fin (Español, sin c cedilla o typos ingleses)
     return data ? { 
         id: data.id, 
         date: new Date(data.fecha), 
         workerId: data.trabajador_id, 
-        washingStart: data.lavado_inicio, 
-        washingEnd: data.lavado_fin, 
-        triturationStart: data.trituracion_inicio, 
-        triturationEnd: data.trituracion_fin, 
+        washingStart: Number(data.lavado_inicio || 0), 
+        washingEnd: Number(data.lavado_fin || 0), 
+        triturationStart: Number(data.trituracion_inicio || 0), 
+        triturationEnd: Number(data.trituracion_fin || 0), 
         comments: data.comentarios 
     } : null;
 };
@@ -595,7 +595,7 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
-    // CORRECCIÓN DEFINITIVA: trituracion_inicio/fin (ES) en lugar de trituration_... (EN)
+    // CORRECCIÓN DEFINITIVA DE MAPEADO: trituracion_inicio/fin son los nombres reales de columna
     return (data || []).map(r => ({ 
         id: r.id, 
         date: new Date(r.fecha), 
