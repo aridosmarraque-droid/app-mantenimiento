@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDailyAuditLogs, getWorkers, getAllMachines, getCostCenters, getServiceProviders, getCPReportsByRange, getCRReportsByRange } from '../../services/db';
+import { 
+    getDailyAuditLogs, 
+    getWorkers, 
+    getAllMachines, 
+    getCostCenters, 
+    getServiceProviders, 
+    getCPReportsByRange, 
+    getCRReportsByRange,
+    updateOperationLog,
+    updatePersonalReport
+} from '../../services/db';
 import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvider, CPDailyReport, CRDailyReport } from '../../types';
-import { ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, Mountain, Waves, ChevronRight, Droplets, Factory } from 'lucide-react';
+import { 
+    ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
+    Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, 
+    Mountain, Waves, Droplets, Factory, Edit2, Save, X 
+} from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -21,6 +35,11 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [centers, setCenters] = useState<CostCenter[]>([]);
     const [providers, setProviders] = useState<ServiceProvider[]>([]);
+
+    // Edit Modal State
+    const [editingOp, setEditingOp] = useState<OperationLog | null>(null);
+    const [editingPersonal, setEditingPersonal] = useState<PersonalReport | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
 
     useEffect(() => {
         Promise.all([
@@ -48,22 +67,16 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 getCRReportsByRange(selectedDate, selectedDate)
             ]);
             
-            // --- LÓGICA DE DE-DUPLICACIÓN POR CONTENIDO (FINGERPRINT) ---
-            const getOpFingerprint = (op: OperationLog) => 
-                `${op.machineId}-${op.workerId}-${op.hoursAtExecution}-${op.type}-${new Date(op.date).getTime()}`;
-            
-            const getPersonalFingerprint = (p: PersonalReport) => 
-                `${p.workerId}-${p.machineId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
-
+            // --- LÓGICA DE DE-DUPLICACIÓN ---
             const uniqueOpsMap = new Map();
             data.ops.forEach(op => {
-                const fp = getOpFingerprint(op);
+                const fp = `${op.machineId}-${op.workerId}-${op.hoursAtExecution}-${op.type}-${new Date(op.date).getTime()}`;
                 if (!uniqueOpsMap.has(fp)) uniqueOpsMap.set(fp, op);
             });
 
             const uniquePersonalMap = new Map();
             data.personal.forEach(p => {
-                const fp = getPersonalFingerprint(p);
+                const fp = `${p.workerId}-${p.machineId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
                 if (!uniquePersonalMap.has(fp)) uniquePersonalMap.set(fp, p);
             });
 
@@ -84,6 +97,30 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         fetchAudit();
     }, [fetchAudit]);
 
+    const handleSaveOpEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingOp) return;
+        setSavingEdit(true);
+        try {
+            await updateOperationLog(editingOp.id, editingOp);
+            setEditingOp(null);
+            fetchAudit();
+        } catch (e) { alert("Error al guardar"); }
+        finally { setSavingEdit(false); }
+    };
+
+    const handleSavePersonalEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingPersonal) return;
+        setSavingEdit(true);
+        try {
+            await updatePersonalReport(editingPersonal.id, editingPersonal);
+            setEditingPersonal(null);
+            fetchAudit();
+        } catch (e) { alert("Error al guardar"); }
+        finally { setSavingEdit(false); }
+    };
+
     const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
     const getMachineName = (id: string) => {
         const m = machines.find(m => m.id === id);
@@ -100,7 +137,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     };
 
     return (
-        <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+        <div className="space-y-6 pb-20 animate-in fade-in duration-500 relative">
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                     <ArrowLeft className="w-6 h-6" />
@@ -108,6 +145,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 <h3 className="text-xl font-bold text-slate-800 tracking-tight">Auditoría Diaria Integral</h3>
             </div>
 
+            {/* Selector de Fecha */}
             <div className="bg-white p-6 rounded-xl shadow-md border border-slate-100 mx-1">
                 <div className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="flex-1 w-full">
@@ -200,7 +238,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                 <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
                                                 <p className="font-mono font-bold text-xs">{report.washingStart.toFixed(2)} → {report.washingEnd.toFixed(2)}</p>
                                             </div>
-                                            <div className="bg-amber-100 text-amber-900 px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-200">
+                                            <div className="bg-amber-800 text-white px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-900">
                                                 {(report.washingEnd - report.washingStart).toFixed(2)}h
                                             </div>
                                         </div>
@@ -209,7 +247,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                 <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
                                                 <p className="font-mono font-bold text-xs">{report.triturationStart.toFixed(2)} → {report.triturationEnd.toFixed(2)}</p>
                                             </div>
-                                            <div className="bg-amber-100 text-amber-900 px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-200">
+                                            <div className="bg-amber-800 text-white px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-900">
                                                 {(report.triturationEnd - report.triturationStart).toFixed(2)}h
                                             </div>
                                         </div>
@@ -239,7 +277,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 const cfg = typeConfig[op.type] || { label: 'Otro', icon: Info, color: 'text-slate-600 bg-slate-50' };
                                 const Icon = cfg.icon;
                                 return (
-                                    <div key={`op-${op.id}`} className="bg-white border border-blue-50 rounded-2xl p-5 shadow-sm hover:border-blue-200 transition-all">
+                                    <div key={`op-${op.id}`} className="bg-white border border-blue-50 rounded-2xl p-5 shadow-sm hover:border-blue-200 transition-all group relative">
+                                        <button 
+                                            onClick={() => setEditingOp(op)}
+                                            className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-lg opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
+                                        >
+                                            <Edit2 size={16} />
+                                        </button>
                                         <div className="flex justify-between items-start mb-3">
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2.5 rounded-xl ${cfg.color} border shadow-sm`}>
@@ -254,9 +298,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-2 py-1 rounded-full border">
-                                                {new Date(op.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
                                         </div>
                                         <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-700 border border-slate-100 leading-relaxed">
                                             {op.type === 'LEVELS' && `Revisión Niveles: Aceite Motor (${op.motorOil}L), Hidráulico (${op.hydraulicOil}L), Refrigerante (${op.coolant}L)`}
@@ -275,10 +316,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             )}
                                             {op.type === 'REFUELING' && <div className="font-bold text-green-700">Suministro Combustible: {op.fuelLitres} Litros</div>}
                                             {op.type === 'SCHEDULED' && <div className="font-bold text-purple-700">Mantenimiento Programado: {op.description}</div>}
-                                            <div className="mt-2 pt-2 border-t border-slate-200 text-[9px] text-slate-400 font-bold flex justify-between uppercase">
-                                                <span>Talleres: {getProviderName(op.repairerId)}</span>
-                                                <span className="opacity-40">Ref: {op.id.substring(0,8)}</span>
-                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -295,7 +332,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                         </h4>
                         <div className="grid gap-3">
                             {auditData.personal.map(p => (
-                                <div key={`p-${p.id}`} className="bg-white border border-green-50 rounded-2xl p-5 shadow-sm hover:border-green-200 transition-all">
+                                <div key={`p-${p.id}`} className="bg-white border border-green-50 rounded-2xl p-5 shadow-sm hover:border-green-200 transition-all group relative">
+                                    <button 
+                                        onClick={() => setEditingPersonal(p)}
+                                        className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-lg opacity-0 group-hover:opacity-100 hover:text-green-600 hover:bg-green-50 transition-all shadow-sm"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2.5 bg-green-50 text-green-600 rounded-xl border border-green-100"><ClipboardList size={22} /></div>
@@ -321,6 +364,104 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             ))}
                             {auditData.personal.length === 0 && <div className="text-center py-6 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">No hay partes de personal registrados.</div>}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODALES DE EDICIÓN */}
+            {editingOp && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100">
+                        <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+                            <h4 className="font-bold flex items-center gap-2"><Wrench size={18}/> Editar Registro Técnico</h4>
+                            <button onClick={() => setEditingOp(null)}><X size={20}/></button>
+                        </div>
+                        <form onSubmit={handleSaveOpEdit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Registro</label>
+                                <input 
+                                    type="number" step="0.01" 
+                                    value={editingOp.hoursAtExecution}
+                                    onChange={e => setEditingOp({...editingOp, hoursAtExecution: Number(e.target.value)})}
+                                    className="w-full p-3 border rounded-xl font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Incidencia</label>
+                                <textarea 
+                                    rows={3}
+                                    value={editingOp.description || editingOp.breakdownCause || ''}
+                                    onChange={e => {
+                                        if (editingOp.type === 'BREAKDOWN') setEditingOp({...editingOp, breakdownCause: e.target.value});
+                                        else setEditingOp({...editingOp, description: e.target.value});
+                                    }}
+                                    className="w-full p-3 border rounded-xl text-sm"
+                                />
+                            </div>
+                            <div className="flex gap-2 pt-4">
+                                <button type="button" onClick={() => setEditingOp(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
+                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
+                                    {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {editingPersonal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100">
+                        <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+                            <h4 className="font-bold flex items-center gap-2"><User size={18}/> Editar Parte de Personal</h4>
+                            <button onClick={() => setEditingPersonal(null)}><X size={20}/></button>
+                        </div>
+                        <form onSubmit={handleSavePersonalEdit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Jornada</label>
+                                <input 
+                                    type="number" step="0.5" 
+                                    value={editingPersonal.hours}
+                                    onChange={e => setEditingPersonal({...editingPersonal, hours: Number(e.target.value)})}
+                                    className="w-full p-3 border rounded-xl font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Máquina Seleccionada</label>
+                                <select 
+                                    value={editingPersonal.machineId}
+                                    onChange={e => setEditingPersonal({...editingPersonal, machineId: e.target.value})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-white"
+                                >
+                                    {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Centro de Trabajo</label>
+                                <select 
+                                    value={editingPersonal.costCenterId}
+                                    onChange={e => setEditingPersonal({...editingPersonal, costCenterId: e.target.value})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-white"
+                                >
+                                    {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción de Trabajo</label>
+                                <textarea 
+                                    rows={3}
+                                    value={editingPersonal.description || ''}
+                                    onChange={e => setEditingPersonal({...editingPersonal, description: e.target.value})}
+                                    className="w-full p-3 border rounded-xl text-sm"
+                                />
+                            </div>
+                            <div className="flex gap-2 pt-4">
+                                <button type="button" onClick={() => setEditingPersonal(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
+                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-green-600 rounded-xl flex items-center justify-center gap-2">
+                                    {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
