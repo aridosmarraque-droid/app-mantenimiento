@@ -72,7 +72,9 @@ const mapWorker = (w: any): Worker => ({
     phone: w.telefono || '',
     positionIds: [], 
     role: w.rol || 'worker',
-    active: w.activo !== undefined ? w.activo : true
+    active: w.activo !== undefined ? w.activo : true,
+    scheduledHours: Number(w.horas_programadas || 10),
+    requiresWorkReport: w.requiere_parte !== undefined ? w.requiere_parte : true
 });
 
 const mapDef = (d: any): MaintenanceDefinition => ({
@@ -150,7 +152,9 @@ export const createWorker = async (w: Omit<Worker, 'id'>): Promise<void> => {
         dni: w.dni,
         telefono: w.phone,
         rol: w.role,
-        activo: w.active
+        activo: w.active,
+        horas_programadas: w.scheduledHours || 10,
+        requiere_parte: w.requiresWorkReport !== undefined ? w.requiresWorkReport : true
     });
     if (error) throw error;
 };
@@ -163,6 +167,8 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
     if (updates.phone !== undefined) payload.telefono = updates.phone;
     if (updates.role !== undefined) payload.rol = updates.role;
     if (updates.active !== undefined) payload.activo = updates.active;
+    if (updates.scheduledHours !== undefined) payload.horas_programadas = updates.scheduledHours;
+    if (updates.requiresWorkReport !== undefined) payload.requiere_parte = updates.requiresWorkReport;
     
     const { error } = await supabase.from('mant_trabajadores').update(payload).eq('id', id);
     if (error) throw error;
@@ -277,7 +283,6 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         nombre: m.name,
         codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours,
-        // FIXED: Corrected mapping from Machine property 'requiresHours' to DB column 'requiere_horas'
         requiere_horas: m.requiresHours,
         gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses,
@@ -590,8 +595,8 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
         trabajador_id: cleanUuid(report.workerId),
         lavado_inicio: cleanNum(report.washingStart),
         lavado_fin: cleanNum(report.washingEnd),
-        trituracion_inicio: cleanNum(report.triturationStart),
-        trituracion_fin: cleanNum(report.triturationEnd),
+        trituration_inicio: cleanNum(report.triturationStart),
+        trituration_fin: cleanNum(report.triturationEnd),
         comentarios: report.comments || null
     });
     if (error) throw error;
@@ -614,7 +619,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
 };
