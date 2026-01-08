@@ -416,14 +416,17 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             {reports.map(p => (
                                                 <div key={p.id} className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 group relative">
                                                     <div className="flex justify-between items-start mb-1">
-                                                        <div className="flex items-center gap-2 text-[11px] font-black text-slate-800 uppercase">
-                                                            <Truck size={12} className="text-blue-500"/> {p.machineName || "General"}
+                                                        <div className="flex items-center gap-2 text-[11px] font-black text-slate-800 uppercase leading-tight pr-8">
+                                                            <Truck size={12} className="text-blue-500 shrink-0"/> 
+                                                            <span className="text-amber-700">{p.costCenterName}</span>
+                                                            <span className="text-slate-300">|</span>
+                                                            <span>{p.machineName || "General"}</span>
                                                             <span className="text-slate-300 mx-1">|</span>
                                                             <span className="text-indigo-600">{p.hours}h</span>
                                                         </div>
                                                         <button 
                                                             onClick={() => setEditingPersonal(p)}
-                                                            className="text-slate-300 hover:text-blue-600 transition-colors"
+                                                            className="text-slate-300 hover:text-blue-600 transition-colors shrink-0"
                                                         >
                                                             <Edit2 size={12} />
                                                         </button>
@@ -445,7 +448,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* MODALES DE EDICIÓN (Mismos que antes...) */}
+            {/* MODALES DE EDICIÓN */}
             {editingOp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100">
