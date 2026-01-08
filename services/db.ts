@@ -586,7 +586,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios 
     }));
 };
