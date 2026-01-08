@@ -106,7 +106,7 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: defs.map(mapDef),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo !== undefined ? m.activo : true,
+        active: m.active !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -170,21 +170,31 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
-    const { data, error } = await supabase.from('mant_centros').select('*');
+    const { data, error } = await supabase.from('mant_centros').select('*').order('nombre');
     if (error) return [];
-    return (data || []).map((c: any) => ({ id: c.id, name: c.nombre }));
+    return (data || []).map((c: any) => ({ 
+        id: c.id, 
+        name: c.nombre,
+        selectableForReports: c.es_parte_trabajo !== undefined ? c.es_parte_trabajo : true
+    }));
 };
 
-export const createCostCenter = async (name: string): Promise<CostCenter> => {
+export const createCostCenter = async (name: string, selectable: boolean = true): Promise<CostCenter> => {
     if (!isConfigured) return mock.createCostCenter(name);
-    const { data, error } = await supabase.from('mant_centros').insert({ nombre: name }).select().single();
+    const { data, error } = await supabase.from('mant_centros').insert({ 
+        nombre: name,
+        es_parte_trabajo: selectable 
+    }).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.nombre };
+    return { id: data.id, name: data.nombre, selectableForReports: data.es_parte_trabajo };
 };
 
-export const updateCostCenter = async (id: string, name: string): Promise<void> => {
+export const updateCostCenter = async (id: string, name: string, selectable: boolean): Promise<void> => {
     if (!isConfigured) return mock.updateCostCenter(id, name);
-    const { error } = await supabase.from('mant_centros').update({ nombre: name }).eq('id', id);
+    const { error } = await supabase.from('mant_centros').update({ 
+        nombre: name,
+        es_parte_trabajo: selectable
+    }).eq('id', id);
     if (error) throw error;
 };
 
@@ -201,7 +211,7 @@ export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter
     return data.map(s => ({
         id: s.id,
         centerId: s.centro_id,
-        name: s.nombre,
+        name: s.name,
         tracksProduction: !!s.es_produccion,
         productionField: s.campo_produccion
     }));
@@ -267,6 +277,7 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         nombre: m.name,
         codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours,
+        // FIXED: Corrected mapping from Machine property 'requiresHours' to DB column 'requiere_horas'
         requiere_horas: m.requiresHours,
         gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses,
