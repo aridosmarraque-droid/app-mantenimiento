@@ -108,7 +108,7 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: defs.map(mapDef),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo !== undefined ? m.activo : true,
+        active: m.active !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -217,7 +217,7 @@ export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter
     return data.map(s => ({
         id: s.id,
         centerId: s.centro_id,
-        name: s.name,
+        name: s.nombre,
         tracksProduction: !!s.es_produccion,
         productionField: s.campo_produccion
     }));
@@ -555,7 +555,7 @@ export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cp_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    return data ? { id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, crusherStart: data.machacadora_inicio, crusherEnd: data.machacadora_fin, millsStart: data.molinos_inicio, millsEnd: data.molinos_fin } : null;
+    return data ? { id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, crusherStart: Number(data.machacadora_inicio || 0), crusherEnd: Number(data.machacadora_fin || 0), millsStart: Number(data.molinos_inicio || 0), millsEnd: Number(data.molinos_fin || 0) } : null;
 };
 
 export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
@@ -575,7 +575,6 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    // Mapeo corregido: trituracion_inicio/fin (Español, sin c cedilla o typos ingleses)
     return data ? { 
         id: data.id, 
         date: new Date(data.fecha), 
@@ -605,13 +604,21 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
 export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDailyReport[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('cp_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
-    return (data || []).map(r => ({ id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, crusherStart: r.machacadora_inicio, crusherEnd: r.machacadora_fin, millsStart: r.molinos_inicio, millsEnd: r.molinos_fin, aiAnalysis: r.ai_analisis }));
+    return (data || []).map(r => ({ 
+        id: r.id, 
+        date: new Date(r.fecha), 
+        workerId: r.trabajador_id, 
+        crusherStart: Number(r.machacadora_inicio || 0), 
+        crusherEnd: Number(r.machacadora_fin || 0), 
+        millsStart: Number(r.molinos_inicio || 0), 
+        millsEnd: Number(r.molinos_fin || 0), 
+        aiAnalysis: r.ai_analisis 
+    }));
 };
 
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
-    // CORRECCIÓN DEFINITIVA DE MAPEADO: trituracion_inicio/fin son los nombres reales de columna
     return (data || []).map(r => ({ 
         id: r.id, 
         date: new Date(r.fecha), 
@@ -629,7 +636,29 @@ export const updateCPReportAnalysis = async (id: string, a: string) => { await s
 export const getCPWeeklyPlan = async (monday: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', monday).maybeSingle();
-    return data ? { id: data.id, mondayDate: data.fecha_lunes, hoursMon: data.horas_lunes, hoursTue: data.horas_martes, hoursWed: data.horas_miercoles, hoursThu: data.horas_jueves, hoursFri: data.horas_viernes } : null;
+    return data ? { 
+        id: data.id, 
+        mondayDate: data.fecha_lunes, 
+        hoursMon: Number(data.horas_lunes || 0), 
+        hoursTue: Number(data.horas_martes || 0), 
+        hoursWed: Number(data.horas_miercoles || 0), 
+        hoursThu: Number(data.horas_jueves || 0), 
+        hoursFri: Number(data.horas_viernes || 0) 
+    } : null;
+};
+
+export const getCPWeeklyPlansByRange = async (start: string, end: string): Promise<CPWeeklyPlan[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('cp_planificacion').select('*').gte('fecha_lunes', start).lte('fecha_lunes', end);
+    return (data || []).map(d => ({
+        id: d.id,
+        mondayDate: d.fecha_lunes,
+        hoursMon: Number(d.horas_lunes || 0),
+        hoursTue: Number(d.horas_martes || 0),
+        hoursWed: Number(d.horas_miercoles || 0),
+        hoursThu: Number(d.horas_jueves || 0),
+        hoursFri: Number(d.horas_viernes || 0)
+    }));
 };
 
 export const saveCPWeeklyPlan = async (p: CPWeeklyPlan) => {
@@ -642,7 +671,6 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     const dateStr = toLocalDateString(date);
     const [ops, pers] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        // Join con centros para el parte directamente para asegurar que se lee el centro_id del parte
         supabase.from('partes_trabajo').select('*, mant_centros(nombre), mant_maquinas(nombre, centro_id)').eq('fecha', dateStr)
     ]);
     return { 
@@ -655,7 +683,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             machineId: r.maquina_id, 
             machineName: r.mant_maquinas?.nombre,
             costCenterId: r.centro_id,
-            costCenterName: r.mant_centros?.nombre || 'Desconocido', // Prioridad al centro del parte
+            costCenterName: r.mant_centros?.nombre || 'Desconocido', 
             description: r.comentarios
         })) 
     };
