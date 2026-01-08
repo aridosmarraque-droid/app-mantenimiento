@@ -1,4 +1,4 @@
-import { getCPReportsByRange, getCPWeeklyPlan } from './db';
+import { getCPReportsByRange, getCPWeeklyPlansByRange } from './db';
 import { CPDailyReport, CPWeeklyPlan } from '../types';
 
 export interface ProductionStat {
@@ -36,58 +36,60 @@ const toLocalISO = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
-const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
+const getHoursFromPlan = (plan: CPWeeklyPlan | null | undefined, date: Date): number => {
     if (!plan) return 8; // Default to 8 if no plan
     const day = date.getDay(); // 0 Sun, 1 Mon...
-    switch (day) {
-        case 1: return plan.hoursMon;
-        case 2: return plan.hoursTue;
-        case 3: return plan.hoursWed;
-        case 4: return plan.hoursThu;
-        case 5: return plan.hoursFri;
-        default: return 0; // Weekend usually 0
-    }
+    const h = (() => {
+        switch (day) {
+            case 1: return plan.hoursMon;
+            case 2: return plan.hoursTue;
+            case 3: return plan.hoursWed;
+            case 4: return plan.hoursThu;
+            case 5: return plan.hoursFri;
+            default: return 0; // Weekend usually 0
+        }
+    })();
+    return Number(h || 0); // Asegurar que sea número y no null/undefined
 };
 
 /**
- * Calcula estadísticas en un rango, pero filtra tanto producción como planificación por el limitDate
+ * Calcula estadísticas en un rango de forma masiva para evitar sobrecarga de peticiones
  */
-const calculateStats = async (start: Date, end: Date, label: string, limitDate: Date, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
-    // 1. Obtener todos los partes del rango total
+const calculateStats = async (
+    start: Date, 
+    end: Date, 
+    label: string, 
+    limitDate: Date, 
+    allPlansInRange: CPWeeklyPlan[],
+    dateFormat: 'day' | 'month' | 'year' = 'day'
+): Promise<ProductionStat> => {
+    // 1. Obtener reportes
     const allReportsInRange = await getCPReportsByRange(start, end);
     
     // 2. Normalizar el punto de corte (final del día seleccionado)
     const cutoff = new Date(limitDate);
     cutoff.setHours(23, 59, 59, 999);
 
-    // 3. Filtrar los reportes para que solo cuenten los que están dentro del Period-to-Date
+    // 3. Filtrar reportes
     const filteredReports = allReportsInRange.filter(r => {
         const reportDate = new Date(r.date);
         return reportDate <= cutoff;
     });
     
-    // 4. Sumar horas reales SOLO de los reportes filtrados
-    const totalActual = filteredReports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
+    const totalActual = filteredReports.reduce((acc, r) => acc + (Number(r.millsEnd || 0) - Number(r.millsStart || 0)), 0);
 
-    // 5. Calcular horas planificadas también respetando el cutoff
+    // 4. Calcular horas planificadas localmente (sin más peticiones a DB)
     let totalPlanned = 0;
     const loopCurrent = new Date(start);
-    loopCurrent.setHours(0,0,0,0);
+    loopCurrent.setHours(12,0,0,0); // Usar mediodía para evitar problemas de DST
     
-    const planCache: Record<string, CPWeeklyPlan | null> = {};
+    const stopAt = new Date(end < cutoff ? end : cutoff);
+    stopAt.setHours(23, 59, 59, 999);
 
-    while (loopCurrent <= new Date(end)) {
-        // No sumar planificación si ya pasamos el día de corte
-        if (loopCurrent > cutoff) {
-            break;
-        }
-
+    while (loopCurrent <= stopAt) {
         const mondayStr = toLocalISO(getMonday(loopCurrent));
-        if (planCache[mondayStr] === undefined) {
-            planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
-        }
-        
-        totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
+        const plan = allPlansInRange.find(p => p.mondayDate === mondayStr);
+        totalPlanned += getHoursFromPlan(plan, loopCurrent);
         loopCurrent.setDate(loopCurrent.getDate() + 1);
     }
 
@@ -120,11 +122,18 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     monthly: ProductionComparison,
     yearly: ProductionComparison
 }> => {
-    // Normalizar baseDate a medianoche local
     const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     
+    // RANGOS PARA PRE-CARGA MASIVA DE PLANES
+    // El rango máximo que necesitamos es desde el inicio del año pasado hasta el fin del año actual
+    const fullRangeStart = new Date(today.getFullYear() - 1, 0, 1);
+    const fullRangeEnd = new Date(today.getFullYear(), 11, 31);
+    
+    // Pre-cargar todos los planes necesarios en una sola consulta
+    const allPlans = await getCPWeeklyPlansByRange(toLocalISO(fullRangeStart), toLocalISO(fullRangeEnd));
+
     // 1. Daily
-    const daily = await calculateStats(today, today, "Día Seleccionado", today, 'day');
+    const daily = await calculateStats(today, today, "Día Seleccionado", today, allPlans, 'day');
 
     // 2. Weekly
     const startWeek = getMonday(today);
@@ -139,10 +148,10 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     const lastWeekLimit = new Date(today);
     lastWeekLimit.setDate(lastWeekLimit.getDate() - 7);
 
-    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Seleccionada", today, 'day');
+    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Seleccionada", today, allPlans, 'day');
     weeklyCurr.dateLabel = `Semana ${startWeek.getDate()}/${startWeek.getMonth()+1}`;
 
-    const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", lastWeekLimit, 'day');
+    const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", lastWeekLimit, allPlans, 'day');
     weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
 
     // 3. Monthly
@@ -154,8 +163,8 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     
     const lastMonthLimit = new Date(today.getFullYear(), today.getMonth() - 1, Math.min(today.getDate(), endLastMonth.getDate()));
 
-    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", today, 'month');
-    const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastMonthLimit, 'month');
+    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", today, allPlans, 'month');
+    const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastMonthLimit, allPlans, 'month');
 
     // 4. Yearly
     const startYear = new Date(today.getFullYear(), 0, 1);
@@ -166,8 +175,8 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     
     const lastYearLimit = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
 
-    const yearlyCurr = await calculateStats(startYear, endYear, "Año Seleccionado", today, 'year');
-    const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior", lastYearLimit, 'year');
+    const yearlyCurr = await calculateStats(startYear, endYear, "Año Seleccionado", today, allPlans, 'year');
+    const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior", lastYearLimit, allPlans, 'year');
 
     const compare = (curr: ProductionStat, prev: ProductionStat): ProductionComparison => ({
         current: curr,
