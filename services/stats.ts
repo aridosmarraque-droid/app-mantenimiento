@@ -1,4 +1,3 @@
-
 import { getCPReportsByRange, getCPWeeklyPlan } from './db';
 import { CPDailyReport, CPWeeklyPlan } from '../types';
 
@@ -61,8 +60,9 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     // Iteramos día a día localmente
     let totalPlanned = 0;
     
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Final de hoy para incluir hoy en comparaciones
+    // El "Hoy" absoluto real para no planificar futuro lejano
+    const absoluteNow = new Date();
+    absoluteNow.setHours(23, 59, 59, 999);
 
     const loopCurrent = new Date(start);
     loopCurrent.setHours(0,0,0,0);
@@ -73,8 +73,8 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
     while (loopCurrent <= loopEnd) {
-        // No sumar planificación de días futuros
-        if (loopCurrent > today) {
+        // No sumar planificación de días futuros respecto a HOY real
+        if (loopCurrent > absoluteNow) {
             break;
         }
 
@@ -114,20 +114,21 @@ const calculateStats = async (start: Date, end: Date, label: string, dateFormat:
     };
 };
 
-export const getProductionEfficiencyStats = async (): Promise<{
+export const getProductionEfficiencyStats = async (baseDate: Date = new Date()): Promise<{
     daily: ProductionStat,
     weekly: ProductionComparison,
     monthly: ProductionComparison,
     yearly: ProductionComparison
 }> => {
-    const today = new Date(); // Fecha actual local
+    // Normalizar baseDate a medianoche
+    const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     
     // 1. Daily (Start = Today 00:00, End = Today 23:59)
-    const startDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const daily = await calculateStats(startDay, endDay, "Hoy", 'day');
+    const startDay = new Date(today);
+    const endDay = new Date(today);
+    const daily = await calculateStats(startDay, endDay, "Día Seleccionado", 'day');
 
-    // 2. Weekly
+    // 2. Weekly (Relativo a baseDate)
     const startWeek = getMonday(today);
     const endWeek = new Date(startWeek);
     endWeek.setDate(endWeek.getDate() + 6); // Domingo
@@ -137,30 +138,30 @@ export const getProductionEfficiencyStats = async (): Promise<{
     const endLastWeek = new Date(endWeek);
     endLastWeek.setDate(endLastWeek.getDate() - 7);
 
-    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Actual", 'day');
+    const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Seleccionada", 'day');
     weeklyCurr.dateLabel = `Semana ${startWeek.getDate()}/${startWeek.getMonth()+1}`;
 
     const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", 'day');
     weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
 
-    // 3. Monthly
+    // 3. Monthly (Relativo a baseDate)
     const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     const startLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const endLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
 
-    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Actual", 'month');
+    const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", 'month');
     const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", 'month');
 
-    // 4. Yearly
+    // 4. Yearly (Relativo a baseDate)
     const startYear = new Date(today.getFullYear(), 0, 1);
     const endYear = new Date(today.getFullYear(), 11, 31);
     
     const startLastYear = new Date(today.getFullYear() - 1, 0, 1);
     const endLastYear = new Date(today.getFullYear() - 1, 11, 31);
 
-    const yearlyCurr = await calculateStats(startYear, endYear, "Año Actual", 'year');
+    const yearlyCurr = await calculateStats(startYear, endYear, "Año Seleccionado", 'year');
     const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior", 'year');
 
     const compare = (curr: ProductionStat, prev: ProductionStat): ProductionComparison => ({
