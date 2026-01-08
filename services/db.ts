@@ -108,7 +108,7 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: defs.map(mapDef),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.active !== undefined ? m.activo : true,
+        active: m.activo !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -595,8 +595,8 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
         trabajador_id: cleanUuid(report.workerId),
         lavado_inicio: cleanNum(report.washingStart),
         lavado_fin: cleanNum(report.washingEnd),
-        trituration_inicio: cleanNum(report.triturationStart),
-        trituration_fin: cleanNum(report.triturationEnd),
+        trituracion_inicio: cleanNum(report.triturationStart),
+        trituracion_fin: cleanNum(report.triturationEnd),
         comentarios: report.comments || null
     });
     if (error) throw error;
@@ -619,7 +619,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios 
     }));
 };
