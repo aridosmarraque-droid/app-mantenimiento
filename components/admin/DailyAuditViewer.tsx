@@ -89,7 +89,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         const m = machines.find(m => m.id === id);
         return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Planta";
     };
-    const getCenterName = (id?: string) => centers.find(c => c.id === id)?.name || "N/A";
     const getProviderName = (id?: string) => providers.find(p => p.id === id)?.name || "Propio";
 
     const typeConfig: any = {
@@ -152,27 +151,31 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             {/* CANTERA PURA */}
                             {auditData.cp.map(report => (
                                 <div key={`cp-${report.id}`} className="bg-white border border-amber-100 rounded-2xl p-5 shadow-sm">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Mountain size={20}/></div>
-                                            <div>
-                                                <div className="font-bold text-slate-800">Cantera Pura</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-black text-amber-600">{report.millsEnd - report.millsStart}h</div>
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Producción</div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Mountain size={20}/></div>
+                                        <div>
+                                            <div className="font-bold text-slate-800">Cantera Pura</div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div>
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
-                                            <p className="font-mono font-bold">{report.crusherStart} → {report.crusherEnd}</p>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                            <div>
+                                                <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
+                                                <p className="font-mono font-bold text-xs">{report.crusherStart} → {report.crusherEnd}</p>
+                                            </div>
+                                            <div className="bg-amber-100 text-amber-900 px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-200">
+                                                {report.crusherEnd - report.crusherStart}h
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
-                                            <p className="font-mono font-bold">{report.millsStart} → {report.millsEnd}</p>
+                                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                            <div>
+                                                <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
+                                                <p className="font-mono font-bold text-xs">{report.millsStart} → {report.millsEnd}</p>
+                                            </div>
+                                            <div className="bg-amber-100 text-amber-900 px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-200">
+                                                {report.millsEnd - report.millsStart}h
+                                            </div>
                                         </div>
                                     </div>
                                     {report.comments && (
@@ -184,27 +187,31 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             {/* CANTO RODADO */}
                             {auditData.cr.map(report => (
                                 <div key={`cr-${report.id}`} className="bg-white border border-teal-100 rounded-2xl p-5 shadow-sm">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="p-2 bg-teal-50 text-teal-600 rounded-lg"><Waves size={20}/></div>
-                                            <div>
-                                                <div className="font-bold text-slate-800">Canto Rodado</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-black text-teal-600">{(report.washingEnd - report.washingStart + report.triturationEnd - report.triturationStart).toFixed(2)}h</div>
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Tot. Planta</div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="p-2 bg-teal-50 text-teal-600 rounded-lg"><Waves size={20}/></div>
+                                        <div>
+                                            <div className="font-bold text-slate-800">Canto Rodado</div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div>
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
-                                            <p className="font-mono font-bold">{report.washingStart} → {report.washingEnd}</p>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                            <div>
+                                                <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
+                                                <p className="font-mono font-bold text-xs">{report.washingStart.toFixed(2)} → {report.washingEnd.toFixed(2)}</p>
+                                            </div>
+                                            <div className="bg-amber-100 text-amber-900 px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-200">
+                                                {(report.washingEnd - report.washingStart).toFixed(2)}h
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
-                                            <p className="font-mono font-bold">{report.triturationStart} → {report.triturationEnd}</p>
+                                        <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                            <div>
+                                                <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
+                                                <p className="font-mono font-bold text-xs">{report.triturationStart.toFixed(2)} → {report.triturationEnd.toFixed(2)}</p>
+                                            </div>
+                                            <div className="bg-amber-100 text-amber-900 px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-200">
+                                                {(report.triturationEnd - report.triturationStart).toFixed(2)}h
+                                            </div>
                                         </div>
                                     </div>
                                     {report.comments && (
@@ -294,8 +301,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             <div className="p-2.5 bg-green-50 text-green-600 rounded-xl border border-green-100"><ClipboardList size={22} /></div>
                                             <div>
                                                 <div className="font-black text-slate-900 leading-tight">{getWorkerName(p.workerId)}</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1">
-                                                    <Factory size={10} className="text-green-600"/> {getCenterName(p.costCenterId)}
+                                                <div className="text-[10px] text-indigo-600 font-black uppercase mt-1 flex items-center gap-1">
+                                                    <Factory size={10} className="text-indigo-500"/> {p.costCenterName}
                                                 </div>
                                             </div>
                                         </div>
