@@ -18,7 +18,9 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const loadStats = useCallback(async () => {
         setLoading(true);
         try {
-            const dateObj = new Date(selectedDate);
+            // Parseo robusto para evitar desfases UTC
+            const [year, month, day] = selectedDate.split('-').map(Number);
+            const dateObj = new Date(year, month - 1, day);
             const data = await getProductionEfficiencyStats(dateObj);
             setStats(data);
         } catch (e) {
@@ -41,8 +43,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                 new Date(report.date)
             );
             await updateCPReportAnalysis(report.id, analysis);
-            
-            // Recargar datos para mostrar el nuevo análisis
             await loadStats();
         } catch (error) {
             alert("Error al analizar con IA");
@@ -51,7 +51,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
         }
     };
 
-    // Obtener último reporte del día seleccionado para la sección "Gerente Virtual"
     const dailyReports = stats?.daily?.reports || [];
     const latestReport = dailyReports.length > 0 ? dailyReports[0] : null;
     const latestEfficiency = stats?.daily?.efficiency || 0;
@@ -68,8 +67,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
             </div>
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
-                
-                {/* Selector de Fecha */}
                 <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 flex flex-col sm:flex-row gap-4 items-end">
                     <div className="flex-1 w-full">
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
@@ -94,10 +91,9 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                     </button>
                 </div>
 
-                {/* Intro Card */}
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl text-sm text-blue-800 flex items-start gap-2">
                     <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <p>Cálculo de eficiencia basado en horas de <strong>Molienda</strong> vs Planificación teórica. Los informes se sincronizan con <em>aridos@marraque.es</em>.</p>
+                    <p>Análisis <strong>Period-to-Date</strong>: Las comparativas muestran la eficiencia hasta el día seleccionado relativo a cada periodo.</p>
                 </div>
 
                 {loading ? (
@@ -107,13 +103,12 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                     </div>
                 ) : (
                     <>
-                        {/* Gerente Virtual Section */}
                         <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-2xl shadow-md border border-indigo-100">
                             <div className="flex justify-between items-start mb-4">
                                 <h3 className="font-black text-indigo-900 flex items-center gap-2 uppercase text-xs tracking-widest">
                                     <BrainCircuit className="w-6 h-6 text-indigo-600" /> Gerente Virtual (IA)
                                 </h3>
-                                {latestReport ? (
+                                {latestReport && (
                                     latestReport.aiAnalysis ? (
                                         <span className="bg-green-100 text-green-700 text-[10px] font-black uppercase px-2 py-1 rounded-full border border-green-200 flex items-center gap-1">
                                             <Sparkles size={12}/> Analizado
@@ -128,20 +123,20 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                             Analizar Día
                                         </button>
                                     )
-                                ) : null}
+                                )}
                             </div>
 
                             <div className="text-sm text-slate-700">
                                 {latestReport ? (
                                     <>
-                                        <p className="mb-3 text-slate-500 text-[10px] uppercase font-black">Partes de: {new Date(selectedDate).toLocaleDateString()}</p>
+                                        <p className="mb-3 text-slate-500 text-[10px] uppercase font-black">Partes de: {new Date(latestReport.date).toLocaleDateString()}</p>
                                         {latestReport.aiAnalysis ? (
                                             <div className="prose prose-sm prose-indigo bg-white p-4 rounded-xl border border-indigo-100 shadow-inner">
                                                 <div className="whitespace-pre-line text-xs font-medium leading-relaxed">{latestReport.aiAnalysis}</div>
                                             </div>
                                         ) : (
                                             <div className="bg-white/50 p-6 rounded-xl border border-indigo-100 italic text-slate-400 text-center text-xs">
-                                                "Sin análisis generado para este día. Solicita un análisis para obtener conclusiones técnicas."
+                                                "Sin análisis generado. Solicita un análisis para obtener conclusiones técnicas sobre este día."
                                             </div>
                                         )}
                                     </>
@@ -153,7 +148,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                             </div>
                         </div>
 
-                        {/* KPI Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <StatCard title="Eficiencia del Día" stat={stats.daily} />
                             <ComparisonCard title="Eficiencia Semanal" data={stats.weekly} />
@@ -161,7 +155,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                             <ComparisonCard title="Eficiencia Anual" data={stats.yearly} />
                         </div>
 
-                        {/* Recent Comments Section */}
                         <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100">
                             <h3 className="font-black text-slate-800 mb-4 border-b pb-3 flex items-center gap-2 text-xs uppercase tracking-widest">
                                 <Calendar className="w-5 h-5 text-amber-500" /> Incidencias del Periodo
@@ -176,15 +169,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                             </span>
                                         </div>
                                         <p className="text-xs text-slate-700 italic leading-relaxed">"{r.comments || 'Sin comentarios registrados.'}"</p>
-                                        {!r.aiAnalysis && (
-                                            <button 
-                                                onClick={() => handleAnalyzeClick(r, 0)}
-                                                disabled={analyzingId === r.id}
-                                                className="mt-3 text-[10px] font-black text-indigo-600 uppercase hover:underline flex items-center gap-1"
-                                            >
-                                                <Sparkles size={12} /> {analyzingId === r.id ? 'Procesando...' : 'Analizar esta incidencia'}
-                                            </button>
-                                        )}
                                     </div>
                                 ))}
                                 {stats.monthly.current.reports.length === 0 && (
@@ -238,7 +222,7 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
             <span className={`text-3xl font-black ${getColor(data.current.efficiency)}`}>
                 {data.current.efficiency.toFixed(1)}%
             </span>
-            <span className="ml-2 text-[10px] font-bold text-slate-300 uppercase tracking-tighter">vs {data.previous.efficiency.toFixed(1)}% prev.</span>
+            <span className="ml-2 text-[10px] font-bold text-slate-300 uppercase tracking-tighter">vs {data.previous.efficiency.toFixed(1)}%</span>
         </div>
         
         <div className="mt-3 text-[10px] font-bold text-slate-500 mb-3 flex justify-between uppercase">
