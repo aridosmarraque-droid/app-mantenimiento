@@ -415,6 +415,20 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     return mapLogFromDb(data);
 };
 
+export const updateOperationLog = async (id: string, updates: Partial<OperationLog>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload: any = {};
+    if (updates.hoursAtExecution !== undefined) payload.horas_registro = cleanNum(updates.hoursAtExecution);
+    if (updates.description !== undefined) payload.descripcion = updates.description;
+    if (updates.breakdownCause !== undefined) payload.causa_averia = updates.breakdownCause;
+    if (updates.breakdownSolution !== undefined) payload.solucion_averia = updates.breakdownSolution;
+    if (updates.materials !== undefined) payload.materiales = updates.materials;
+    if (updates.fuelLitres !== undefined) payload.litros_combustible = cleanNum(updates.fuelLitres);
+    
+    const { error } = await supabase.from('mant_registros').update(payload).eq('id', id);
+    if (error) throw error;
+};
+
 export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('mant_registros').select('*').eq('maquina_id', machineId);
@@ -489,6 +503,18 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
         console.error("ERROR GUARDANDO PARTE PERSONAL. Payload:", payload);
         throw error;
     }
+};
+
+export const updatePersonalReport = async (id: string, updates: Partial<PersonalReport>): Promise<void> => {
+    if (!isConfigured) return;
+    const payload: any = {};
+    if (updates.hours !== undefined) payload.horas = cleanNum(updates.hours);
+    if (updates.description !== undefined) payload.comentarios = updates.description;
+    if (updates.machineId !== undefined) payload.maquina_id = cleanUuid(updates.machineId);
+    if (updates.costCenterId !== undefined) payload.centro_id = cleanUuid(updates.costCenterId);
+    
+    const { error } = await supabase.from('partes_trabajo').update(payload).eq('id', id);
+    if (error) throw error;
 };
 
 export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
@@ -583,7 +609,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     const dateStr = toLocalDateString(date);
     const [ops, pers] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        // Join con centros para el parte directamente
+        // Join con centros para el parte directamente para asegurar que se lee el centro_id del parte
         supabase.from('partes_trabajo').select('*, mant_centros(nombre), mant_maquinas(nombre, centro_id)').eq('fecha', dateStr)
     ]);
     return { 
