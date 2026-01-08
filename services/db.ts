@@ -47,12 +47,12 @@ const fromDbOperationType = (type: string): OperationType => {
     return map[upperType] || (upperType as OperationType);
 };
 
-const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 const cleanUuid = (id: any): string | null => {
     if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
     const trimmed = id.trim();
-    return isUuid(trimmed) ? trimmed : null;
+    return trimmed.length > 0 ? trimmed : null;
 };
 
 const cleanNum = (val: any): number | null => {
@@ -425,6 +425,11 @@ export const updateOperationLog = async (id: string, updates: Partial<OperationL
     if (updates.materials !== undefined) payload.materiales = updates.materials;
     if (updates.fuelLitres !== undefined) payload.litros_combustible = cleanNum(updates.fuelLitres);
     
+    // Añadidos campos de niveles
+    if (updates.motorOil !== undefined) payload.aceite_motor_l = cleanNum(updates.motorOil);
+    if (updates.hydraulicOil !== undefined) payload.aceite_hidraulico_l = cleanNum(updates.hydraulicOil);
+    if (updates.coolant !== undefined) payload.refrigerante_l = cleanNum(updates.coolant);
+    
     const { error } = await supabase.from('mant_registros').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -513,6 +518,9 @@ export const updatePersonalReport = async (id: string, updates: Partial<Personal
     if (updates.machineId !== undefined) payload.maquina_id = cleanUuid(updates.machineId);
     if (updates.costCenterId !== undefined) payload.centro_id = cleanUuid(updates.costCenterId);
     
+    // Permitir editar la fecha del parte
+    if (updates.date !== undefined) payload.fecha = toLocalDateString(updates.date);
+    
     const { error } = await supabase.from('partes_trabajo').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -586,7 +594,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
 };
