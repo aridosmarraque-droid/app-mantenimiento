@@ -50,32 +50,34 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
 };
 
 /**
- * Calcula estadísticas en un rango, pero solo suma planificación hasta el limitDate (Corte relativo)
+ * Calcula estadísticas en un rango, pero filtra tanto producción como planificación por el limitDate
  */
 const calculateStats = async (start: Date, end: Date, label: string, limitDate: Date, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
-    // 1. Obtener partes reales en el rango solicitado
-    const reports = await getCPReportsByRange(start, end);
+    // 1. Obtener todos los partes del rango total
+    const allReportsInRange = await getCPReportsByRange(start, end);
     
-    // 2. Sumar horas reales (Solo de los partes que existen en el rango)
-    const totalActual = reports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
-
-    // 3. Calcular horas planificadas
-    let totalPlanned = 0;
-    
-    // El límite de planificación es el limitDate (normalizado a final del día)
+    // 2. Normalizar el punto de corte (final del día seleccionado)
     const cutoff = new Date(limitDate);
     cutoff.setHours(23, 59, 59, 999);
 
+    // 3. Filtrar los reportes para que solo cuenten los que están dentro del Period-to-Date
+    const filteredReports = allReportsInRange.filter(r => {
+        const reportDate = new Date(r.date);
+        return reportDate <= cutoff;
+    });
+    
+    // 4. Sumar horas reales SOLO de los reportes filtrados
+    const totalActual = filteredReports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
+
+    // 5. Calcular horas planificadas también respetando el cutoff
+    let totalPlanned = 0;
     const loopCurrent = new Date(start);
     loopCurrent.setHours(0,0,0,0);
     
-    const loopEnd = new Date(end);
-    loopEnd.setHours(23,59,59,999);
-
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
-    while (loopCurrent <= loopEnd) {
-        // IMPORTANTE: No sumar planificación de días que superen el punto de corte seleccionado
+    while (loopCurrent <= new Date(end)) {
+        // No sumar planificación si ya pasamos el día de corte
         if (loopCurrent > cutoff) {
             break;
         }
@@ -89,7 +91,7 @@ const calculateStats = async (start: Date, end: Date, label: string, limitDate: 
         loopCurrent.setDate(loopCurrent.getDate() + 1);
     }
 
-    // Etiquetas
+    // Etiquetas de visualización
     let dateLabel = "";
     if (dateFormat === 'day') {
         dateLabel = start.toLocaleDateString('es-ES'); 
@@ -105,10 +107,10 @@ const calculateStats = async (start: Date, end: Date, label: string, limitDate: 
     return {
         period: label,
         dateLabel,
-        totalActualHours: totalActual,
-        totalPlannedHours: totalPlanned,
+        totalActualHours: parseFloat(totalActual.toFixed(2)),
+        totalPlannedHours: parseFloat(totalPlanned.toFixed(2)),
         efficiency,
-        reports
+        reports: filteredReports
     };
 };
 
@@ -118,23 +120,22 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     monthly: ProductionComparison,
     yearly: ProductionComparison
 }> => {
-    // Normalizar baseDate a medianoche para cálculos
+    // Normalizar baseDate a medianoche local
     const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     
-    // 1. Daily (Corte en el mismo día seleccionado)
+    // 1. Daily
     const daily = await calculateStats(today, today, "Día Seleccionado", today, 'day');
 
-    // 2. Weekly (Corte en baseDate)
+    // 2. Weekly
     const startWeek = getMonday(today);
     const endWeek = new Date(startWeek);
-    endWeek.setDate(endWeek.getDate() + 6); // Domingo de esa semana
+    endWeek.setDate(endWeek.getDate() + 6); 
     
     const startLastWeek = new Date(startWeek);
     startLastWeek.setDate(startLastWeek.getDate() - 7);
     const endLastWeek = new Date(endWeek);
     endLastWeek.setDate(endLastWeek.getDate() - 7);
     
-    // El punto de corte para la semana anterior es la misma posición relativa (7 días atrás)
     const lastWeekLimit = new Date(today);
     lastWeekLimit.setDate(lastWeekLimit.getDate() - 7);
 
@@ -144,20 +145,19 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", lastWeekLimit, 'day');
     weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
 
-    // 3. Monthly (Corte en baseDate)
+    // 3. Monthly
     const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     const startLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const endLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
     
-    // Punto de corte para el mes anterior (mismo día del mes anterior)
     const lastMonthLimit = new Date(today.getFullYear(), today.getMonth() - 1, Math.min(today.getDate(), endLastMonth.getDate()));
 
     const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", today, 'month');
     const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastMonthLimit, 'month');
 
-    // 4. Yearly (Corte en baseDate)
+    // 4. Yearly
     const startYear = new Date(today.getFullYear(), 0, 1);
     const endYear = new Date(today.getFullYear(), 11, 31);
     
