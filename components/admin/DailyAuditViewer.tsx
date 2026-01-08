@@ -91,11 +91,11 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         } finally {
             setLoading(false);
         }
-    }, [date, loading]);
+    }, [date]);
 
     useEffect(() => {
         fetchAudit();
-    }, [date]);
+    }, [fetchAudit]);
 
     const handleSaveOpEdit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -240,7 +240,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
                                             <div>
                                                 <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
-                                                <p className="font-mono font-bold text-xs">{report.washingStart.toFixed(2)} → {report.washingEnd.toFixed(2)}</p>
+                                                <p className="font-mono font-bold text-xs">{(report.washingStart || 0).toFixed(2)} → {(report.washingEnd || 0).toFixed(2)}</p>
                                             </div>
                                             <div className="bg-amber-800 text-white px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-900">
                                                 {(report.washingEnd - report.washingStart).toFixed(2)}h
@@ -249,7 +249,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
                                             <div>
                                                 <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
-                                                <p className="font-mono font-bold text-xs">{report.triturationStart.toFixed(2)} → {report.triturationEnd.toFixed(2)}</p>
+                                                {/* Se asegura lectura de campos trituracion_inicio/fin corregidos */}
+                                                <p className="font-mono font-bold text-xs">{(report.triturationStart || 0).toFixed(2)} → {(report.triturationEnd || 0).toFixed(2)}</p>
                                             </div>
                                             <div className="bg-amber-800 text-white px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-900">
                                                 {(report.triturationEnd - report.triturationStart).toFixed(2)}h
@@ -306,6 +307,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-700 border border-slate-100 leading-relaxed">
                                             {op.type === 'LEVELS' && (
                                                 <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                                    {/* Corregida visualización para evitar undefinedL */}
                                                     {(op.motorOil ?? 0) > 0 && <span>Motor: <strong>{op.motorOil}L</strong></span>}
                                                     {(op.hydraulicOil ?? 0) > 0 && <span>Hidráulico: <strong>{op.hydraulicOil}L</strong></span>}
                                                     {(op.coolant ?? 0) > 0 && <span>Refrigerante: <strong>{op.coolant}L</strong></span>}
@@ -402,15 +404,15 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 <div className="grid grid-cols-1 gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
                                     <div>
                                         <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Aceite Motor (L)</label>
-                                        <input type="number" step="0.1" value={editingOp.motorOil || ''} onChange={e => setEditingOp({...editingOp, motorOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                        <input type="number" step="0.1" value={editingOp.motorOil ?? ''} onChange={e => setEditingOp({...editingOp, motorOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Aceite Hidráulico (L)</label>
-                                        <input type="number" step="0.1" value={editingOp.hydraulicOil || ''} onChange={e => setEditingOp({...editingOp, hydraulicOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                        <input type="number" step="0.1" value={editingOp.hydraulicOil ?? ''} onChange={e => setEditingOp({...editingOp, hydraulicOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Refrigerante (L)</label>
-                                        <input type="number" step="0.1" value={editingOp.coolant || ''} onChange={e => setEditingOp({...editingOp, coolant: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                        <input type="number" step="0.1" value={editingOp.coolant ?? ''} onChange={e => setEditingOp({...editingOp, coolant: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
                                     </div>
                                 </div>
                             )}
@@ -418,7 +420,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             {editingOp.type === 'REFUELING' && (
                                 <div className="p-3 bg-green-50 rounded-xl border border-green-100">
                                     <label className="block text-[10px] font-black text-green-600 uppercase mb-1">Litros Repostados</label>
-                                    <input type="number" step="0.1" value={editingOp.fuelLitres || ''} onChange={e => setEditingOp({...editingOp, fuelLitres: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-white font-bold text-lg" />
+                                    <input type="number" step="0.1" value={editingOp.fuelLitres ?? ''} onChange={e => setEditingOp({...editingOp, fuelLitres: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-white font-bold text-lg" />
                                 </div>
                             )}
 
