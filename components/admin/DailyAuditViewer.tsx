@@ -91,11 +91,11 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         } finally {
             setLoading(false);
         }
-    }, [date]);
+    }, [date, loading]);
 
     useEffect(() => {
         fetchAudit();
-    }, [fetchAudit]);
+    }, [date]);
 
     const handleSaveOpEdit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -114,7 +114,12 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         if (!editingPersonal) return;
         setSavingEdit(true);
         try {
-            await updatePersonalReport(editingPersonal.id, editingPersonal);
+            // Aseguramos que la fecha es un objeto Date
+            const reportToSave = {
+                ...editingPersonal,
+                date: new Date(editingPersonal.date)
+            };
+            await updatePersonalReport(reportToSave.id, reportToSave);
             setEditingPersonal(null);
             fetchAudit();
         } catch (e) { alert("Error al guardar"); }
@@ -126,7 +131,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         const m = machines.find(m => m.id === id);
         return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Planta";
     };
-    const getProviderName = (id?: string) => providers.find(p => p.id === id)?.name || "Propio";
 
     const typeConfig: any = {
         'LEVELS': { label: 'Niveles', icon: Droplet, color: 'text-blue-600 bg-blue-50' },
@@ -245,7 +249,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
                                             <div>
                                                 <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
-                                                {/* Corregida la lectura explícita de los campos trituracion_inicio/fin mapeados como triturationStart/End */}
                                                 <p className="font-mono font-bold text-xs">{report.triturationStart.toFixed(2)} → {report.triturationEnd.toFixed(2)}</p>
                                             </div>
                                             <div className="bg-amber-800 text-white px-3 py-1 rounded-lg font-black text-xs shadow-sm border border-amber-900">
@@ -301,7 +304,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             </div>
                                         </div>
                                         <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-700 border border-slate-100 leading-relaxed">
-                                            {op.type === 'LEVELS' && `Revisión Niveles: Aceite Motor (${op.motorOil}L), Hidráulico (${op.hydraulicOil}L), Refrigerante (${op.coolant}L)`}
+                                            {op.type === 'LEVELS' && (
+                                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                                    {(op.motorOil ?? 0) > 0 && <span>Motor: <strong>{op.motorOil}L</strong></span>}
+                                                    {(op.hydraulicOil ?? 0) > 0 && <span>Hidráulico: <strong>{op.hydraulicOil}L</strong></span>}
+                                                    {(op.coolant ?? 0) > 0 && <span>Refrigerante: <strong>{op.coolant}L</strong></span>}
+                                                    {(!op.motorOil && !op.hydraulicOil && !op.coolant) && "Revisión niveles correcta (sin consumos)."}
+                                                </div>
+                                            )}
                                             {op.type === 'BREAKDOWN' && (
                                                 <>
                                                     <div className="font-black text-red-600 uppercase text-[9px] mb-1 flex items-center gap-1"><AlertCircle size={10}/> Avería Detectada</div>
@@ -377,7 +387,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             <h4 className="font-bold flex items-center gap-2"><Wrench size={18}/> Editar Registro Técnico</h4>
                             <button onClick={() => setEditingOp(null)}><X size={20}/></button>
                         </div>
-                        <form onSubmit={handleSaveOpEdit} className="p-6 space-y-4">
+                        <form onSubmit={handleSaveOpEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Registro</label>
                                 <input 
@@ -388,48 +398,47 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 />
                             </div>
 
-                            {editingOp.type === 'BREAKDOWN' ? (
-                                <>
+                            {editingOp.type === 'LEVELS' && (
+                                <div className="grid grid-cols-1 gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Causa de la Avería</label>
-                                        <textarea 
-                                            rows={2}
-                                            value={editingOp.breakdownCause || ''}
-                                            onChange={e => setEditingOp({...editingOp, breakdownCause: e.target.value})}
-                                            className="w-full p-3 border rounded-xl text-sm"
-                                        />
+                                        <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Aceite Motor (L)</label>
+                                        <input type="number" step="0.1" value={editingOp.motorOil || ''} onChange={e => setEditingOp({...editingOp, motorOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Solución Adoptada</label>
-                                        <textarea 
-                                            rows={2}
-                                            value={editingOp.breakdownSolution || ''}
-                                            onChange={e => setEditingOp({...editingOp, breakdownSolution: e.target.value})}
-                                            className="w-full p-3 border rounded-xl text-sm"
-                                        />
+                                        <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Aceite Hidráulico (L)</label>
+                                        <input type="number" step="0.1" value={editingOp.hydraulicOil || ''} onChange={e => setEditingOp({...editingOp, hydraulicOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
                                     </div>
-                                </>
-                            ) : (
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Notas</label>
-                                    <textarea 
-                                        rows={3}
-                                        value={editingOp.description || ''}
-                                        onChange={e => setEditingOp({...editingOp, description: e.target.value})}
-                                        className="w-full p-3 border rounded-xl text-sm"
-                                    />
+                                    <div>
+                                        <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Refrigerante (L)</label>
+                                        <input type="number" step="0.1" value={editingOp.coolant || ''} onChange={e => setEditingOp({...editingOp, coolant: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                    </div>
                                 </div>
                             )}
 
-                            {editingOp.type === 'MAINTENANCE' && (
+                            {editingOp.type === 'REFUELING' && (
+                                <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+                                    <label className="block text-[10px] font-black text-green-600 uppercase mb-1">Litros Repostados</label>
+                                    <input type="number" step="0.1" value={editingOp.fuelLitres || ''} onChange={e => setEditingOp({...editingOp, fuelLitres: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-white font-bold text-lg" />
+                                </div>
+                            )}
+
+                            {editingOp.type === 'BREAKDOWN' && (
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Causa de la Avería</label>
+                                        <textarea rows={2} value={editingOp.breakdownCause || ''} onChange={e => setEditingOp({...editingOp, breakdownCause: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Solución Adoptada</label>
+                                        <textarea rows={2} value={editingOp.breakdownSolution || ''} onChange={e => setEditingOp({...editingOp, breakdownSolution: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                </>
+                            )}
+
+                            {(editingOp.type === 'MAINTENANCE' || editingOp.type === 'SCHEDULED') && (
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Materiales Usados</label>
-                                    <input 
-                                        type="text"
-                                        value={editingOp.materials || ''}
-                                        onChange={e => setEditingOp({...editingOp, materials: e.target.value})}
-                                        className="w-full p-3 border rounded-xl text-sm"
-                                    />
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Notas</label>
+                                    <textarea rows={3} value={editingOp.description || ''} onChange={e => setEditingOp({...editingOp, description: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
                                 </div>
                             )}
 
@@ -452,6 +461,16 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             <button onClick={() => setEditingPersonal(null)}><X size={20}/></button>
                         </div>
                         <form onSubmit={handleSavePersonalEdit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha del Parte</label>
+                                <input 
+                                    type="date" 
+                                    value={editingPersonal.date instanceof Date ? editingPersonal.date.toISOString().split('T')[0] : new Date(editingPersonal.date).toISOString().split('T')[0]}
+                                    onChange={e => setEditingPersonal({...editingPersonal, date: new Date(e.target.value)})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-amber-50 border-amber-200"
+                                />
+                                <p className="text-[9px] text-amber-600 mt-1 font-bold uppercase tracking-tighter">* Utilice esto solo para corregir errores de fecha.</p>
+                            </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Jornada</label>
                                 <input 
