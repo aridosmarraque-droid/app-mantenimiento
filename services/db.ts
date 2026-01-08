@@ -463,7 +463,7 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         id: r.id, 
         date: new Date(r.fecha), 
         workerId: r.trabajador_id, 
-        hours: Number(r.horas), 
+        hours: Number(r.horas || 0), // IMPORTANTE: Usamos 'horas' de la DB
         machineId: r.maquina_id, 
         machineName: r.mant_maquinas?.nombre 
     }));
@@ -471,14 +471,22 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('partes_trabajo').insert({ 
+    
+    // Mapeo EXPLÍCITO de claves para Supabase (horas -> horas)
+    const payload = { 
         fecha: toLocalDateString(report.date), 
         trabajador_id: cleanUuid(report.workerId), 
-        hours: cleanNum(report.hours), 
+        horas: cleanNum(report.hours), // Enviamos 'horas' explícitamente
         maquina_id: cleanUuid(report.machineId), 
         comentarios: report.description || null
-    });
-    if (error) throw error;
+    };
+
+    const { error } = await supabase.from('partes_trabajo').insert(payload);
+    
+    if (error) {
+        console.error("ERROR GUARDANDO PARTE PERSONAL. Payload:", payload);
+        throw error;
+    }
 };
 
 export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
@@ -581,7 +589,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             id: r.id, 
             date: new Date(r.fecha), 
             workerId: r.trabajador_id, 
-            hours: Number(r.horas), 
+            hours: Number(r.horas || 0), 
             machineId: r.maquina_id, 
             machineName: r.mant_maquinas?.nombre,
             costCenterId: r.mant_maquinas?.centro_id,
