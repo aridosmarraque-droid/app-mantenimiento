@@ -28,7 +28,7 @@ const getMonday = (d: Date) => {
     return monday;
 };
 
-// Formato local YYYY-MM-DD para plan
+// Formato local YYYY-MM-DD para comparaciones seguras
 const toLocalISO = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -37,7 +37,7 @@ const toLocalISO = (date: Date): string => {
 };
 
 const getHoursFromPlan = (plan: CPWeeklyPlan | null | undefined, date: Date): number => {
-    if (!plan) return 8; // Default to 8 if no plan
+    if (!plan) return 8; // Default a 8 horas si no hay plan definido
     const day = date.getDay(); // 0 Sun, 1 Mon...
     const h = (() => {
         switch (day) {
@@ -46,14 +46,14 @@ const getHoursFromPlan = (plan: CPWeeklyPlan | null | undefined, date: Date): nu
             case 3: return plan.hoursWed;
             case 4: return plan.hoursThu;
             case 5: return plan.hoursFri;
-            default: return 0; // Weekend usually 0
+            default: return 0; // Fines de semana 0 por defecto
         }
     })();
-    return Number(h || 0); // Asegurar que sea número y no null/undefined
+    return Number(h || 0);
 };
 
 /**
- * Calcula estadísticas en un rango de forma masiva para evitar sobrecarga de peticiones
+ * Calcula estadísticas en un rango de forma masiva
  */
 const calculateStats = async (
     start: Date, 
@@ -63,30 +63,32 @@ const calculateStats = async (
     allPlansInRange: CPWeeklyPlan[],
     dateFormat: 'day' | 'month' | 'year' = 'day'
 ): Promise<ProductionStat> => {
-    // 1. Obtener reportes
+    // 1. Obtener reportes del rango
     const allReportsInRange = await getCPReportsByRange(start, end);
     
-    // 2. Normalizar el punto de corte (final del día seleccionado)
-    const cutoff = new Date(limitDate);
-    cutoff.setHours(23, 59, 59, 999);
+    // 2. Normalizar el punto de corte a cadena para comparación segura
+    const cutoffStr = toLocalISO(limitDate);
 
-    // 3. Filtrar reportes
+    // 3. Filtrar reportes (Comparación por string YYYY-MM-DD para evitar desfases UTC)
     const filteredReports = allReportsInRange.filter(r => {
-        const reportDate = new Date(r.date);
-        return reportDate <= cutoff;
+        const reportDateStr = toLocalISO(new Date(r.date));
+        return reportDateStr <= cutoffStr;
     });
     
-    const totalActual = filteredReports.reduce((acc, r) => acc + (Number(r.millsEnd || 0) - Number(r.millsStart || 0)), 0);
+    // Sumar producción de molienda (indicador principal de eficiencia de planta)
+    const totalActual = filteredReports.reduce((acc, r) => {
+        const prod = Number(r.millsEnd || 0) - Number(r.millsStart || 0);
+        return acc + (prod > 0 ? prod : 0);
+    }, 0);
 
-    // 4. Calcular horas planificadas localmente (sin más peticiones a DB)
+    // 4. Calcular horas planificadas acumuladas hasta la fecha límite
     let totalPlanned = 0;
     const loopCurrent = new Date(start);
-    loopCurrent.setHours(12,0,0,0); // Usar mediodía para evitar problemas de DST
+    loopCurrent.setHours(12, 0, 0, 0); // Evitar problemas de salto de día por DST
     
-    const stopAt = new Date(end < cutoff ? end : cutoff);
-    stopAt.setHours(23, 59, 59, 999);
+    const stopAtStr = toLocalISO(end < limitDate ? end : limitDate);
 
-    while (loopCurrent <= stopAt) {
+    while (toLocalISO(loopCurrent) <= stopAtStr) {
         const mondayStr = toLocalISO(getMonday(loopCurrent));
         const plan = allPlansInRange.find(p => p.mondayDate === mondayStr);
         totalPlanned += getHoursFromPlan(plan, loopCurrent);
@@ -122,20 +124,18 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     monthly: ProductionComparison,
     yearly: ProductionComparison
 }> => {
+    // Normalizar baseDate a solo fecha
     const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
     
-    // RANGOS PARA PRE-CARGA MASIVA DE PLANES
-    // El rango máximo que necesitamos es desde el inicio del año pasado hasta el fin del año actual
+    // Cargar todos los planes desde el año pasado hasta el fin del actual
     const fullRangeStart = new Date(today.getFullYear() - 1, 0, 1);
     const fullRangeEnd = new Date(today.getFullYear(), 11, 31);
-    
-    // Pre-cargar todos los planes necesarios en una sola consulta
     const allPlans = await getCPWeeklyPlansByRange(toLocalISO(fullRangeStart), toLocalISO(fullRangeEnd));
 
-    // 1. Daily
+    // 1. Estadísticas Diarias
     const daily = await calculateStats(today, today, "Día Seleccionado", today, allPlans, 'day');
 
-    // 2. Weekly
+    // 2. Comparativa Semanal (Semana actual vs Semana anterior hasta el mismo día relativo)
     const startWeek = getMonday(today);
     const endWeek = new Date(startWeek);
     endWeek.setDate(endWeek.getDate() + 6); 
@@ -149,12 +149,9 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     lastWeekLimit.setDate(lastWeekLimit.getDate() - 7);
 
     const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Seleccionada", today, allPlans, 'day');
-    weeklyCurr.dateLabel = `Semana ${startWeek.getDate()}/${startWeek.getMonth()+1}`;
-
     const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", lastWeekLimit, allPlans, 'day');
-    weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
 
-    // 3. Monthly
+    // 3. Comparativa Mensual
     const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
@@ -166,7 +163,7 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
     const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", today, allPlans, 'month');
     const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastMonthLimit, allPlans, 'month');
 
-    // 4. Yearly
+    // 4. Comparativa Anual
     const startYear = new Date(today.getFullYear(), 0, 1);
     const endYear = new Date(today.getFullYear(), 11, 31);
     
@@ -182,7 +179,7 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
         current: curr,
         previous: prev,
         trend: curr.efficiency > prev.efficiency ? 'up' : curr.efficiency < prev.efficiency ? 'down' : 'equal',
-        diff: parseFloat((curr.efficiency - prev.efficiency).toFixed(1))
+        diff: parseFloat((curr.efficiency - (prev.efficiency || 0)).toFixed(1))
     });
 
     return {
