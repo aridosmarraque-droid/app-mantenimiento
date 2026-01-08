@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { getWorkers, createWorker, updateWorker } from '../../services/db';
 import { Worker } from '../../types';
-import { UserPlus, Edit2, Save, ArrowLeft, Loader2, UserCircle, Phone, CreditCard, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { UserPlus, Edit2, Save, ArrowLeft, Loader2, UserCircle, Phone, CreditCard, ToggleLeft, ToggleRight, X, Clock, ClipboardCheck } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -20,6 +19,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
     const [phone, setPhone] = useState('');
     const [role, setRole] = useState<'worker' | 'admin' | 'cp' | 'cr'>('worker');
     const [active, setActive] = useState(true);
+    const [scheduledHours, setScheduledHours] = useState<number>(10);
+    const [requiresWorkReport, setRequiresWorkReport] = useState(true);
 
     useEffect(() => {
         loadWorkers();
@@ -44,6 +45,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         setPhone('');
         setRole('worker');
         setActive(true);
+        setScheduledHours(10);
+        setRequiresWorkReport(true);
     };
 
     const handleEdit = (w: Worker) => {
@@ -51,9 +54,10 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         setName(w.name);
         setDni(w.dni);
         setPhone(w.phone || '');
-        // Forzamos el cast para asegurar que el select reconozca el valor
         setRole(w.role as any);
         setActive(w.active ?? true);
+        setScheduledHours(w.scheduledHours || 10);
+        setRequiresWorkReport(w.requiresWorkReport !== undefined ? w.requiresWorkReport : true);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -64,8 +68,10 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                 name,
                 dni,
                 phone,
-                role, // Usamos el estado local 'role' que es 'worker' | 'admin' | 'cp' | 'cr'
+                role,
                 active,
+                scheduledHours,
+                requiresWorkReport,
                 positionIds: []
             };
 
@@ -132,12 +138,30 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                 <option value="admin">Administrador (Acceso Total)</option>
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                                <Clock size={12}/> Horas Jornada Programadas
+                            </label>
+                            <input 
+                                type="number" 
+                                required 
+                                min="1" 
+                                max="24"
+                                className="w-full p-2 border rounded shadow-sm font-bold" 
+                                value={scheduledHours} 
+                                onChange={e => setScheduledHours(Number(e.target.value))} 
+                            />
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 mt-2">
                         <button type="button" onClick={() => setActive(!active)} className="flex items-center gap-2 text-sm font-bold text-slate-600">
                             {active ? <ToggleRight className="text-green-600 w-8 h-8" /> : <ToggleLeft className="text-slate-400 w-8 h-8" />}
                             Trabajador en Activo
+                        </button>
+                        <button type="button" onClick={() => setRequiresWorkReport(!requiresWorkReport)} className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                            {requiresWorkReport ? <ToggleRight className="text-blue-600 w-8 h-8" /> : <ToggleLeft className="text-slate-400 w-8 h-8" />}
+                            Requiere Parte de Trabajo Diario
                         </button>
                     </div>
 
@@ -173,15 +197,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                     </div>
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
                                         <span className="text-xs text-slate-500 flex items-center gap-1"><CreditCard size={12}/> {w.dni}</span>
-                                        {w.phone && <span className="text-xs text-slate-500 flex items-center gap-1"><Phone size={12}/> {w.phone}</span>}
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                                            w.role === 'admin' ? 'bg-red-600 text-white' : 
-                                            w.role === 'cp' ? 'bg-amber-500 text-white' : 
-                                            w.role === 'cr' ? 'bg-teal-600 text-white' : 
-                                            'bg-slate-500 text-white'
-                                        }`}>
-                                            {w.role}
-                                        </span>
+                                        <span className="text-xs text-slate-500 flex items-center gap-1"><Clock size={12}/> {w.scheduledHours}h/día</span>
+                                        {w.requiresWorkReport && <span className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1"><ClipboardCheck size={10}/> Parte Req.</span>}
                                     </div>
                                 </div>
                             </div>
