@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -14,9 +13,10 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
   const [hours, setHours] = useState<number | ''>(machine.currentHours || '');
   const [providerId, setProviderId] = useState('');
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
-  const [type, setType] = useState<string>('Engrase General');
   
-  // For 'Other'
+  // Usamos claves internas para evitar errores de restricción en la DB
+  const [typeKey, setTypeKey] = useState<string>('ENGRASE');
+  
   const [description, setDescription] = useState('');
   const [materials, setMaterials] = useState('');
 
@@ -26,12 +26,20 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Mapeo de etiquetas para la descripción
+    const labels: Record<string, string> = {
+        'LIMPIEZA': 'Limpieza / Soplado Filtros',
+        'ENGRASE': 'Engrase General',
+        'OTROS': 'Otros Mantenimientos'
+    };
+
     onSubmit({
       hoursAtExecution: Number(hours),
       repairerId: providerId,
-      maintenanceType: type,
-      description: type === 'Otros Mantenimientos' ? description : undefined,
-      materials: type === 'Otros Mantenimientos' ? materials : undefined,
+      maintenanceType: typeKey, // Enviamos la clave (ENGRASE, LIMPIEZA, etc.)
+      description: typeKey === 'OTROS' ? description : labels[typeKey],
+      materials: materials || undefined,
     });
   };
 
@@ -71,33 +79,35 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
       <div className="space-y-2">
         <label className="block text-sm font-medium text-slate-700">Tipo de trabajo *</label>
         <div className="flex flex-col gap-2">
-            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'Limpieza / Soplado Filtros' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
-                <input type="radio" name="mType" className="mr-3" checked={type === 'Limpieza / Soplado Filtros'} onChange={() => setType('Limpieza / Soplado Filtros')} />
+            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${typeKey === 'LIMPIEZA' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
+                <input type="radio" name="mType" className="mr-3" checked={typeKey === 'LIMPIEZA'} onChange={() => setTypeKey('LIMPIEZA')} />
                 Limpieza / Soplado Filtros
             </label>
-            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'Engrase General' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
-                <input type="radio" name="mType" className="mr-3" checked={type === 'Engrase General'} onChange={() => setType('Engrase General')} />
+            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${typeKey === 'ENGRASE' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
+                <input type="radio" name="mType" className="mr-3" checked={typeKey === 'ENGRASE'} onChange={() => setTypeKey('ENGRASE')} />
                 Engrase General
             </label>
-            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${type === 'Otros Mantenimientos' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
-                <input type="radio" name="mType" className="mr-3" checked={type === 'Otros Mantenimientos'} onChange={() => setType('Otros Mantenimientos')} />
+            <label className={`flex items-center p-3 border rounded-lg cursor-pointer ${typeKey === 'OTROS' ? 'bg-amber-100 border-amber-500' : 'bg-slate-50'}`}>
+                <input type="radio" name="mType" className="mr-3" checked={typeKey === 'OTROS'} onChange={() => setTypeKey('OTROS')} />
                 Otros Mantenimientos
             </label>
         </div>
       </div>
 
-      {type === 'Otros Mantenimientos' && (
-        <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200 mt-2">
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Descripción del Mantenimiento *</label>
-                <textarea
-                    required
-                    className="w-full p-2 border rounded"
-                    rows={2}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                />
-            </div>
+      <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200 mt-2">
+            {typeKey === 'OTROS' && (
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Descripción del Mantenimiento *</label>
+                    <textarea
+                        required
+                        className="w-full p-2 border rounded"
+                        rows={2}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Describa el trabajo realizado..."
+                    />
+                </div>
+            )}
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Materiales Usados</label>
                 <textarea
@@ -105,10 +115,10 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
                     rows={2}
                     value={materials}
                     onChange={(e) => setMaterials(e.target.value)}
+                    placeholder="Filtros, grasas, valvulina..."
                 />
             </div>
-        </div>
-      )}
+      </div>
 
       <div className="flex gap-3 mt-6">
         <button type="button" onClick={onCancel} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Cancelar</button>
