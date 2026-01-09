@@ -64,7 +64,7 @@ const cleanNum = (val: any): number | null => {
 };
 
 // ============================================================================
-// MAPPERS MEJORADOS
+// MAPPERS MEJORADOS CON LÓGICA DE MÚLTIPLOS
 // ============================================================================
 
 const mapWorker = (w: any): Worker => ({
@@ -81,18 +81,31 @@ const mapWorker = (w: any): Worker => ({
 
 const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDefinition => {
     const lastHours = Number(d.ultimas_horas_realizadas || 0);
-    const interval = Number(d.intervalo_horas || 0);
-    const warning = Number(d.horas_preaviso || 0);
+    const interval = Number(d.intervalo_horas || 500);
+    const warning = Number(d.horas_preaviso || 50);
     
     let remainingHours = 0;
     let isPending = !!d.pendiente;
+    let nextTarget = 0;
 
     if (d.tipo_programacion === 'HOURS') {
-        // Lógica corregida: El siguiente vencimiento es Siempre (Ultima ejecución + Intervalo)
-        const nextDue = lastHours + interval;
-        remainingHours = nextDue - machineCurrentHours;
+        /**
+         * LÓGICA DE MÚLTIPLOS:
+         * El próximo hito es el múltiplo de 'interval' inmediatamente superior a 'lastHours'.
+         * Si lastHours es 0 (nunca hecho), buscamos el primer múltiplo por delante de las horas actuales.
+         */
+        if (lastHours === 0) {
+            nextTarget = Math.ceil((machineCurrentHours + 1) / interval) * interval;
+        } else {
+            // Añadimos un pequeño margen (10% del intervalo) para permitir mantenimientos preventivos 
+            // que se hagan un poco antes sin que el sistema crea que aún toca el mismo múltiplo.
+            const margin = interval * 0.1;
+            nextTarget = Math.floor((lastHours + margin) / interval) * interval + interval;
+        }
+
+        remainingHours = nextTarget - machineCurrentHours;
         
-        // Si faltan menos de las horas de preaviso, ya se considera una acción necesaria
+        // Estado: Pendiente si estamos en zona de preaviso o vencido
         if (remainingHours <= warning) {
             isPending = true;
         }
@@ -115,7 +128,7 @@ const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDef
         intervalMonths: Number(d.intervalo_meses || 0),
         nextDate: d.proxima_fecha ? new Date(d.proxima_fecha) : undefined,
         lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
-        tasks: d.tareas || '',
+        tasks: d.tasks || d.tareas || '',
         pending: isPending,
     };
 };
@@ -372,16 +385,22 @@ export const getMachineDependencyCount = async (id: string): Promise<{ logs: num
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
     
-    // CORRECCIÓN: Al añadir un mantenimiento nuevo a una máquina vieja, las "últimas horas" deben ser las actuales
-    // de lo contrario marcará vencido de inmediato.
-    const lastHours = def.lastMaintenanceHours ?? currentMachineHours;
+    /**
+     * CORRECCIÓN DE ALTA: 
+     * Al añadir un mantenimiento nuevo a una máquina vieja, las "últimas horas realizadas"
+     * se inicializan al múltiplo anterior más cercano a las horas actuales.
+     * Ej: Máquina 10.079h, Intervalo 500. El último "teórico" fue a las 10.000h.
+     */
+    const interval = def.intervalHours || 500;
+    const lastTheoricalMultiple = Math.floor(currentMachineHours / interval) * interval;
+    const lastHours = def.lastMaintenanceHours ?? lastTheoricalMultiple;
 
     const payload = {
         maquina_id: cleanUuid(def.machineId),
         nombre: def.name,
         tipo_programacion: def.maintenanceType,
-        intervalo_horas: def.intervalHours,
-        horas_preaviso: def.warningHours,
+        intervalo_horas: interval,
+        horas_preaviso: def.warningHours || 50,
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
         tareas: def.tasks,
@@ -448,14 +467,12 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
 
     if (error) {
-        console.error("DEBUG - Payload enviado:", payload);
-        console.error("DEBUG - Error de DB:", error);
         throw new Error(`Error de Base de Datos: ${error.message}`);
     }
 
     const h = cleanNum(log.hoursAtExecution);
     if (h !== null) {
-        // Actualizar contador de máquina
+        // Actualizar contador de máquina si es superior al actual
         await supabase.from('mant_maquinas')
             .update({ horas_actuales: h })
             .eq('id', maquinaId)
@@ -544,7 +561,7 @@ export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine
     for (const def of mappedMachine.maintenanceDefs) {
         if (def.remainingHours !== undefined) {
             if (def.remainingHours <= 0) {
-                // Notificar vencido
+                // Notificar vencido (Recordatorio recurrente si se desea, o una sola vez)
                 await notifyMaintenanceAlert(mappedMachine, def, responsible, 'OVERDUE');
             } else if (def.remainingHours <= (def.warningHours || 0)) {
                 // Notificar preaviso
@@ -691,7 +708,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
 };
