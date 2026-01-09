@@ -62,20 +62,8 @@ const cleanNum = (val: any): number | null => {
 };
 
 // ============================================================================
-// MAPPERS CON LÓGICA DE MÚLTIPLOS MEJORADA
+// LÓGICA DE CÁLCULO POR MÚLTIPLOS (GMAO)
 // ============================================================================
-
-const mapWorker = (w: any): Worker => ({
-    id: w.id,
-    name: w.nombre || 'Sin nombre',
-    dni: w.dni || '',
-    phone: w.telefono || '',
-    positionIds: [], 
-    role: w.rol || 'worker',
-    active: w.activo !== undefined ? w.activo : true,
-    scheduledHours: Number(w.horas_programadas || 10),
-    requiresWorkReport: w.requiere_parte !== undefined ? w.requiere_parte : true
-});
 
 const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDefinition => {
     const lastHours = Number(d.ultimas_horas_realizadas || 0);
@@ -87,15 +75,26 @@ const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDef
     let nextTarget = 0;
 
     if (d.tipo_programacion === 'HOURS') {
+        /**
+         * LÓGICA DE HITOS FIJOS:
+         * Si lastHours es 14000 e intervalo 500, el próximo hito es 14500.
+         * Si la máquina tiene 14560, faltan -60h (VENCIDO).
+         */
+        nextTarget = lastHours + interval;
+        
+        // Caso especial: Máquina que acaba de ser dada de alta y no tiene historial.
+        // Buscamos el primer múltiplo que esté por delante de sus horas actuales.
         if (lastHours === 0) {
             nextTarget = Math.ceil((machineCurrentHours + 1) / interval) * interval;
-        } else {
-            // Margen del 10% para evitar que un mantenimiento hecho un poco antes se detecte como el mismo ciclo
-            const margin = interval * 0.1;
-            nextTarget = Math.floor((lastHours + margin) / interval) * interval + interval;
         }
+
         remainingHours = nextTarget - machineCurrentHours;
-        if (remainingHours <= warning) isPending = true;
+        
+        // Se considera pendiente si estamos en zona de preaviso (ej. faltan 40h y el preaviso es 50h)
+        // o si ya se ha pasado del hito (remaining <= 0).
+        if (remainingHours <= warning) {
+            isPending = true;
+        }
     } else if (d.tipo_programacion === 'DATE' && d.proxima_fecha) {
         const nextDate = new Date(d.proxima_fecha);
         const today = new Date();
@@ -120,6 +119,21 @@ const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDef
     };
 };
 
+/**
+ * Mapea los datos del trabajador de la base de datos al tipo Worker de la aplicación.
+ */
+const mapWorker = (w: any): Worker => ({
+    id: w.id,
+    name: w.nombre,
+    dni: w.dni,
+    phone: w.telefono || '',
+    positionIds: [],
+    role: w.rol,
+    active: w.activo !== undefined ? w.activo : true,
+    scheduledHours: cleanNum(w.horas_programadas) || undefined,
+    requiresWorkReport: w.requiere_parte !== undefined ? w.requiere_parte : true
+});
+
 const mapMachine = (m: any): Machine => {
     const rawDefs = m.mant_mantenimientos_def || []; 
     const currentHours = Number(m.horas_actuales || 0);
@@ -136,7 +150,7 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: rawDefs.map((d: any) => calculateDefStatus(d, currentHours)),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.active !== undefined ? m.activo : true,
+        active: m.activo !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -155,7 +169,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => ({
   breakdownSolution: dbLog.solucion_averia,
   repairerId: dbLog.reparador_id,
   maintenanceType: dbLog.tipo_mantenimiento,
-  description: dbLog.descripcion, 
+  description: dbLog.description, 
   materials: dbLog.materiales,
   maintenanceDefId: dbLog.mantenimiento_def_id,
   fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -169,6 +183,7 @@ export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> 
     if (!isConfigured) return mock.getWorkers();
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
     if (error) return [];
+    // mapWorker was previously missing, causing the build error.
     const workers = (data || []).map(mapWorker).sort((a, b) => a.name.localeCompare(b.name));
     return onlyActive ? workers.filter(w => w.active !== false) : workers;
 };
@@ -358,8 +373,11 @@ export const getMachineDependencyCount = async (id: string): Promise<{ logs: num
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
     const interval = def.intervalHours || 500;
+    
+    // Al añadir un mantenimiento nuevo, buscamos el hito teórico anterior más cercano para empezar el ciclo limpio.
     const lastTheoricalMultiple = Math.floor(currentMachineHours / interval) * interval;
     const lastHours = def.lastMaintenanceHours ?? lastTheoricalMultiple;
+
     const payload = {
         maquina_id: cleanUuid(def.machineId),
         nombre: def.name,
@@ -430,17 +448,32 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     const h = cleanNum(log.hoursAtExecution);
     if (h !== null) {
+        // Actualizar el contador de la máquina si es mayor al actual
         await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
 
-        // LÓGICA DE CIERRE DE CICLO PROGRAMADO:
+        // LÓGICA CRÍTICA DE CIERRE DE CICLO PROGRAMADO:
         if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
-            // 1. Obtener intervalo para calcular el múltiplo objetivo
-            const { data: defData } = await supabase.from('mant_mantenimientos_def').select('intervalo_horas').eq('id', log.maintenanceDefId).single();
-            const interval = defData?.intervalo_horas || 500;
+            /**
+             * El usuario solicita que se registre como 'ultimas_horas_realizadas' 
+             * el hito programado y NO las reales del marcador.
+             * Ej: Si tocaba a las 14500 y se hace a las 14560, guardamos 14500.
+             */
+            const { data: defData } = await supabase.from('mant_mantenimientos_def')
+                .select('intervalo_horas, ultimas_horas_realizadas')
+                .eq('id', log.maintenanceDefId).single();
             
-            // 2. Calcular las "horas programadas" que se están cerrando (el múltiplo objetivo)
-            // Esto asegura que si se hizo a las 14560, se guarde 14500 como base del siguiente ciclo.
-            const targetHoursBaseline = Math.round(h / interval) * interval;
+            const interval = defData?.intervalo_horas || 500;
+            const lastPerformed = defData?.ultimas_horas_realizadas || 0;
+
+            // El nuevo hito realizado es el siguiente múltiplo teórico que estábamos atendiendo.
+            // Si last=14000 e interval=500, el que acabamos de hacer es el de las 14500.
+            let targetHoursBaseline = lastPerformed + interval;
+            
+            // Seguridad: Si por algún motivo la máquina está MUY por delante (se saltaron varios),
+            // redondeamos al múltiplo más cercano a las horas de ejecución para no dejarla "vencida" de nuevo.
+            if (h > (targetHoursBaseline + interval)) {
+                targetHoursBaseline = Math.floor(h / interval) * interval;
+            }
 
             await supabase.from('mant_mantenimientos_def')
                 .update({ 
@@ -514,8 +547,10 @@ export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine
     for (const def of mappedMachine.maintenanceDefs) {
         if (def.remainingHours !== undefined) {
             if (def.remainingHours <= 0) {
+                // Notificación de mantenimiento VENCIDO
                 await notifyMaintenanceAlert(mappedMachine, def, responsible, 'OVERDUE');
             } else if (def.remainingHours <= (def.warningHours || 0)) {
+                // Notificación de PREAVISO
                 await notifyMaintenanceAlert(mappedMachine, def, responsible, 'WARNING');
             }
         }
@@ -650,7 +685,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituracion_inicio || 0), 
+        triturationStart: Number(r.trituration_inicio || 0), 
         triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
