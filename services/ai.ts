@@ -6,18 +6,7 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // Obtener la clave de forma segura sin disparar errores de AST en Rollup/Vite
-    const getApiKey = () => {
-        try {
-            return (process as any).env.API_KEY;
-        } catch (e) {
-            return null;
-        }
-    };
-
-    const apiKey = getApiKey();
-
-    if (!apiKey) {
+    if (!process.env.API_KEY) {
         console.warn("⚠️ API Key no encontrada.");
         return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
                "No se ha detectado la API Key de Google Gemini en el entorno.\n\n" +
@@ -27,7 +16,7 @@ export const analyzeProductionReport = async (
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const prompt = `
             Actúa como un Gerente de Mantenimiento y Producción Industrial senior con 20 años de experiencia en plantas de áridos y canteras.
