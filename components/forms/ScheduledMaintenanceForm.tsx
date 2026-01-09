@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -40,6 +41,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
           hoursAtExecution: Number(hours),
           repairerId: providerId,
           maintenanceDefId: selectedDefId,
+          // 'PROGRAMADO' suele ser el valor aceptado por el CHECK constraint para mantenimientos planificados.
           maintenanceType: 'PROGRAMADO', 
           description: def?.name
       });
