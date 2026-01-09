@@ -566,7 +566,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingStart: Number(data.lavado_inicio || 0), 
         washingEnd: Number(data.lavado_fin || 0), 
         triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituracion_fin || 0), 
+        triturationEnd: Number(data.trituration_fin || 0), 
         comments: data.comentarios 
     } : null;
 };
@@ -578,8 +578,8 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
         trabajador_id: cleanUuid(report.workerId),
         lavado_inicio: cleanNum(report.washingStart),
         lavado_fin: cleanNum(report.washingEnd),
-        trituracion_inicio: cleanNum(report.triturationStart),
-        trituracion_fin: cleanNum(report.triturationEnd),
+        trituration_inicio: cleanNum(report.triturationStart),
+        trituration_fin: cleanNum(report.triturationEnd),
         comentarios: report.comments || null
     });
     if (error) throw error;
@@ -600,8 +600,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationStart: Number(r.trituration_inicio || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
 };
