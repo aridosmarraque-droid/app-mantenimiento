@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
     getDailyAuditLogs, 
     getWorkers, 
@@ -14,7 +14,7 @@ import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvi
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, 
-    Mountain, Waves, Droplets, Factory, Edit2, Save, X, CheckCircle2, XCircle, Clock
+    Mountain, Waves, Droplets, Factory, Edit2, Save, X, UserX, Clock
 } from 'lucide-react';
 
 interface Props {
@@ -68,7 +68,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             ]);
             
             // --- LÓGICA DE DE-DUPLICACIÓN ---
-            // Se incluye el centro de coste en la huella para permitir mismos registros en distintos tajos
             const uniqueOpsMap = new Map();
             data.ops.forEach(op => {
                 const fp = `${op.machineId}-${op.workerId}-${op.hoursAtExecution}-${op.type}-${new Date(op.date).getTime()}`;
@@ -77,8 +76,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
 
             const uniquePersonalMap = new Map();
             data.personal.forEach(p => {
-                // CORRECCIÓN: Se añade p.costCenterId a la huella única
-                const fp = `${p.workerId}-${p.machineId || 'none'}-${p.costCenterId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
+                const fp = `${p.workerId}-${p.machineId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
                 if (!uniquePersonalMap.has(fp)) uniquePersonalMap.set(fp, p);
             });
 
@@ -98,6 +96,16 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     useEffect(() => {
         fetchAudit();
     }, [fetchAudit]);
+
+    // Calcular trabajadores que faltan por hacer el parte
+    const missingWorkers = useMemo(() => {
+        const workersWithReport = new Set(auditData.personal.map(p => p.workerId));
+        return workers.filter(w => 
+            w.active && 
+            w.role !== 'admin' && 
+            !workersWithReport.has(w.id)
+        );
+    }, [workers, auditData.personal]);
 
     const handleSaveOpEdit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -140,39 +148,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         'REFUELING': { label: 'Repost.', icon: Fuel, color: 'text-green-600 bg-green-50' },
         'SCHEDULED': { label: 'Prog.', icon: CalendarClock, color: 'text-purple-600 bg-purple-50' }
     };
-
-    // --- LÓGICA DE AUDITORÍA DE PERSONAL ---
-    const getWorkerAuditStatus = () => {
-        const activeWorkers = workers.filter(w => w.active);
-        
-        const results = activeWorkers.map(worker => {
-            const workerReports = auditData.personal.filter(p => p.workerId === worker.id);
-            const totalHours = workerReports.reduce((acc, p) => acc + p.hours, 0);
-            const scheduled = worker.scheduledHours || 10;
-            const diff = totalHours - scheduled;
-            const isCorrect = totalHours === scheduled;
-            const hasRegistered = totalHours > 0;
-            
-            return {
-                worker,
-                reports: workerReports,
-                totalHours,
-                scheduled,
-                diff,
-                isCorrect,
-                hasRegistered
-            };
-        });
-
-        // Ordenar: Primero registrados, luego no registrados que requieren parte al final
-        return results.sort((a, b) => {
-            if (a.hasRegistered && !b.hasRegistered) return -1;
-            if (!a.hasRegistered && b.hasRegistered) return 1;
-            return a.worker.name.localeCompare(b.worker.name);
-        });
-    };
-
-    const workerAudit = getWorkerAuditStatus();
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500 relative">
@@ -362,89 +337,74 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     </div>
                                 );
                             })}
+                            {auditData.ops.length === 0 && <div className="text-center py-6 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">Sin registros de maquinaria hoy.</div>}
                         </div>
                     </div>
 
-                    {/* BLOQUE 3: PERSONAL Y TRABAJO (MEJORADO) */}
+                    {/* BLOQUE 3: PARTES DE PERSONAL */}
                     <div className="space-y-4">
                         <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
                             <span className="bg-green-500 w-2 h-6 rounded-full"></span>
-                            3. Personal y Trabajo (Control de Jornada)
+                            3. Personal y Trabajo
                         </h4>
+
+                        {/* SUB-BLOQUE: PENDIENTES */}
+                        {missingWorkers.length > 0 && (
+                            <div className="space-y-2 mb-4 animate-in slide-in-from-top duration-300">
+                                <h5 className="text-[10px] font-black text-red-500 uppercase tracking-widest pl-2 mb-2 flex items-center gap-1">
+                                    <Clock size={12}/> Pendientes de Parte ({missingWorkers.length})
+                                </h5>
+                                <div className="grid gap-2">
+                                    {missingWorkers.map(w => (
+                                        <div key={`missing-${w.id}`} className="bg-red-50 border border-red-100 rounded-xl p-3 flex justify-between items-center shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-red-100 text-red-600 rounded-lg"><UserX size={18}/></div>
+                                                <div>
+                                                    <div className="text-sm font-black text-slate-800 leading-none">{w.name}</div>
+                                                    <div className="text-[9px] font-bold text-red-400 uppercase mt-1">Sin Registro de Horas</div>
+                                                </div>
+                                            </div>
+                                            <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm">Urgente</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* SUB-BLOQUE: COMPLETADOS */}
                         <div className="grid gap-3">
-                            {workerAudit.map(({ worker, reports, totalHours, scheduled, diff, isCorrect, hasRegistered }) => {
-                                // Solo mostramos si requiere parte o si ha registrado algo
-                                if (!worker.requiresWorkReport && !hasRegistered) return null;
-
-                                return (
-                                    <div key={`audit-worker-${worker.id}`} className={`bg-white border rounded-2xl p-5 shadow-sm transition-all relative ${!hasRegistered ? 'border-red-200 bg-red-50/30' : 'border-slate-100'}`}>
-                                        {/* Indicador de Estado en Esquina */}
-                                        <div className="absolute top-4 right-4 flex items-center gap-2">
-                                            {!hasRegistered ? (
-                                                <div className="flex flex-col items-end">
-                                                    <XCircle className="text-red-600" size={24} />
-                                                    <span className="text-[10px] font-black text-red-700 uppercase">SIN REGISTRO</span>
-                                                </div>
-                                            ) : isCorrect ? (
-                                                <div className="flex flex-col items-end">
-                                                    <CheckCircle2 className="text-green-600" size={24} />
-                                                    <span className="text-[10px] font-black text-green-700 uppercase">CORRECTO</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-end">
-                                                    <AlertCircle className="text-red-600" size={24} />
-                                                    <span className={`text-xs font-black uppercase ${diff > 0 ? 'text-amber-600' : 'text-red-700'}`}>
-                                                        {diff > 0 ? `+${diff.toFixed(1)}h` : `${diff.toFixed(1)}h`}
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className={`p-2.5 rounded-xl border ${hasRegistered ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-400 border-red-200'}`}>
-                                                <User size={22} />
-                                            </div>
+                            {auditData.personal.map(p => (
+                                <div key={`p-${p.id}`} className="bg-white border border-green-50 rounded-2xl p-5 shadow-sm hover:border-blue-200 transition-all group relative">
+                                    <button 
+                                        onClick={() => setEditingPersonal(p)}
+                                        className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-lg opacity-0 group-hover:opacity-100 hover:text-green-600 hover:bg-green-50 transition-all shadow-sm"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-green-50 text-green-600 rounded-xl border border-green-100"><ClipboardList size={22} /></div>
                                             <div>
-                                                <div className="font-black text-slate-900 leading-tight">{worker.name}</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-2">
-                                                    <Clock size={10}/> Prog: <span className="text-slate-600">{scheduled}h</span>
-                                                    <span className="mx-1 text-slate-300">•</span>
-                                                    Registrado: <span className={`${isCorrect ? 'text-green-600' : 'text-red-600'} font-black`}>{totalHours.toFixed(1)}h</span>
+                                                <div className="font-black text-slate-900 leading-tight">{getWorkerName(p.workerId)}</div>
+                                                <div className="text-[10px] text-indigo-600 font-black uppercase mt-1 flex items-center gap-1">
+                                                    <Factory size={10} className="text-indigo-500"/> {p.costCenterName}
                                                 </div>
                                             </div>
                                         </div>
-
-                                        <div className="space-y-2">
-                                            {reports.map(p => (
-                                                <div key={p.id} className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 group relative">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <div className="flex items-center gap-2 text-[11px] font-black text-slate-800 uppercase leading-tight pr-8">
-                                                            <Truck size={12} className="text-blue-500 shrink-0"/> 
-                                                            <span className="text-amber-700">{p.costCenterName}</span>
-                                                            <span className="text-slate-300">|</span>
-                                                            <span>{p.machineName || "General"}</span>
-                                                            <span className="text-slate-300 mx-1">|</span>
-                                                            <span className="text-indigo-600">{p.hours}h</span>
-                                                        </div>
-                                                        <button 
-                                                            onClick={() => setEditingPersonal(p)}
-                                                            className="text-slate-300 hover:text-blue-600 transition-colors shrink-0"
-                                                        >
-                                                            <Edit2 size={12} />
-                                                        </button>
-                                                    </div>
-                                                    {p.description && <p className="text-[10px] text-slate-500 italic">"{p.description}"</p>}
-                                                </div>
-                                            ))}
-                                            {reports.length === 0 && worker.requiresWorkReport && (
-                                                <div className="p-4 bg-red-50 rounded-xl border border-dashed border-red-200 text-center">
-                                                    <p className="text-xs text-red-600 font-bold uppercase tracking-tight">El trabajador tiene obligación de parte diario pero no ha registrado horas.</p>
-                                                </div>
-                                            )}
+                                        <div className="bg-green-600 text-white px-3 py-1.5 rounded-xl text-center shadow-sm">
+                                            <div className="text-sm font-black leading-none">{p.hours}h</div>
+                                            <div className="text-[8px] font-bold uppercase opacity-80">Jornada</div>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <div className="flex items-center gap-2 text-xs font-black text-slate-800 mb-1 uppercase tracking-tight">
+                                            <Truck size={12} className="text-green-600"/> {p.machineName || "Sin Máquina Asignada"}
+                                        </div>
+                                        {p.description && <p className="text-xs text-slate-600 leading-relaxed italic border-l-2 border-green-200 pl-3">"{p.description}"</p>}
+                                    </div>
+                                </div>
+                            ))}
+                            {auditData.personal.length === 0 && <div className="text-center py-6 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">No hay partes de personal registrados.</div>}
                         </div>
                     </div>
                 </div>
@@ -582,7 +542,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setEditingPersonal(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
-                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
+                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-green-600 rounded-xl flex items-center justify-center gap-2">
                                     {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
                                 </button>
                             </div>
