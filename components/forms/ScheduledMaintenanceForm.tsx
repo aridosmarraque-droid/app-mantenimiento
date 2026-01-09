@@ -40,8 +40,9 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
           hoursAtExecution: Number(hours),
           repairerId: providerId,
           maintenanceDefId: selectedDefId,
-          // 'PROGRAMADO' es el valor esperado por la DB
-          maintenanceType: 'PROGRAMADO', 
+          // La DB solo permite ['CLEANING', 'GREASING', 'OTHER'].
+          // Un mantenimiento programado general se mapea a 'OTHER'.
+          maintenanceType: 'OTHER', 
           description: def?.name
       });
   };
