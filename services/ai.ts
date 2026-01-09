@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 export const analyzeProductionReport = async (
@@ -7,14 +6,11 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    /**
-     * The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-     */
-    const apiKey = process.env.API_KEY;
+    // Acceso seguro a la variable de entorno para evitar fallos de Rollup en Vercel
+    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
 
-    // Si no hay key configurada
     if (!apiKey) {
-        console.warn("⚠️ API Key no encontrada (process.env.API_KEY).");
+        console.warn("⚠️ API Key no encontrada.");
         return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
                "No se ha detectado la API Key de Google Gemini.\n\n" +
                "**Simulación (Modo Demo):** \n" +
@@ -23,9 +19,6 @@ export const analyzeProductionReport = async (
     }
 
     try {
-        /**
-         * Initialize GoogleGenAI with the named parameter apiKey.
-         */
         const ai = new GoogleGenAI({ apiKey: apiKey });
         
         const prompt = `
@@ -44,18 +37,11 @@ export const analyzeProductionReport = async (
             5. Formato de respuesta en Markdown limpio (sin bloques de código JSON).
         `;
 
-        /**
-         * Use ai.models.generateContent to query GenAI with the model name and prompt.
-         * Model 'gemini-3-flash-preview' is chosen for basic summarization and analysis.
-         */
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
         });
 
-        /**
-         * Access the text output via the .text property of the response object.
-         */
         return response.text || "No se pudo generar el análisis.";
 
     } catch (error) {
