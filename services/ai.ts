@@ -6,20 +6,28 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // Acceso seguro a la variable de entorno para evitar fallos de Rollup en Vercel
-    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+    // Obtener la clave de forma segura sin disparar errores de AST en Rollup/Vite
+    const getApiKey = () => {
+        try {
+            return (process as any).env.API_KEY;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const apiKey = getApiKey();
 
     if (!apiKey) {
         console.warn("⚠️ API Key no encontrada.");
         return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
-               "No se ha detectado la API Key de Google Gemini.\n\n" +
+               "No se ha detectado la API Key de Google Gemini en el entorno.\n\n" +
                "**Simulación (Modo Demo):** \n" +
                "Basado en los comentarios, parece haber un problema mecánico recurrente. " +
                `La eficiencia del ${efficiency.toFixed(1)}% es baja. Revise los molinos.`;
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey: apiKey });
+        const ai = new GoogleGenAI({ apiKey });
         
         const prompt = `
             Actúa como un Gerente de Mantenimiento y Producción Industrial senior con 20 años de experiencia en plantas de áridos y canteras.
