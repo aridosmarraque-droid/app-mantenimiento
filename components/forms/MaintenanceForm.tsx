@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -39,7 +38,6 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
       hoursAtExecution: Number(hours),
       repairerId: providerId,
       // IMPORTANTE: Enviamos 'PREVENTIVO' para que pase el CHECK constraint de la DB.
-      // El detalle específico va en la descripción.
       maintenanceType: 'PREVENTIVO', 
       description: typeKey === 'OTROS' ? description : labels[typeKey],
       materials: materials || undefined,
