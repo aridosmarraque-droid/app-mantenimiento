@@ -11,14 +11,12 @@ export interface Worker {
   positionIds: string[];
   role: 'admin' | 'worker' | 'cp' | 'cr';
   active?: boolean;
-  scheduledHours?: number; // Horas programadas de jornada
-  requiresWorkReport?: boolean; // Si este trabajador debe presentar parte obligatoriamente
+  expectedHours?: number; // Horas de jornada esperadas
 }
 
 export interface CostCenter {
   id: string;
   name: string;
-  selectableForReports?: boolean;
 }
 
 export interface SubCenter {
