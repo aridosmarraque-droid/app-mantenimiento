@@ -13,7 +13,10 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
   const [hours, setHours] = useState<number | ''>(machine.currentHours || '');
   const [providerId, setProviderId] = useState('');
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  
+  // Usamos claves internas para la UI
   const [typeKey, setTypeKey] = useState<string>('ENGRASE');
+  
   const [description, setDescription] = useState('');
   const [materials, setMaterials] = useState('');
 
@@ -23,17 +26,26 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Mapeo para descripción human-readable
     const labels: Record<string, string> = {
         'LIMPIEZA': 'Limpieza / Soplado Filtros',
         'ENGRASE': 'Engrase General',
         'OTROS': 'Otros Mantenimientos'
     };
 
+    // Mapeo EXACTO para pasar el CHECK de la base de datos: 
+    // ARRAY['CLEANING', 'GREASING', 'OTHER']
+    const dbTypeMap: Record<string, string> = {
+        'LIMPIEZA': 'CLEANING',
+        'ENGRASE': 'GREASING',
+        'OTROS': 'OTHER'
+    };
+
     onSubmit({
       hoursAtExecution: Number(hours),
       repairerId: providerId,
-      // 'PREVENTIVO' es el valor estándar para el check constraint
-      maintenanceType: 'PREVENTIVO', 
+      maintenanceType: dbTypeMap[typeKey] || 'OTHER',
       description: typeKey === 'OTROS' ? description : labels[typeKey],
       materials: materials || undefined,
     });
