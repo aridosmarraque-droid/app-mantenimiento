@@ -103,12 +103,17 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         // Agrupar los reportes personales por trabajador
         const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
         
-        // Incluir a todos los trabajadores activos que no son administradores
-        workers.filter(w => w.active && w.role !== 'admin').forEach(w => {
-            grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
-        });
+        // Solo auditar trabajadores que:
+        // 1. Están activos
+        // 2. No son admins
+        // 3. TIENEN MARCADO "REQUIERE PARTE"
+        workers
+            .filter(w => w.active && w.role !== 'admin' && w.requiresReport !== false)
+            .forEach(w => {
+                grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
+            });
 
-        // Llenar con los reportes encontrados
+        // Llenar con los reportes encontrados para estos trabajadores
         auditData.personal.forEach(p => {
             if (grouped.has(p.workerId)) {
                 const entry = grouped.get(p.workerId)!;
@@ -363,9 +368,9 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
 
                         <div className="grid gap-4">
                             {workerReports.map(({ worker, reports, totalHours }) => {
-                                const expected = worker.expectedHours || 8;
+                                const expected = worker.expectedHours || 0;
                                 const diff = totalHours - expected;
-                                const matches = totalHours === expected;
+                                const matches = totalHours === expected && expected > 0;
                                 const hasReports = reports.length > 0;
 
                                 return (
@@ -432,7 +437,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         {/* Comparativa con jornada esperada */}
                                         <div className="px-4 py-2 bg-slate-50 border-t flex justify-between items-center">
                                             <div className="text-[10px] font-bold text-slate-400 uppercase">Jornada Esperada: {expected}h</div>
-                                            {hasReports && !matches && (
+                                            {hasReports && expected > 0 && totalHours !== expected && (
                                                 <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${diff < 0 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
                                                     Diferencia: {diff > 0 ? '+' : ''}{diff}h
                                                 </div>
@@ -441,6 +446,11 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     </div>
                                 );
                             })}
+                            {workerReports.length === 0 && (
+                                <div className="text-center py-10 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">
+                                    No hay trabajadores activos que requieran parte de trabajo hoy.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -578,7 +588,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setEditingPersonal(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
-                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-green-600 rounded-xl flex items-center justify-center gap-2">
+                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
                                     {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
                                 </button>
                             </div>
