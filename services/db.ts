@@ -388,7 +388,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         solucion_averia: log.breakdownSolution || null,
         reparador_id: cleanUuid(log.repairerId),
         tipo_mantenimiento: log.maintenanceType || null,
-        description: log.description || null,
+        descripcion: log.description || null,
         materiales: log.materials || null,
         litros_combustible: cleanNum(log.fuelLitres),
         mantenimiento_def_id: cleanUuid(log.maintenanceDefId)
