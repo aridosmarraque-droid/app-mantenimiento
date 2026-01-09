@@ -6,17 +6,20 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    if (!process.env.API_KEY) {
-        console.warn("⚠️ API Key no encontrada.");
+    // Acceso seguro a la variable de entorno para evitar errores de Rollup/Vite
+    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+
+    if (!apiKey) {
+        console.warn("⚠️ API Key no encontrada en el entorno.");
         return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
-               "No se ha detectado la API Key de Google Gemini en el entorno.\n\n" +
+               "No se ha detectado la API Key de Google Gemini.\n\n" +
                "**Simulación (Modo Demo):** \n" +
                "Basado en los comentarios, parece haber un problema mecánico recurrente. " +
                `La eficiencia del ${efficiency.toFixed(1)}% es baja. Revise los molinos.`;
     }
 
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey });
         
         const prompt = `
             Actúa como un Gerente de Mantenimiento y Producción Industrial senior con 20 años de experiencia en plantas de áridos y canteras.
