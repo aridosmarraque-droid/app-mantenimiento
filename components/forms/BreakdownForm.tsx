@@ -27,7 +27,7 @@ export const BreakdownForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) 
       breakdownCause: cause,
       breakdownSolution: solution,
       repairerId: providerId,
-      // 'CORRECTIVO' es el valor esperado por la DB para averías
+      // 'CORRECTIVO' es el valor estándar para averías en el check constraint
       maintenanceType: 'CORRECTIVO'
     });
   };
