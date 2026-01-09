@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -41,7 +40,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
           hoursAtExecution: Number(hours),
           repairerId: providerId,
           maintenanceDefId: selectedDefId,
-          // 'PROGRAMADO' suele ser el valor aceptado por el CHECK constraint para mantenimientos planificados.
+          // 'PROGRAMADO' es el valor esperado por la DB
           maintenanceType: 'PROGRAMADO', 
           description: def?.name
       });
@@ -108,7 +107,6 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                    if (def.maintenanceType === 'DATE') {
                        const d = def.nextDate?.toLocaleDateString() || 'N/A';
                        statusText = `Fecha prevista: ${d}`;
-                       // Si estamos aquí es porque pending=true, así que ya pasó la fecha
                        isOverdue = true; 
                    } else {
                         const remaining = def.remainingHours ?? 0;
@@ -145,14 +143,13 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
            </div>
        )}
 
-       {/* Debug / Info list of future */}
        <div className="mt-8 pt-4 border-t border-slate-100">
            <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos</h4>
            <ul className="text-xs text-slate-400 space-y-1">
                {machine.maintenanceDefs.filter(d => !d.pending).map(d => {
                    let info = "";
                    if (d.maintenanceType === 'DATE') {
-                       info = d.nextDate?.toLocaleDateString() || '-';
+                       info = d.nextDate ? new Date(d.nextDate).toLocaleDateString() : '-';
                    } else {
                        info = `Restan: ${d.remainingHours ?? '?'}h`;
                    }
