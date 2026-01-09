@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -14,7 +15,7 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
   const [providerId, setProviderId] = useState('');
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   
-  // Usamos claves internas para evitar errores de restricción en la DB
+  // Usamos claves internas para la UI
   const [typeKey, setTypeKey] = useState<string>('ENGRASE');
   
   const [description, setDescription] = useState('');
@@ -27,7 +28,7 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Mapeo de etiquetas para la descripción
+    // Mapeo de etiquetas para la descripción human-readable
     const labels: Record<string, string> = {
         'LIMPIEZA': 'Limpieza / Soplado Filtros',
         'ENGRASE': 'Engrase General',
@@ -37,7 +38,9 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
     onSubmit({
       hoursAtExecution: Number(hours),
       repairerId: providerId,
-      maintenanceType: typeKey, // Enviamos la clave (ENGRASE, LIMPIEZA, etc.)
+      // IMPORTANTE: Enviamos 'PREVENTIVO' para que pase el CHECK constraint de la DB.
+      // El detalle específico va en la descripción.
+      maintenanceType: 'PREVENTIVO', 
       description: typeKey === 'OTROS' ? description : labels[typeKey],
       materials: materials || undefined,
     });
