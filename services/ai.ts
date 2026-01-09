@@ -6,13 +6,14 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // Acceso seguro a la variable de entorno para evitar errores de Rollup/Vite
-    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+    // El SDK espera que la API_KEY esté disponible en el entorno.
+    // Usamos el acceso directo recomendado para evitar problemas de AST en el compilador.
+    const apiKey = process.env.API_KEY;
 
     if (!apiKey) {
-        console.warn("⚠️ API Key no encontrada en el entorno.");
+        console.warn("⚠️ API Key no encontrada.");
         return "⚠️ CONFIGURACIÓN REQUERIDA: \n\n" +
-               "No se ha detectado la API Key de Google Gemini.\n\n" +
+               "No se ha detectado la API Key de Google Gemini en el entorno.\n\n" +
                "**Simulación (Modo Demo):** \n" +
                "Basado en los comentarios, parece haber un problema mecánico recurrente. " +
                `La eficiencia del ${efficiency.toFixed(1)}% es baja. Revise los molinos.`;
