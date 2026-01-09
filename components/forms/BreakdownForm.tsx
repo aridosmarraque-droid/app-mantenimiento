@@ -27,8 +27,10 @@ export const BreakdownForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) 
       breakdownCause: cause,
       breakdownSolution: solution,
       repairerId: providerId,
-      // 'CORRECTIVO' es el valor estándar para averías en el check constraint
-      maintenanceType: 'CORRECTIVO'
+      // La restricción CHECK de la DB solo permite ['CLEANING', 'GREASING', 'OTHER'].
+      // Para una avería (AVERIA), el tipo de mantenimiento suele ser NULL o 'OTHER'.
+      // Enviamos null para que la DB lo acepte si es nullable, o 'OTHER' si fuera obligatorio.
+      maintenanceType: undefined 
     });
   };
 
