@@ -6,8 +6,8 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     
-    // El SDK espera que la API_KEY esté disponible en el entorno.
-    // Usamos el acceso directo recomendado para evitar problemas de AST en el compilador.
+    // De acuerdo a las guías, usamos process.env.API_KEY directamente.
+    // El sistema asegura que esta variable esté disponible en el entorno.
     const apiKey = process.env.API_KEY;
 
     if (!apiKey) {
@@ -43,6 +43,7 @@ export const analyzeProductionReport = async (
             contents: prompt,
         });
 
+        // La SDK devuelve el texto a través de la propiedad .text
         return response.text || "No se pudo generar el análisis.";
 
     } catch (error) {
