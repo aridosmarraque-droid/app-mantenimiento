@@ -49,8 +49,6 @@ const fromDbOperationType = (type: string): OperationType => {
     return map[upperType] || (upperType as OperationType);
 };
 
-const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
 const cleanUuid = (id: any): string | null => {
     if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
     const trimmed = id.trim();
@@ -64,7 +62,7 @@ const cleanNum = (val: any): number | null => {
 };
 
 // ============================================================================
-// MAPPERS MEJORADOS CON LÓGICA DE MÚLTIPLOS
+// MAPPERS CON LÓGICA DE MÚLTIPLOS MEJORADA
 // ============================================================================
 
 const mapWorker = (w: any): Worker => ({
@@ -89,26 +87,15 @@ const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDef
     let nextTarget = 0;
 
     if (d.tipo_programacion === 'HOURS') {
-        /**
-         * LÓGICA DE MÚLTIPLOS:
-         * El próximo hito es el múltiplo de 'interval' inmediatamente superior a 'lastHours'.
-         * Si lastHours es 0 (nunca hecho), buscamos el primer múltiplo por delante de las horas actuales.
-         */
         if (lastHours === 0) {
             nextTarget = Math.ceil((machineCurrentHours + 1) / interval) * interval;
         } else {
-            // Añadimos un pequeño margen (10% del intervalo) para permitir mantenimientos preventivos 
-            // que se hagan un poco antes sin que el sistema crea que aún toca el mismo múltiplo.
+            // Margen del 10% para evitar que un mantenimiento hecho un poco antes se detecte como el mismo ciclo
             const margin = interval * 0.1;
             nextTarget = Math.floor((lastHours + margin) / interval) * interval + interval;
         }
-
         remainingHours = nextTarget - machineCurrentHours;
-        
-        // Estado: Pendiente si estamos en zona de preaviso o vencido
-        if (remainingHours <= warning) {
-            isPending = true;
-        }
+        if (remainingHours <= warning) isPending = true;
     } else if (d.tipo_programacion === 'DATE' && d.proxima_fecha) {
         const nextDate = new Date(d.proxima_fecha);
         const today = new Date();
@@ -210,7 +197,6 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
     if (updates.active !== undefined) payload.activo = updates.active;
     if (updates.scheduledHours !== undefined) payload.horas_programadas = updates.scheduledHours;
     if (updates.requiresWorkReport !== undefined) payload.requiere_parte = updates.requiresWorkReport;
-    
     const { error } = await supabase.from('mant_trabajadores').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -228,20 +214,14 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
 
 export const createCostCenter = async (name: string, selectable: boolean = true): Promise<CostCenter> => {
     if (!isConfigured) return mock.createCostCenter(name);
-    const { data, error } = await supabase.from('mant_centros').insert({ 
-        nombre: name,
-        es_parte_trabajo: selectable 
-    }).select().single();
+    const { data, error } = await supabase.from('mant_centros').insert({ nombre: name, es_parte_trabajo: selectable }).select().single();
     if (error) throw error;
     return { id: data.id, name: data.nombre, selectableForReports: data.es_parte_trabajo };
 };
 
 export const updateCostCenter = async (id: string, name: string, selectable: boolean): Promise<void> => {
     if (!isConfigured) return mock.updateCostCenter(id, name);
-    const { error } = await supabase.from('mant_centros').update({ 
-        nombre: name,
-        es_parte_trabajo: selectable
-    }).eq('id', id);
+    const { error } = await supabase.from('mant_centros').update({ nombre: name, es_parte_trabajo: selectable }).eq('id', id);
     if (error) throw error;
 };
 
@@ -281,7 +261,6 @@ export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): 
     if (updates.name !== undefined) payload.nombre = updates.name;
     if (updates.tracksProduction !== undefined) payload.es_produccion = updates.tracksProduction;
     if (updates.productionField !== undefined) payload.campo_produccion = updates.productionField;
-    
     const { error } = await supabase.from('mant_subcentros').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -334,13 +313,11 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
     };
     const { data, error } = await supabase.from('mant_maquinas').insert(payload).select().single();
     if (error) throw error;
-    
     if (m.maintenanceDefs && m.maintenanceDefs.length > 0) {
         for (const def of m.maintenanceDefs) {
             await addMaintenanceDef({ ...def, machineId: data.id }, m.currentHours);
         }
     }
-    
     return mapMachine(data);
 };
 
@@ -359,7 +336,6 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.selectableForReports !== undefined) payload.es_parte_trabajo = updates.selectableForReports;
     if (updates.active !== undefined) payload.activo = updates.active;
     if (updates.vinculadaProduccion !== undefined) payload.vinculada_produccion = updates.vinculadaProduccion;
-
     const { error } = await supabase.from('mant_maquinas').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -376,25 +352,14 @@ export const getMachineDependencyCount = async (id: string): Promise<{ logs: num
         supabase.from('mant_registros').select('id', { count: 'exact', head: true }).eq('maquina_id', id),
         supabase.from('partes_trabajo').select('id', { count: 'exact', head: true }).eq('maquina_id', id)
     ]);
-    return { 
-        logs: logsRes.count || 0, 
-        reports: reportsRes.count || 0 
-    };
+    return { logs: logsRes.count || 0, reports: reportsRes.count || 0 };
 };
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
-    
-    /**
-     * CORRECCIÓN DE ALTA: 
-     * Al añadir un mantenimiento nuevo a una máquina vieja, las "últimas horas realizadas"
-     * se inicializan al múltiplo anterior más cercano a las horas actuales.
-     * Ej: Máquina 10.079h, Intervalo 500. El último "teórico" fue a las 10.000h.
-     */
     const interval = def.intervalHours || 500;
     const lastTheoricalMultiple = Math.floor(currentMachineHours / interval) * interval;
     const lastHours = def.lastMaintenanceHours ?? lastTheoricalMultiple;
-
     const payload = {
         maquina_id: cleanUuid(def.machineId),
         nombre: def.name,
@@ -437,13 +402,9 @@ export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
-    
     const trabajadorId = cleanUuid(log.workerId);
     const maquinaId = cleanUuid(log.machineId);
-
-    if (!trabajadorId || !maquinaId) {
-        throw new Error("ID de Trabajador o Máquina inválido. Cierra sesión y entra de nuevo.");
-    }
+    if (!trabajadorId || !maquinaId) throw new Error("ID de Trabajador o Máquina inválido.");
 
     const payload = {
         fecha: toLocalDateString(log.date),
@@ -465,30 +426,30 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     };
 
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
-
-    if (error) {
-        throw new Error(`Error de Base de Datos: ${error.message}`);
-    }
+    if (error) throw new Error(`Error de Base de Datos: ${error.message}`);
 
     const h = cleanNum(log.hoursAtExecution);
     if (h !== null) {
-        // Actualizar contador de máquina si es superior al actual
-        await supabase.from('mant_maquinas')
-            .update({ horas_actuales: h })
-            .eq('id', maquinaId)
-            .lt('horas_actuales', h);
+        await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
 
-        // SI ES UN MANTENIMIENTO PROGRAMADO: Actualizar la definición para resetear ciclo
+        // LÓGICA DE CIERRE DE CICLO PROGRAMADO:
         if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
+            // 1. Obtener intervalo para calcular el múltiplo objetivo
+            const { data: defData } = await supabase.from('mant_mantenimientos_def').select('intervalo_horas').eq('id', log.maintenanceDefId).single();
+            const interval = defData?.intervalo_horas || 500;
+            
+            // 2. Calcular las "horas programadas" que se están cerrando (el múltiplo objetivo)
+            // Esto asegura que si se hizo a las 14560, se guarde 14500 como base del siguiente ciclo.
+            const targetHoursBaseline = Math.round(h / interval) * interval;
+
             await supabase.from('mant_mantenimientos_def')
                 .update({ 
-                    ultimas_horas_realizadas: h,
+                    ultimas_horas_realizadas: targetHoursBaseline,
                     pendiente: false 
                 })
                 .eq('id', log.maintenanceDefId);
         }
     }
-
     return mapLogFromDb(data);
 };
 
@@ -501,12 +462,9 @@ export const updateOperationLog = async (id: string, updates: Partial<OperationL
     if (updates.breakdownSolution !== undefined) payload.solucion_averia = updates.breakdownSolution;
     if (updates.materials !== undefined) payload.materiales = updates.materials;
     if (updates.fuelLitres !== undefined) payload.litros_combustible = cleanNum(updates.fuelLitres);
-    
-    // Soportar edición de niveles
     if (updates.motorOil !== undefined) payload.aceite_motor_l = cleanNum(updates.motorOil);
     if (updates.hydraulicOil !== undefined) payload.aceite_hidraulico_l = cleanNum(updates.hydraulicOil);
     if (updates.coolant !== undefined) payload.refrigerante_l = cleanNum(updates.coolant);
-    
     const { error } = await supabase.from('mant_registros').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -548,28 +506,20 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => {
     if (!isConfigured) return m;
-    
     const { data } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
     if (!data) return m;
-
     const mappedMachine = mapMachine(data);
-    
-    // VERIFICACIÓN DE ALERTAS PARA NOTIFICACIONES
     const workers = await getWorkers(false);
     const responsible = workers.find(w => w.id === mappedMachine.responsibleWorkerId);
-
     for (const def of mappedMachine.maintenanceDefs) {
         if (def.remainingHours !== undefined) {
             if (def.remainingHours <= 0) {
-                // Notificar vencido (Recordatorio recurrente si se desea, o una sola vez)
                 await notifyMaintenanceAlert(mappedMachine, def, responsible, 'OVERDUE');
             } else if (def.remainingHours <= (def.warningHours || 0)) {
-                // Notificar preaviso
                 await notifyMaintenanceAlert(mappedMachine, def, responsible, 'WARNING');
             }
         }
     }
-
     return mappedMachine;
 };
 
@@ -590,22 +540,16 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    
     const payload = { 
         fecha: toLocalDateString(report.date), 
         trabajador_id: cleanUuid(report.workerId), 
         horas: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
-        centro_id: cleanUuid(report.costCenterId), // Guardamos el centro seleccionado
+        centro_id: cleanUuid(report.costCenterId),
         comentarios: report.description || null
     };
-
     const { error } = await supabase.from('partes_trabajo').insert(payload);
-    
-    if (error) {
-        console.error("ERROR GUARDANDO PARTE PERSONAL. Payload:", payload);
-        throw error;
-    }
+    if (error) throw error;
 };
 
 export const updatePersonalReport = async (id: string, updates: Partial<PersonalReport>): Promise<void> => {
@@ -616,7 +560,6 @@ export const updatePersonalReport = async (id: string, updates: Partial<Personal
     if (updates.machineId !== undefined) payload.maquina_id = cleanUuid(updates.machineId);
     if (updates.costCenterId !== undefined) payload.centro_id = cleanUuid(updates.costCenterId);
     if (updates.date !== undefined) payload.fecha = toLocalDateString(updates.date);
-    
     const { error } = await supabase.from('partes_trabajo').update(payload).eq('id', id);
     if (error) throw error;
 };
