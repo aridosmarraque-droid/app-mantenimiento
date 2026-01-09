@@ -1,23 +1,21 @@
-
 import { jsPDF } from "jspdf";
-import autoTable from 'jspdf-autotable';
+import 'jspdf-autotable';
 import { CPDailyReport, PersonalReport } from '../types';
-import { ProductionComparison } from './stats'; // Importar tipo de estadísticas
+import { ProductionComparison } from './stats';
 
 export const generateCPReportPDF = (
     report: Omit<CPDailyReport, 'id'>, 
     workerName: string,
     plannedHours: number,
     efficiency: number,
-    weeklyStats?: ProductionComparison, // Nuevo parámetro opcional
-    monthlyStats?: ProductionComparison // Nuevo parámetro opcional
+    weeklyStats?: ProductionComparison,
+    monthlyStats?: ProductionComparison
 ): string => {
-  // Use any to bypass type issues with jsPDF definitions in this environment
   const doc: any = new jsPDF();
   const dateStr = report.date.toLocaleDateString('es-ES');
 
   // --- HEADER ---
-  doc.setFillColor(220, 38, 38); // Red color header
+  doc.setFillColor(220, 38, 38);
   doc.rect(0, 0, 210, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
@@ -29,7 +27,6 @@ export const generateCPReportPDF = (
   doc.setFont("helvetica", "normal");
   doc.text("Parte Diario de Producción - Cantera Pura", 20, 30);
 
-  // --- INFO BLOCK ---
   doc.setTextColor(40, 40, 40);
   doc.setFontSize(10);
   doc.text(`Fecha: ${dateStr}`, 20, 50);
@@ -38,14 +35,13 @@ export const generateCPReportPDF = (
 
   let finalY = 65;
 
-  // --- MACHACADORA TABLE ---
   doc.setFontSize(12);
   doc.setTextColor(180, 83, 9); 
   doc.setFont("helvetica", "bold");
   doc.text("Producción Machacadora", 20, finalY);
   finalY += 5;
 
-  autoTable(doc, {
+  doc.autoTable({
     startY: finalY,
     head: [['Concepto', 'Horas']],
     body: [
@@ -64,13 +60,12 @@ export const generateCPReportPDF = (
 
   finalY = doc.lastAutoTable.finalY + 15;
 
-  // --- MOLINOS TABLE ---
   doc.setFontSize(12);
   doc.setTextColor(29, 78, 216); 
   doc.text("Producción Molinos", 20, finalY);
   finalY += 5;
 
-  autoTable(doc, {
+  doc.autoTable({
     startY: finalY,
     head: [['Concepto', 'Horas']],
     body: [
@@ -89,7 +84,6 @@ export const generateCPReportPDF = (
 
   finalY = doc.lastAutoTable.finalY + 15;
 
-  // --- EFICIENCIA DIARIA ---
   doc.setFontSize(12);
   doc.setTextColor(22, 163, 74);
   doc.text("Rendimiento Diario (Molienda)", 20, finalY);
@@ -107,7 +101,7 @@ export const generateCPReportPDF = (
 
   const actualHours = report.millsEnd - report.millsStart;
   
-  autoTable(doc, {
+  doc.autoTable({
     startY: finalY,
     head: [['Horas Reales', 'Horas Planificadas', 'Eficiencia %', 'Estado']],
     body: [
@@ -125,10 +119,9 @@ export const generateCPReportPDF = (
 
   finalY = doc.lastAutoTable.finalY + 15;
 
-  // --- TENDENCIAS (NUEVO BLOQUE) ---
   if (weeklyStats && monthlyStats) {
       doc.setFontSize(12);
-      doc.setTextColor(71, 85, 105); // Slate
+      doc.setTextColor(71, 85, 105);
       doc.text("Tendencias de Rendimiento", 20, finalY);
       finalY += 5;
 
@@ -137,7 +130,7 @@ export const generateCPReportPDF = (
           return `${arrow} ${stat.diff > 0 ? '+' : ''}${stat.diff}% vs anterior`;
       };
 
-      autoTable(doc, {
+      doc.autoTable({
         startY: finalY,
         head: [['Periodo', 'Eficiencia Actual', 'Tendencia', 'Comparativa']],
         body: [
@@ -161,7 +154,6 @@ export const generateCPReportPDF = (
             0: { fontStyle: 'bold' }
         },
         didParseCell: function(data: any) {
-             // Colorear celda de tendencia
              if (data.section === 'body' && data.column.index === 2) {
                  const text = data.cell.raw;
                  if (text === 'MEJORA') data.cell.styles.textColor = [22, 163, 74];
@@ -173,46 +165,28 @@ export const generateCPReportPDF = (
       finalY = doc.lastAutoTable.finalY + 15;
   }
 
-  // --- COMENTARIOS ---
   if (report.comments) {
-      // Check page break
-      if (finalY > 250) {
-          doc.addPage();
-          finalY = 20;
-      }
-
+      if (finalY > 250) { doc.addPage(); finalY = 20; }
       doc.setFontSize(12);
       doc.setTextColor(40, 40, 40);
       doc.text("Comentarios / Incidencias", 20, finalY);
-      
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      
       const splitText = doc.splitTextToSize(report.comments, 170);
       doc.text(splitText, 20, finalY + 7);
-      
-      // Update Y based on text lines
       const dim = doc.getTextDimensions(splitText);
       finalY = finalY + 7 + dim.h + 10;
   }
 
-  // --- ANÁLISIS IA (NUEVO BLOQUE) ---
   if (report.aiAnalysis) {
-      // Check page break
-      if (finalY > 220) {
-          doc.addPage();
-          finalY = 20;
-      }
-
+      if (finalY > 220) { doc.addPage(); finalY = 20; }
       doc.setFontSize(12);
-      doc.setTextColor(79, 70, 229); // Indigo color for AI
+      doc.setTextColor(79, 70, 229);
       doc.setFont("helvetica", "bold");
       doc.text("Análisis Técnico Inteligente (IA)", 20, finalY);
-      
       doc.setFontSize(10);
       doc.setTextColor(60, 60, 60);
       doc.setFont("helvetica", "italic");
-      
       const splitAnalysis = doc.splitTextToSize(report.aiAnalysis, 170);
       doc.text(splitAnalysis, 20, finalY + 7);
   }
@@ -232,59 +206,45 @@ export const generatePersonalReportPDF = (
   const doc: any = new jsPDF();
   const dateStr = report.date.toLocaleDateString('es-ES');
 
-  // --- HEADER ---
-  doc.setFillColor(30, 41, 59); // Slate-800 header
+  doc.setFillColor(30, 41, 59);
   doc.rect(0, 0, 210, 40, 'F');
-  
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
   doc.setFont("helvetica", "bold");
   doc.text("ARIDOS MARRAQUE", 20, 20);
-  
   doc.setFontSize(14);
   doc.setFont("helvetica", "normal");
   doc.text("Parte de Trabajo Personal", 20, 30);
 
-  // --- INFO ---
   doc.setTextColor(40, 40, 40);
   doc.setFontSize(10);
   doc.text(`Fecha: ${dateStr}`, 20, 50);
   doc.text(`Operario: ${workerName}`, 20, 56);
   doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 140, 50);
 
-  let finalY = 70;
-
-  // --- DETAILS TABLE ---
-  autoTable(doc, {
-    startY: finalY,
+  doc.autoTable({
+    startY: 70,
     head: [['Concepto', 'Detalle']],
     body: [
       ['Horas Trabajadas', `${report.hours} horas`],
       ['Ubicación / Tajo', report.location || 'No especificado'],
     ],
     theme: 'striped',
-    headStyles: { fillColor: [71, 85, 105] }, // Slate-600
+    headStyles: { fillColor: [71, 85, 105] },
     styles: { fontSize: 12, cellPadding: 4 },
-    columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 60 },
-    }
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } }
   });
 
-  finalY = doc.lastAutoTable.finalY + 20;
-
-  // --- DESCRIPTION ---
+  const finalY = doc.lastAutoTable.finalY + 20;
   doc.setFontSize(14);
   doc.setTextColor(30, 41, 59);
   doc.text("Descripción de Trabajos Realizados", 20, finalY);
-  
   doc.setFontSize(11);
   doc.setTextColor(50, 50, 50);
   doc.setFont("helvetica", "normal");
-  
   const splitText = doc.splitTextToSize(report.description, 170);
   doc.text(splitText, 20, finalY + 10);
 
-  // Footer
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
   doc.text("Documento generado automáticamente por GMAO Marraque App", 105, 290, { align: 'center' });
@@ -292,4 +252,3 @@ export const generatePersonalReportPDF = (
   const dataUri = doc.output('datauristring');
   return dataUri.split(',')[1];
 };
-
