@@ -30,14 +30,11 @@ const toLocalDateString = (date: Date): string => {
 };
 
 const toDbOperationType = (type: OperationType): string => {
-    // Las restricciones CHECK de la base de datos esperan los nombres en inglés
-    // iguales a los definidos en el tipo OperationType (LEVELS, BREAKDOWN, MAINTENANCE, etc.)
     return type; 
 };
 
 const fromDbOperationType = (type: string): OperationType => {
     const t = (type || '').toUpperCase();
-    // Mapeo inverso flexible para compatibilidad con datos viejos o traducidos
     if (t === 'MANTENIMIENTO' || t === 'MAINTENANCE') return 'MAINTENANCE';
     if (t === 'AVERIA' || t === 'AVERÍA' || t === 'BREAKDOWN') return 'BREAKDOWN';
     if (t === 'NIVELES' || t === 'LEVELS') return 'LEVELS';
@@ -70,7 +67,8 @@ const mapWorker = (w: any): Worker => ({
     positionIds: [], 
     role: w.rol || 'worker',
     active: w.activo !== undefined ? w.activo : true,
-    expectedHours: Number(w.horas_jornada || 8) // Valor por defecto 8 si es nulo
+    expectedHours: Number(w.horas_programadas || 0),
+    requiresReport: w.requiere_parte !== undefined ? w.requiere_parte : true
 });
 
 const mapDef = (d: any): MaintenanceDefinition => ({
@@ -149,7 +147,8 @@ export const createWorker = async (w: Omit<Worker, 'id'>): Promise<void> => {
         telefono: w.phone,
         rol: w.role,
         activo: w.active,
-        horas_jornada: w.expectedHours
+        horas_programadas: w.expectedHours,
+        requiere_parte: w.requiresReport
     });
     if (error) throw error;
 };
@@ -162,7 +161,8 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
     if (updates.phone !== undefined) payload.telefono = updates.phone;
     if (updates.role !== undefined) payload.rol = updates.role;
     if (updates.active !== undefined) payload.activo = updates.active;
-    if (updates.expectedHours !== undefined) payload.horas_jornada = updates.expectedHours;
+    if (updates.expectedHours !== undefined) payload.horas_programadas = updates.expectedHours;
+    if (updates.requiresReport !== undefined) payload.requiere_parte = updates.requiresReport;
     
     const { error } = await supabase.from('mant_trabajadores').update(payload).eq('id', id);
     if (error) throw error;
@@ -268,7 +268,6 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours,
         requiere_horas: m.requiresHours,
-        // Corrected property names to match Machine interface
         gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
@@ -320,10 +319,7 @@ export const getMachineDependencyCount = async (id: string): Promise<{ logs: num
         supabase.from('mant_registros').select('id', { count: 'exact', head: true }).eq('maquina_id', id),
         supabase.from('partes_trabajo').select('id', { count: 'exact', head: true }).eq('maquina_id', id)
     ]);
-    return { 
-        logs: logsRes.count || 0, 
-        reports: reportsRes.count || 0 
-    };
+    return { logs: logsRes.count || 0, reports: reportsRes.count || 0 };
 };
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
@@ -370,14 +366,9 @@ export const deleteMaintenanceDef = async (defId: string): Promise<void> => {
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
-    
     const trabajadorId = cleanUuid(log.workerId);
     const maquinaId = cleanUuid(log.machineId);
-
-    if (!trabajadorId || !maquinaId) {
-        throw new Error("ID de Trabajador o Máquina inválido. Cierra sesión y entra de nuevo.");
-    }
-
+    if (!trabajadorId || !maquinaId) throw new Error("ID de Trabajador o Máquina inválido.");
     const payload = {
         fecha: toLocalDateString(log.date),
         trabajador_id: trabajadorId,
@@ -396,23 +387,12 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         litros_combustible: cleanNum(log.fuelLitres),
         mantenimiento_def_id: cleanUuid(log.maintenanceDefId)
     };
-
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
-
-    if (error) {
-        console.error("DEBUG - Payload enviado:", payload);
-        console.error("DEBUG - Error de DB:", error);
-        throw new Error(`Error de Base de Datos: ${error.message}`);
-    }
-
+    if (error) throw new Error(`Error de Base de Datos: ${error.message}`);
     const h = cleanNum(log.hoursAtExecution);
     if (h !== null) {
-        await supabase.from('mant_maquinas')
-            .update({ horas_actuales: h })
-            .eq('id', maquinaId)
-            .lt('horas_actuales', h);
+        await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
     }
-
     return mapLogFromDb(data);
 };
 
@@ -428,7 +408,6 @@ export const updateOperationLog = async (id: string, updates: Partial<OperationL
     if (updates.motorOil !== undefined) payload.aceite_motor_l = cleanNum(updates.motorOil);
     if (updates.hydraulicOil !== undefined) payload.aceite_hidraulico_l = cleanNum(updates.hydraulicOil);
     if (updates.coolant !== undefined) payload.refrigerante_l = cleanNum(updates.coolant);
-    
     const { error } = await supabase.from('mant_registros').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -491,18 +470,15 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    
     const payload = { 
         fecha: toLocalDateString(report.date), 
         trabajador_id: cleanUuid(report.workerId), 
-        hours: cleanNum(report.hours), 
+        horas: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
         centro_id: cleanUuid(report.costCenterId),
         comentarios: report.description || null
     };
-
     const { error } = await supabase.from('partes_trabajo').insert(payload);
-    
     if (error) throw error;
 };
 
@@ -514,7 +490,6 @@ export const updatePersonalReport = async (id: string, updates: Partial<Personal
     if (updates.machineId !== undefined) payload.maquina_id = cleanUuid(updates.machineId);
     if (updates.costCenterId !== undefined) payload.centro_id = cleanUuid(updates.costCenterId);
     if (updates.date !== undefined) payload.fecha = toLocalDateString(updates.date);
-    
     const { error } = await supabase.from('partes_trabajo').update(payload).eq('id', id);
     if (error) throw error;
 };
@@ -562,7 +537,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingStart: Number(data.lavado_inicio || 0), 
         washingEnd: Number(data.lavado_fin || 0), 
         triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituration_fin || 0), 
+        triturationEnd: Number(data.trituracion_fin || 0), 
         comments: data.comentarios 
     } : null;
 };
@@ -597,7 +572,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios 
     }));
 };
