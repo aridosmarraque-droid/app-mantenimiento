@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider } from '../../types';
 import { getServiceProviders } from '../../services/db';
@@ -28,6 +27,8 @@ export const BreakdownForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) 
       breakdownCause: cause,
       breakdownSolution: solution,
       repairerId: providerId,
+      // 'CORRECTIVO' es el valor esperado por la DB para averías
+      maintenanceType: 'CORRECTIVO'
     });
   };
 
