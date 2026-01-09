@@ -1,6 +1,8 @@
+
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
 import * as offline from './offlineQueue';
+import { notifyMaintenanceAlert } from './notifications';
 import { 
     CostCenter, 
     SubCenter, 
@@ -24,8 +26,8 @@ const toLocalDateString = (date: Date): string => {
     const d = new Date(date);
     if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0];
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 };
 
@@ -62,7 +64,7 @@ const cleanNum = (val: any): number | null => {
 };
 
 // ============================================================================
-// MAPPERS
+// MAPPERS MEJORADOS
 // ============================================================================
 
 const mapWorker = (w: any): Worker => ({
@@ -77,35 +79,61 @@ const mapWorker = (w: any): Worker => ({
     requiresWorkReport: w.requiere_parte !== undefined ? w.requiere_parte : true
 });
 
-const mapDef = (d: any): MaintenanceDefinition => ({
-    id: d.id,
-    machineId: d.maquina_id,
-    name: d.nombre,
-    maintenanceType: d.tipo_programacion || 'HOURS',
-    intervalHours: Number(d.intervalo_horas || 0),
-    warningHours: Number(d.horas_preaviso || 0), 
-    lastMaintenanceHours: Number(d.ultimas_horas_realizadas || 0),
-    remainingHours: Number(d.horas_restantes || 0),
-    intervalMonths: Number(d.intervalo_meses || 0),
-    nextDate: d.proxima_fecha ? new Date(d.proxima_fecha) : undefined,
-    lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
-    tasks: d.tareas || '',
-    pending: !!d.pendiente,
-});
+const calculateDefStatus = (d: any, machineCurrentHours: number): MaintenanceDefinition => {
+    const lastHours = Number(d.ultimas_horas_realizadas || 0);
+    const interval = Number(d.intervalo_horas || 0);
+    const warning = Number(d.horas_preaviso || 0);
+    
+    let remainingHours = 0;
+    let isPending = !!d.pendiente;
+
+    if (d.tipo_programacion === 'HOURS') {
+        // Lógica corregida: El siguiente vencimiento es Siempre (Ultima ejecución + Intervalo)
+        const nextDue = lastHours + interval;
+        remainingHours = nextDue - machineCurrentHours;
+        
+        // Si faltan menos de las horas de preaviso, ya se considera una acción necesaria
+        if (remainingHours <= warning) {
+            isPending = true;
+        }
+    } else if (d.tipo_programacion === 'DATE' && d.proxima_fecha) {
+        const nextDate = new Date(d.proxima_fecha);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        isPending = nextDate <= today || isPending;
+    }
+
+    return {
+        id: d.id,
+        machineId: d.maquina_id,
+        name: d.nombre,
+        maintenanceType: d.tipo_programacion || 'HOURS',
+        intervalHours: interval,
+        warningHours: warning, 
+        lastMaintenanceHours: lastHours,
+        remainingHours: remainingHours,
+        intervalMonths: Number(d.intervalo_meses || 0),
+        nextDate: d.proxima_fecha ? new Date(d.proxima_fecha) : undefined,
+        lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
+        tasks: d.tareas || '',
+        pending: isPending,
+    };
+};
 
 const mapMachine = (m: any): Machine => {
-    const defs = m.mant_mantenimientos_def || []; 
+    const rawDefs = m.mant_mantenimientos_def || []; 
+    const currentHours = Number(m.horas_actuales || 0);
     return {
         id: m.id,
         costCenterId: m.centro_id, 
         subCenterId: m.subcentro_id,
         name: m.nombre,
         companyCode: m.codigo_empresa,
-        currentHours: Number(m.horas_actuales || 0),
+        currentHours: currentHours,
         requiresHours: !!m.requiere_horas, 
         adminExpenses: !!m.gastos_admin,
         transportExpenses: !!m.gastos_transporte,
-        maintenanceDefs: defs.map(mapDef),
+        maintenanceDefs: rawDefs.map((d: any) => calculateDefStatus(d, currentHours)),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
         active: m.active !== undefined ? m.activo : true,
@@ -343,6 +371,11 @@ export const getMachineDependencyCount = async (id: string): Promise<{ logs: num
 
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachineHours: number): Promise<MaintenanceDefinition> => {
     if (!isConfigured) return mock.addMaintenanceDef(def, currentMachineHours);
+    
+    // CORRECCIÓN: Al añadir un mantenimiento nuevo a una máquina vieja, las "últimas horas" deben ser las actuales
+    // de lo contrario marcará vencido de inmediato.
+    const lastHours = def.lastMaintenanceHours ?? currentMachineHours;
+
     const payload = {
         maquina_id: cleanUuid(def.machineId),
         nombre: def.name,
@@ -352,12 +385,12 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
         tareas: def.tasks,
-        ultimas_horas_realizadas: def.lastMaintenanceHours || 0,
-        pendiente: !!def.pending
+        ultimas_horas_realizadas: lastHours,
+        pendiente: false
     };
     const { data, error } = await supabase.from('mant_mantenimientos_def').insert(payload).select().single();
     if (error) throw error;
-    return mapDef(data);
+    return calculateDefStatus(data, currentMachineHours);
 };
 
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
@@ -417,15 +450,26 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     if (error) {
         console.error("DEBUG - Payload enviado:", payload);
         console.error("DEBUG - Error de DB:", error);
-        throw new Error(`Error de Base de Datos: ${error.message}. Verifica que el tipo de operación '${payload.tipo_operacion}' sea permitido.`);
+        throw new Error(`Error de Base de Datos: ${error.message}`);
     }
 
     const h = cleanNum(log.hoursAtExecution);
     if (h !== null) {
+        // Actualizar contador de máquina
         await supabase.from('mant_maquinas')
             .update({ horas_actuales: h })
             .eq('id', maquinaId)
             .lt('horas_actuales', h);
+
+        // SI ES UN MANTENIMIENTO PROGRAMADO: Actualizar la definición para resetear ciclo
+        if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
+            await supabase.from('mant_mantenimientos_def')
+                .update({ 
+                    ultimas_horas_realizadas: h,
+                    pendiente: false 
+                })
+                .eq('id', log.maintenanceDefId);
+        }
     }
 
     return mapLogFromDb(data);
@@ -487,8 +531,29 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => {
     if (!isConfigured) return m;
+    
     const { data } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
-    return data ? mapMachine(data) : m;
+    if (!data) return m;
+
+    const mappedMachine = mapMachine(data);
+    
+    // VERIFICACIÓN DE ALERTAS PARA NOTIFICACIONES
+    const workers = await getWorkers(false);
+    const responsible = workers.find(w => w.id === mappedMachine.responsibleWorkerId);
+
+    for (const def of mappedMachine.maintenanceDefs) {
+        if (def.remainingHours !== undefined) {
+            if (def.remainingHours <= 0) {
+                // Notificar vencido
+                await notifyMaintenanceAlert(mappedMachine, def, responsible, 'OVERDUE');
+            } else if (def.remainingHours <= (def.warningHours || 0)) {
+                // Notificar preaviso
+                await notifyMaintenanceAlert(mappedMachine, def, responsible, 'WARNING');
+            }
+        }
+    }
+
+    return mappedMachine;
 };
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
