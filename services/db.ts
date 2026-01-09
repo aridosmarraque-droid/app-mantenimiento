@@ -1,4 +1,3 @@
-
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
 import * as offline from './offlineQueue';
@@ -54,8 +53,6 @@ const fromDbOperationType = (type: string): OperationType => {
     };
     return map[upperType] || (upperType as OperationType);
 };
-
-const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 const cleanUuid = (id: any): string | null => {
     if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
@@ -432,8 +429,6 @@ export const updateOperationLog = async (id: string, updates: Partial<OperationL
     if (updates.breakdownSolution !== undefined) payload.solucion_averia = updates.breakdownSolution;
     if (updates.materials !== undefined) payload.materiales = updates.materials;
     if (updates.fuelLitres !== undefined) payload.litros_combustible = cleanNum(updates.fuelLitres);
-    
-    // Soportar edición de niveles
     if (updates.motorOil !== undefined) payload.aceite_motor_l = cleanNum(updates.motorOil);
     if (updates.hydraulicOil !== undefined) payload.aceite_hidraulico_l = cleanNum(updates.hydraulicOil);
     if (updates.coolant !== undefined) payload.refrigerante_l = cleanNum(updates.coolant);
@@ -506,16 +501,13 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
         trabajador_id: cleanUuid(report.workerId), 
         horas: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
-        centro_id: cleanUuid(report.costCenterId), // Guardamos el centro seleccionado
+        centro_id: cleanUuid(report.costCenterId),
         comentarios: report.description || null
     };
 
     const { error } = await supabase.from('partes_trabajo').insert(payload);
     
-    if (error) {
-        console.error("ERROR GUARDANDO PARTE PERSONAL. Payload:", payload);
-        throw error;
-    }
+    if (error) throw error;
 };
 
 export const updatePersonalReport = async (id: string, updates: Partial<PersonalReport>): Promise<void> => {
@@ -567,7 +559,6 @@ export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<v
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return null;
     const { data } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    // Mapeo corregido: trituracion_inicio/fin (Español, sin c cedilla o typos ingleses)
     return data ? { 
         id: data.id, 
         date: new Date(data.fecha), 
@@ -587,8 +578,8 @@ export const saveCRReport = async (report: Omit<CRDailyReport, 'id'>): Promise<v
         trabajador_id: cleanUuid(report.workerId),
         lavado_inicio: cleanNum(report.washingStart),
         lavado_fin: cleanNum(report.washingEnd),
-        trituration_inicio: cleanNum(report.triturationStart),
-        trituration_fin: cleanNum(report.triturationEnd),
+        trituracion_inicio: cleanNum(report.triturationStart),
+        trituracion_fin: cleanNum(report.triturationEnd),
         comentarios: report.comments || null
     });
     if (error) throw error;
@@ -603,7 +594,6 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
     if (!isConfigured) return [];
     const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(start)).lte('fecha', toLocalDateString(end));
-    // CORRECCIÓN DEFINITIVA DE MAPEADO: trituracion_inicio/fin son los nombres reales de columna
     return (data || []).map(r => ({ 
         id: r.id, 
         date: new Date(r.fecha), 
@@ -634,7 +624,6 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     const dateStr = toLocalDateString(date);
     const [ops, pers] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        // Join con centros para el parte directamente para asegurar que se lee el centro_id del parte
         supabase.from('partes_trabajo').select('*, mant_centros(nombre), mant_maquinas(nombre, centro_id)').eq('fecha', dateStr)
     ]);
     return { 
@@ -647,7 +636,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             machineId: r.maquina_id, 
             machineName: r.mant_maquinas?.nombre,
             costCenterId: r.centro_id,
-            costCenterName: r.mant_centros?.nombre || 'Desconocido', // Prioridad al centro del parte
+            costCenterName: r.mant_centros?.nombre || 'Desconocido',
             description: r.comentarios
         })) 
     };
