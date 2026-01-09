@@ -69,7 +69,8 @@ const mapWorker = (w: any): Worker => ({
     phone: w.telefono || '',
     positionIds: [], 
     role: w.rol || 'worker',
-    active: w.activo !== undefined ? w.activo : true
+    active: w.activo !== undefined ? w.activo : true,
+    expectedHours: Number(w.horas_jornada || 8) // Valor por defecto 8 si es nulo
 });
 
 const mapDef = (d: any): MaintenanceDefinition => ({
@@ -147,7 +148,8 @@ export const createWorker = async (w: Omit<Worker, 'id'>): Promise<void> => {
         dni: w.dni,
         telefono: w.phone,
         rol: w.role,
-        activo: w.active
+        activo: w.active,
+        horas_jornada: w.expectedHours
     });
     if (error) throw error;
 };
@@ -160,6 +162,7 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
     if (updates.phone !== undefined) payload.telefono = updates.phone;
     if (updates.role !== undefined) payload.rol = updates.role;
     if (updates.active !== undefined) payload.activo = updates.active;
+    if (updates.expectedHours !== undefined) payload.horas_jornada = updates.expectedHours;
     
     const { error } = await supabase.from('mant_trabajadores').update(payload).eq('id', id);
     if (error) throw error;
@@ -559,7 +562,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingStart: Number(data.lavado_inicio || 0), 
         washingEnd: Number(data.lavado_fin || 0), 
         triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituracion_fin || 0), 
+        triturationEnd: Number(data.trituration_fin || 0), 
         comments: data.comentarios 
     } : null;
 };
@@ -594,7 +597,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0), 
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios 
     }));
 };
