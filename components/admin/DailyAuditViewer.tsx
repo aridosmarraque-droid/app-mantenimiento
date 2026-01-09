@@ -68,6 +68,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             ]);
             
             // --- LÓGICA DE DE-DUPLICACIÓN ---
+            // Se incluye el centro de coste en la huella para permitir mismos registros en distintos tajos
             const uniqueOpsMap = new Map();
             data.ops.forEach(op => {
                 const fp = `${op.machineId}-${op.workerId}-${op.hoursAtExecution}-${op.type}-${new Date(op.date).getTime()}`;
@@ -76,7 +77,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
 
             const uniquePersonalMap = new Map();
             data.personal.forEach(p => {
-                const fp = `${p.workerId}-${p.machineId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
+                // CORRECCIÓN: Se añade p.costCenterId a la huella única
+                const fp = `${p.workerId}-${p.machineId || 'none'}-${p.costCenterId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
                 if (!uniquePersonalMap.has(fp)) uniquePersonalMap.set(fp, p);
             });
 
@@ -580,7 +582,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                             </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setEditingPersonal(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
-                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-green-600 rounded-xl flex items-center justify-center gap-2">
+                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
                                     {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
                                 </button>
                             </div>
