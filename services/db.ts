@@ -30,28 +30,20 @@ const toLocalDateString = (date: Date): string => {
 };
 
 const toDbOperationType = (type: OperationType): string => {
-    const map: Record<OperationType, string> = {
-        'BREAKDOWN': 'AVERIA',
-        'LEVELS': 'NIVELES',
-        'MAINTENANCE': 'MANTENIMIENTO',
-        'SCHEDULED': 'PROGRAMADO',
-        'REFUELING': 'REPOSTAJE'
-    };
-    return map[type] || type; 
+    // Las restricciones CHECK de la base de datos esperan los nombres en inglés
+    // iguales a los definidos en el tipo OperationType (LEVELS, BREAKDOWN, MAINTENANCE, etc.)
+    return type; 
 };
 
 const fromDbOperationType = (type: string): OperationType => {
-    const upperType = (type || '').toUpperCase();
-    const map: Record<string, OperationType> = {
-        'AVERIA': 'BREAKDOWN',
-        'AVERÍA': 'BREAKDOWN',
-        'NIVELES': 'LEVELS',
-        'MANTENIMIENTO': 'MAINTENANCE',
-        'PROGRAMADO': 'SCHEDULED',
-        'REPOSTAJE': 'REFUELING',
-        'COMBUSTIBLE': 'REFUELING'
-    };
-    return map[upperType] || (upperType as OperationType);
+    const t = (type || '').toUpperCase();
+    // Mapeo inverso flexible para compatibilidad con datos viejos o traducidos
+    if (t === 'MANTENIMIENTO' || t === 'MAINTENANCE') return 'MAINTENANCE';
+    if (t === 'AVERIA' || t === 'AVERÍA' || t === 'BREAKDOWN') return 'BREAKDOWN';
+    if (t === 'NIVELES' || t === 'LEVELS') return 'LEVELS';
+    if (t === 'PROGRAMADO' || t === 'SCHEDULED') return 'SCHEDULED';
+    if (t === 'REPOSTAJE' || t === 'COMBUSTIBLE' || t === 'REFUELING') return 'REFUELING';
+    return t as OperationType;
 };
 
 const cleanUuid = (id: any): string | null => {
@@ -111,7 +103,7 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: defs.map(mapDef),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo !== undefined ? m.activo : true,
+        active: m.active !== undefined ? m.active : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -273,6 +265,7 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours,
         requiere_horas: m.requiresHours,
+        // Corrected property names to match Machine interface
         gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
@@ -395,7 +388,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         solucion_averia: log.breakdownSolution || null,
         reparador_id: cleanUuid(log.repairerId),
         tipo_mantenimiento: log.maintenanceType || null,
-        descripcion: log.description || null,
+        description: log.description || null,
         materiales: log.materials || null,
         litros_combustible: cleanNum(log.fuelLitres),
         mantenimiento_def_id: cleanUuid(log.maintenanceDefId)
@@ -499,7 +492,7 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
     const payload = { 
         fecha: toLocalDateString(report.date), 
         trabajador_id: cleanUuid(report.workerId), 
-        horas: cleanNum(report.hours), 
+        hours: cleanNum(report.hours), 
         maquina_id: cleanUuid(report.machineId), 
         centro_id: cleanUuid(report.costCenterId),
         comentarios: report.description || null
