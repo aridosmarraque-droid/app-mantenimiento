@@ -14,7 +14,8 @@ import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvi
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, 
-    Mountain, Waves, Droplets, Factory, Edit2, Save, X, UserX, Clock
+    Mountain, Waves, Droplets, Factory, Edit2, Save, X, UserX, Clock,
+    CheckCircle2
 } from 'lucide-react';
 
 interface Props {
@@ -97,14 +98,26 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         fetchAudit();
     }, [fetchAudit]);
 
-    // Calcular trabajadores que faltan por hacer el parte
-    const missingWorkers = useMemo(() => {
-        const workersWithReport = new Set(auditData.personal.map(p => p.workerId));
-        return workers.filter(w => 
-            w.active && 
-            w.role !== 'admin' && 
-            !workersWithReport.has(w.id)
-        );
+    // --- LÓGICA DE AGRUPACIÓN POR TRABAJADOR ---
+    const workerReports = useMemo(() => {
+        // Agrupar los reportes personales por trabajador
+        const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
+        
+        // Incluir a todos los trabajadores activos que no son administradores
+        workers.filter(w => w.active && w.role !== 'admin').forEach(w => {
+            grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
+        });
+
+        // Llenar con los reportes encontrados
+        auditData.personal.forEach(p => {
+            if (grouped.has(p.workerId)) {
+                const entry = grouped.get(p.workerId)!;
+                entry.reports.push(p);
+                entry.totalHours += p.hours;
+            }
+        });
+
+        return Array.from(grouped.values()).sort((a, b) => b.totalHours - a.totalHours);
     }, [workers, auditData.personal]);
 
     const handleSaveOpEdit = async (e: React.FormEvent) => {
@@ -341,70 +354,93 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* BLOQUE 3: PARTES DE PERSONAL */}
+                    {/* BLOQUE 3: PARTES DE PERSONAL AGRUPADOS */}
                     <div className="space-y-4">
                         <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
                             <span className="bg-green-500 w-2 h-6 rounded-full"></span>
-                            3. Personal y Trabajo
+                            3. Personal y Trabajo (Jornadas)
                         </h4>
 
-                        {/* SUB-BLOQUE: PENDIENTES */}
-                        {missingWorkers.length > 0 && (
-                            <div className="space-y-2 mb-4 animate-in slide-in-from-top duration-300">
-                                <h5 className="text-[10px] font-black text-red-500 uppercase tracking-widest pl-2 mb-2 flex items-center gap-1">
-                                    <Clock size={12}/> Pendientes de Parte ({missingWorkers.length})
-                                </h5>
-                                <div className="grid gap-2">
-                                    {missingWorkers.map(w => (
-                                        <div key={`missing-${w.id}`} className="bg-red-50 border border-red-100 rounded-xl p-3 flex justify-between items-center shadow-sm">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-red-100 text-red-600 rounded-lg"><UserX size={18}/></div>
-                                                <div>
-                                                    <div className="text-sm font-black text-slate-800 leading-none">{w.name}</div>
-                                                    <div className="text-[9px] font-bold text-red-400 uppercase mt-1">Sin Registro de Horas</div>
-                                                </div>
-                                            </div>
-                                            <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm">Urgente</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        <div className="grid gap-4">
+                            {workerReports.map(({ worker, reports, totalHours }) => {
+                                const expected = worker.expectedHours || 8;
+                                const diff = totalHours - expected;
+                                const matches = totalHours === expected;
+                                const hasReports = reports.length > 0;
 
-                        {/* SUB-BLOQUE: COMPLETADOS */}
-                        <div className="grid gap-3">
-                            {auditData.personal.map(p => (
-                                <div key={`p-${p.id}`} className="bg-white border border-green-50 rounded-2xl p-5 shadow-sm hover:border-blue-200 transition-all group relative">
-                                    <button 
-                                        onClick={() => setEditingPersonal(p)}
-                                        className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 rounded-lg opacity-0 group-hover:opacity-100 hover:text-green-600 hover:bg-green-50 transition-all shadow-sm"
-                                    >
-                                        <Edit2 size={16} />
-                                    </button>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2.5 bg-green-50 text-green-600 rounded-xl border border-green-100"><ClipboardList size={22} /></div>
-                                            <div>
-                                                <div className="font-black text-slate-900 leading-tight">{getWorkerName(p.workerId)}</div>
-                                                <div className="text-[10px] text-indigo-600 font-black uppercase mt-1 flex items-center gap-1">
-                                                    <Factory size={10} className="text-indigo-500"/> {p.costCenterName}
+                                return (
+                                    <div key={`worker-${worker.id}`} className={`bg-white rounded-2xl shadow-md border overflow-hidden relative transition-all ${!hasReports ? 'border-red-100 opacity-70 bg-red-50/20' : 'border-slate-100'}`}>
+                                        
+                                        {/* Marca Verde Superior si coincide jornada */}
+                                        {hasReports && matches && (
+                                            <div className="absolute top-0 right-0 w-12 h-12 flex items-center justify-center bg-green-500 text-white rounded-bl-3xl shadow-sm z-10">
+                                                <CheckCircle2 size={24} />
+                                            </div>
+                                        )}
+
+                                        {/* Cabecera del trabajador */}
+                                        <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${worker.role === 'cp' ? 'bg-amber-100 text-amber-600' : worker.role === 'cr' ? 'bg-teal-100 text-teal-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                    <User size={20}/>
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-slate-800 leading-none">{worker.name}</p>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase mt-1 tracking-widest">{worker.role === 'cp' ? 'Cantera' : worker.role === 'cr' ? 'Rodado' : 'Operario'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-xs font-black text-slate-500 uppercase tracking-tighter">Total Hoy</div>
+                                                <div className={`text-xl font-black ${hasReports && diff < 0 ? 'text-red-600' : hasReports && diff > 0 ? 'text-indigo-600' : hasReports ? 'text-green-600' : 'text-red-400'}`}>
+                                                    {totalHours}h
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="bg-green-600 text-white px-3 py-1.5 rounded-xl text-center shadow-sm">
-                                            <div className="text-sm font-black leading-none">{p.hours}h</div>
-                                            <div className="text-[8px] font-bold uppercase opacity-80">Jornada</div>
+
+                                        {/* Desglose de reportes */}
+                                        <div className="p-4 space-y-3">
+                                            {!hasReports ? (
+                                                <div className="flex items-center gap-2 text-red-500 font-bold text-xs uppercase animate-pulse">
+                                                    <UserX size={14}/> Pendiente de Registro Diario
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {reports.map(p => (
+                                                        <div key={p.id} className="flex justify-between items-center group">
+                                                            <div className="flex-1">
+                                                                <p className="text-[10px] font-black text-slate-800 flex items-center gap-1">
+                                                                    <Factory size={10} className="text-blue-500"/> {p.costCenterName}
+                                                                    <span className="text-slate-300 mx-1">/</span>
+                                                                    <Truck size={10} className="text-green-500"/> {p.machineName || 'General'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="font-mono font-bold text-xs bg-slate-100 px-2 py-0.5 rounded border">{p.hours}h</span>
+                                                                <button 
+                                                                    onClick={() => setEditingPersonal(p)}
+                                                                    className="p-1 text-slate-300 hover:text-blue-600 transition-colors"
+                                                                >
+                                                                    <Edit2 size={12} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Comparativa con jornada esperada */}
+                                        <div className="px-4 py-2 bg-slate-50 border-t flex justify-between items-center">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Jornada Esperada: {expected}h</div>
+                                            {hasReports && !matches && (
+                                                <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${diff < 0 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                                                    Diferencia: {diff > 0 ? '+' : ''}{diff}h
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        <div className="flex items-center gap-2 text-xs font-black text-slate-800 mb-1 uppercase tracking-tight">
-                                            <Truck size={12} className="text-green-600"/> {p.machineName || "Sin Máquina Asignada"}
-                                        </div>
-                                        {p.description && <p className="text-xs text-slate-600 leading-relaxed italic border-l-2 border-green-200 pl-3">"{p.description}"</p>}
-                                    </div>
-                                </div>
-                            ))}
-                            {auditData.personal.length === 0 && <div className="text-center py-6 bg-white rounded-2xl border-2 border-dashed border-slate-100 text-slate-400 text-xs italic">No hay partes de personal registrados.</div>}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
