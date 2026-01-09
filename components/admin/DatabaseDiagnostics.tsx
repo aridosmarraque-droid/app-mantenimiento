@@ -9,7 +9,17 @@ interface Props {
 export const DatabaseDiagnostics: React.FC<Props> = ({ onBack }) => {
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [sqlQuery] = useState(`SELECT table_name, string_agg(column_name || ' (' || data_type || ')', ', ') as columnas FROM information_schema.columns WHERE table_schema = 'public' GROUP BY table_name;`);
+    const [sqlQuery] = useState(`
+-- Consulta para verificar las restricciones de la tabla de registros
+SELECT 
+    conname as nombre_restriccion,
+    pg_get_constraintdef(oid) as definicion
+FROM 
+    pg_constraint 
+WHERE 
+    conrelid = 'mant_registros'::regclass 
+    AND conname LIKE '%check%';
+`);
 
     const tablesToTest = [
         'mant_registros',
@@ -49,10 +59,10 @@ export const DatabaseDiagnostics: React.FC<Props> = ({ onBack }) => {
 
             <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl space-y-4">
                 <div className="flex items-center gap-2 mb-2 text-blue-400 font-bold uppercase text-xs tracking-widest">
-                    <Terminal size={16} /> SQL Helper
+                    <Terminal size={16} /> SQL Helper (Solución Definitiva)
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed italic">
-                    Para arreglar la app definitivamente, necesito que ejecutes esta consulta en el **SQL Editor de Supabase** y me pegues el resultado.
+                    Si sigues teniendo errores al guardar, copia esta consulta y ejecútala en el SQL Editor de Supabase.
                 </p>
                 <div className="relative group">
                     <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono overflow-x-auto text-green-400 border border-white/10">
@@ -110,13 +120,6 @@ export const DatabaseDiagnostics: React.FC<Props> = ({ onBack }) => {
                                 )}
                             </div>
                         ))}
-                    </div>
-                )}
-                
-                {results.length === 0 && !loading && (
-                    <div className="text-center py-10 flex flex-col items-center gap-2">
-                        <Database className="text-slate-200" size={48} />
-                        <p className="text-xs text-slate-400 font-medium">Haz clic en iniciar escaneo para validar las tablas existentes.</p>
                     </div>
                 )}
             </div>
