@@ -1,5 +1,5 @@
-import { getCPReportsByRange, getCPWeeklyPlan } from './db';
-import { CPDailyReport, CPWeeklyPlan } from '../types';
+import { getCPReportsByRange, getCPWeeklyPlan, getFuelLogs } from './db';
+import { CPDailyReport, CPWeeklyPlan, OperationLog } from '../types';
 
 export interface ProductionStat {
     period: string; // "Hoy", "Semana Actual", "Mes Actual", etc.
@@ -15,6 +15,17 @@ export interface ProductionComparison {
     previous: ProductionStat;
     trend: 'up' | 'down' | 'equal';
     diff: number;
+}
+
+export interface FuelConsumptionStat {
+    machineId: string;
+    machineName: string;
+    period: string;
+    totalLiters: number;
+    consumedLiters: number;
+    workedHours: number;
+    consumptionPerHour: number;
+    logsCount: number;
 }
 
 // Obtener fecha del lunes de la semana de la fecha dada
@@ -181,5 +192,76 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
         weekly: compare(weeklyCurr, weeklyPrev),
         monthly: compare(monthlyCurr, monthlyPrev),
         yearly: compare(yearlyCurr, yearlyPrev)
+    };
+};
+
+/**
+ * Calcula el consumo medio (L/h) para una lista de logs de repostaje
+ * Lógica: (Suma Litros - Último repostaje) / (Horas Último - Horas Primero)
+ */
+export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLabel: string = "Periodo"): FuelConsumptionStat => {
+    // Necesitamos al menos 2 repostajes para tener un intervalo
+    if (logs.length < 2) {
+        return {
+            machineId: '',
+            machineName: '',
+            period: periodLabel,
+            totalLiters: logs.reduce((acc, l) => acc + (l.fuelLitres || 0), 0),
+            consumedLiters: 0,
+            workedHours: 0,
+            consumptionPerHour: 0,
+            logsCount: logs.length
+        };
+    }
+
+    // Ordenar por fecha ascendente
+    const sorted = [...logs].sort((a, b) => a.date.getTime() - b.date.getTime());
+    
+    const firstLog = sorted[0];
+    const lastLog = sorted[sorted.length - 1];
+    
+    const workedHours = lastLog.hoursAtExecution - firstLog.hoursAtExecution;
+    const totalLiters = sorted.reduce((acc, l) => acc + (l.fuelLitres || 0), 0);
+    const consumedLiters = totalLiters - (lastLog.fuelLitres || 0);
+    
+    const consumptionPerHour = workedHours > 0 ? (consumedLiters / workedHours) : 0;
+
+    return {
+        machineId: firstLog.machineId,
+        machineName: '', // Se rellena en el componente si es necesario
+        period: periodLabel,
+        totalLiters,
+        consumedLiters,
+        workedHours,
+        consumptionPerHour: parseFloat(consumptionPerHour.toFixed(2)),
+        logsCount: logs.length
+    };
+};
+
+export const getMachineFuelStats = async (machineId: string, baseDate: Date = new Date()): Promise<{
+    monthly: FuelConsumptionStat,
+    quarterly: FuelConsumptionStat,
+    yearly: FuelConsumptionStat,
+    logs: OperationLog[]
+}> => {
+    const today = new Date(baseDate);
+    
+    // Rango Año
+    const yearStart = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+    const yearLogs = await getFuelLogs(machineId, yearStart, today);
+    
+    // Rango Trimestre
+    const quarterStart = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
+    const quarterLogs = yearLogs.filter(l => new Date(l.date) >= quarterStart);
+    
+    // Rango Mes actual
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthLogs = quarterLogs.filter(l => new Date(l.date) >= monthStart);
+
+    return {
+        monthly: calculateFuelConsumptionFromLogs(monthLogs, "Mes Actual"),
+        quarterly: calculateFuelConsumptionFromLogs(quarterLogs, "Último Trimestre"),
+        yearly: calculateFuelConsumptionFromLogs(yearLogs, "Último Año"),
+        logs: yearLogs.slice().reverse() // Todos los logs del último año, orden descendente
     };
 };
