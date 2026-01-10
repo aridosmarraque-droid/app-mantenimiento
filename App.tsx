@@ -26,7 +26,7 @@ import { ProductionDashboard } from './components/admin/ProductionDashboard';
 import { DatabaseDiagnostics } from './components/admin/DatabaseDiagnostics';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -53,7 +53,7 @@ enum ViewState {
   ADMIN_DIAGNOSTICS
 }
 
-type MenuCategory = 'activos' | 'produccion' | 'auditoria' | 'configuracion' | null;
+type MenuCategory = 'datos' | 'produccion' | 'informes' | null;
 
 function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -251,19 +251,21 @@ function App() {
           {isMenuOpen && isUserAdmin && (
               <div className="absolute top-full right-0 w-80 bg-white shadow-2xl rounded-bl-3xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30 animate-in slide-in-from-right-5 duration-300">
                   <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('activos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'activos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    <button onClick={() => toggleCategory('datos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'datos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                         <div className="flex items-center gap-3">
-                            <Truck className={`w-5 h-5 ${openCategory === 'activos' ? 'text-blue-400' : 'text-blue-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">Activos y Plantas</span>
+                            <DatabaseZap className={`w-5 h-5 ${openCategory === 'datos' ? 'text-blue-400' : 'text-blue-600'}`} />
+                            <span className="text-xs font-black uppercase tracking-tight">INTRODUCIR/MODIFICAR DATOS</span>
                         </div>
-                        {openCategory === 'activos' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        {openCategory === 'datos' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
-                    {openCategory === 'activos' && (
+                    {openCategory === 'datos' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Centros de Coste</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_SUBCENTERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Plantas / Subcentros</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Nueva Máquina</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Editar Inventario</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Editar Máquina</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Users size={14} className="text-blue-400" /> Gestión de Plantilla</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Wrench size={14} className="text-blue-400" /> Talleres y Proveedores</button>
                         </div>
                     )}
                   </div>
@@ -285,34 +287,17 @@ function App() {
                   </div>
 
                   <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('auditoria')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'auditoria' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    <button onClick={() => toggleCategory('informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
                         <div className="flex items-center gap-3">
-                            <SearchCheck className={`w-5 h-5 ${openCategory === 'auditoria' ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">Auditoría</span>
+                            <SearchCheck className={`w-5 h-5 ${openCategory === 'informes' ? 'text-indigo-400' : 'text-indigo-600'}`} />
+                            <span className="text-xs font-black uppercase tracking-tight">INFORMES</span>
                         </div>
-                        {openCategory === 'auditoria' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        {openCategory === 'informes' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
-                    {openCategory === 'auditoria' && (
+                    {openCategory === 'informes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></span>Auditoría Diaria Integral</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></span>Registros Técnicos</button>
-                        </div>
-                    )}
-                  </div>
-
-                  <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('configuracion')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'configuracion' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
-                        <div className="flex items-center gap-3">
-                            <Settings className={`w-5 h-5 ${openCategory === 'configuracion' ? 'text-slate-400' : 'text-slate-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">Sistema</span>
-                        </div>
-                        {openCategory === 'configuracion' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
-                    {openCategory === 'configuracion' && (
-                        <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>Gestión de Plantilla</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>Talleres y Proveedores</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DIAGNOSTICS)} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-red-600 rounded-full"></span>Diagnóstico DB</button>
                         </div>
                     )}
                   </div>
