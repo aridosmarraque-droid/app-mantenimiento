@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getAllMachines, getMachineLogs, getWorkers, getServiceProviders, getCostCenters } from '../../services/db';
 import { Machine, OperationLog, OperationType, Worker, ServiceProvider, CostCenter } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info } from 'lucide-center';
+import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -53,8 +53,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
             
             if (currentSearchId !== searchIdRef.current) return; 
 
-            // De-duplicación solo por ID único de base de datos
-            // Esto permite registros con el mismo contenido (ej. dos repostajes iguales)
+            // De-duplicación solo por ID único de base de datos para permitir registros idénticos legítimos
             const uniqueLogs = Array.from(new Map(data.map(item => [item.id, item])).values());
             
             setLogs(uniqueLogs);
