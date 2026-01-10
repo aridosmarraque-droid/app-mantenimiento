@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getAllMachines, getMachineLogs, getWorkers, getServiceProviders, getCostCenters } from '../../services/db';
 import { Machine, OperationLog, OperationType, Worker, ServiceProvider, CostCenter } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info } from 'lucide-center';
 
 interface Props {
     onBack: () => void;
@@ -52,22 +51,13 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
             const end = endDate ? new Date(endDate) : undefined;
             const data = await getMachineLogs(selectedMachineId, start, end, selectedTypes);
             
-            if (currentSearchId !== searchIdRef.current) return; // Evitar carrera si cambió búsqueda
+            if (currentSearchId !== searchIdRef.current) return; 
 
-            // --- LÓGICA DE DE-DUPLICACIÓN AGRESIVA POR CONTENIDO ---
-            // Generamos una clave única basada en datos lógicos del registro
-            const getFingerprint = (l: OperationLog) => 
-                `${l.machineId}-${l.workerId}-${l.hoursAtExecution}-${l.type}-${new Date(l.date).getTime()}`;
-
-            const uniqueMap = new Map();
-            data.forEach(log => {
-                const fp = getFingerprint(log);
-                if (!uniqueMap.has(fp)) {
-                    uniqueMap.set(fp, log);
-                }
-            });
+            // De-duplicación solo por ID único de base de datos
+            // Esto permite registros con el mismo contenido (ej. dos repostajes iguales)
+            const uniqueLogs = Array.from(new Map(data.map(item => [item.id, item])).values());
             
-            setLogs(Array.from(uniqueMap.values()));
+            setLogs(uniqueLogs);
         } catch (error) {
             console.error("Error al buscar logs:", error);
         } finally {
@@ -293,5 +283,3 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
         </div>
     );
 };
-
-
