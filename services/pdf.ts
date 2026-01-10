@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
-import { CPDailyReport, PersonalReport } from '../types';
-import { ProductionComparison } from './stats';
+import { CPDailyReport, PersonalReport, OperationLog, Machine } from '../types';
+import { ProductionComparison, FuelConsumptionStat } from './stats';
 
 export const generateCPReportPDF = (
     report: Omit<CPDailyReport, 'id'>, 
@@ -251,4 +251,60 @@ export const generatePersonalReportPDF = (
 
   const dataUri = doc.output('datauristring');
   return dataUri.split(',')[1];
+};
+
+export const generateFuelReportPDF = (
+    machinesData: { machine: Machine, stats: { monthly: FuelConsumptionStat, quarterly: FuelConsumptionStat, yearly: FuelConsumptionStat } }[],
+    periodLabel: string
+): string => {
+    const doc: any = new jsPDF();
+    
+    // --- HEADER ---
+    doc.setFillColor(15, 23, 42); // Slate 900
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("ARIDOS MARRAQUE", 20, 20);
+    
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Informe de Consumos de Gasoil - ${periodLabel}`, 20, 30);
+
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(10);
+    doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 140, 50);
+
+    const tableData = machinesData.map(({ machine, stats }) => [
+        machine.companyCode ? `[${machine.companyCode}] ${machine.name}` : machine.name,
+        `${stats.monthly.totalLiters} L`,
+        `${stats.monthly.consumptionPerHour} L/h`,
+        `${stats.quarterly.consumptionPerHour} L/h`,
+        `${stats.yearly.consumptionPerHour} L/h`,
+    ]);
+
+    doc.autoTable({
+        startY: 60,
+        head: [['Máquina', 'Litros Mes', 'Consumo Mes', 'Consumo Trim.', 'Consumo Año']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [15, 23, 42] },
+        styles: { fontSize: 9, halign: 'center' },
+        columnStyles: {
+            0: { fontStyle: 'bold', halign: 'left', cellWidth: 60 }
+        }
+    });
+
+    const finalY = doc.lastAutoTable.finalY + 15;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.text("* Cálculo basado en: (Litros Suministrados - Último Repostaje) / (Diferencia de Horas)", 20, finalY);
+
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Documento de control interno - GMAO Marraque", 105, 290, { align: 'center' });
+
+    const dataUri = doc.output('datauristring');
+    return dataUri.split(',')[1];
 };
