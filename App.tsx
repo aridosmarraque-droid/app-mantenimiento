@@ -24,6 +24,7 @@ import { PersonalReportForm } from './components/personal/PersonalReportForm';
 import { WeeklyPlanning } from './components/admin/WeeklyPlanning';
 import { ProductionDashboard } from './components/admin/ProductionDashboard';
 import { DatabaseDiagnostics } from './components/admin/DatabaseDiagnostics';
+import { FuelReportViewer } from './components/admin/FuelReportViewer';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
 import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench } from 'lucide-react';
@@ -50,7 +51,8 @@ enum ViewState {
   ADMIN_PRODUCTION_DASHBOARD,
   ADMIN_MANAGE_WORKERS,
   ADMIN_MANAGE_PROVIDERS,
-  ADMIN_DIAGNOSTICS
+  ADMIN_DIAGNOSTICS,
+  ADMIN_FUEL_REPORT
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'informes' | null;
@@ -298,6 +300,7 @@ function App() {
                         <div className="bg-slate-50 divide-y divide-slate-100">
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></span>Auditoría Diaria Integral</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></span>Registros Técnicos</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_FUEL_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Fuel size={14} className="text-indigo-400" /> Informe de Gasoil</button>
                         </div>
                     )}
                   </div>
@@ -433,6 +436,7 @@ function App() {
             {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_FUEL_REPORT && <FuelReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
 
         </main>
       </div>
