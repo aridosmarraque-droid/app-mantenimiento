@@ -2,11 +2,11 @@ import { getCPReportsByRange, getCPWeeklyPlan, getFuelLogs } from './db';
 import { CPDailyReport, CPWeeklyPlan, OperationLog } from '../types';
 
 export interface ProductionStat {
-    period: string; // "Hoy", "Semana Actual", "Mes Actual", etc.
-    dateLabel: string; // "12/05/2024" or "Mayo 2024"
+    period: string;
+    dateLabel: string;
     totalActualHours: number;
     totalPlannedHours: number;
-    efficiency: number; // Porcentaje
+    efficiency: number;
     reports: CPDailyReport[];
 }
 
@@ -28,7 +28,6 @@ export interface FuelConsumptionStat {
     logsCount: number;
 }
 
-// Obtener fecha del lunes de la semana de la fecha dada
 const getMonday = (d: Date) => {
     const date = new Date(d);
     const day = date.getDay();
@@ -39,7 +38,6 @@ const getMonday = (d: Date) => {
     return monday;
 };
 
-// Formato local YYYY-MM-DD para plan
 const toLocalISO = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -48,39 +46,30 @@ const toLocalISO = (date: Date): string => {
 };
 
 const getHoursFromPlan = (plan: CPWeeklyPlan | null, date: Date): number => {
-    if (!plan) return 8; // Default to 8 if no plan
-    const day = date.getDay(); // 0 Sun, 1 Mon...
+    if (!plan) return 8;
+    const day = date.getDay();
     switch (day) {
         case 1: return plan.hoursMon;
         case 2: return plan.hoursTue;
         case 3: return plan.hoursWed;
         case 4: return plan.hoursThu;
         case 5: return plan.hoursFri;
-        default: return 0; // Weekend usually 0
+        default: return 0;
     }
 };
 
-/**
- * Calcula estadísticas en un rango, pero filtra tanto producción como planificación por el limitDate
- */
 const calculateStats = async (start: Date, end: Date, label: string, limitDate: Date, dateFormat: 'day' | 'month' | 'year' = 'day'): Promise<ProductionStat> => {
-    // 1. Obtener todos los partes del rango total
     const allReportsInRange = await getCPReportsByRange(start, end);
-    
-    // 2. Normalizar el punto de corte (final del día seleccionado)
     const cutoff = new Date(limitDate);
     cutoff.setHours(23, 59, 59, 999);
 
-    // 3. Filtrar los reportes para que solo cuenten los que están dentro del Period-to-Date
     const filteredReports = allReportsInRange.filter(r => {
         const reportDate = new Date(r.date);
         return reportDate <= cutoff;
     });
     
-    // 4. Sumar horas reales SOLO de los reportes filtrados
     const totalActual = filteredReports.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
 
-    // 5. Calcular horas planificadas también respetando el cutoff
     let totalPlanned = 0;
     const loopCurrent = new Date(start);
     loopCurrent.setHours(0,0,0,0);
@@ -88,30 +77,21 @@ const calculateStats = async (start: Date, end: Date, label: string, limitDate: 
     const planCache: Record<string, CPWeeklyPlan | null> = {};
 
     while (loopCurrent <= new Date(end)) {
-        // No sumar planificación si ya pasamos el día de corte
-        if (loopCurrent > cutoff) {
-            break;
-        }
-
+        if (loopCurrent > cutoff) break;
         const mondayStr = toLocalISO(getMonday(loopCurrent));
         if (planCache[mondayStr] === undefined) {
             planCache[mondayStr] = await getCPWeeklyPlan(mondayStr);
         }
-        
         totalPlanned += getHoursFromPlan(planCache[mondayStr], loopCurrent);
         loopCurrent.setDate(loopCurrent.getDate() + 1);
     }
 
-    // Etiquetas de visualización
     let dateLabel = "";
-    if (dateFormat === 'day') {
-        dateLabel = start.toLocaleDateString('es-ES'); 
-    } else if (dateFormat === 'month') {
+    if (dateFormat === 'day') dateLabel = start.toLocaleDateString('es-ES'); 
+    else if (dateFormat === 'month') {
         dateLabel = start.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
         dateLabel = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
-    } else if (dateFormat === 'year') {
-        dateLabel = start.getFullYear().toString();
-    }
+    } else if (dateFormat === 'year') dateLabel = start.getFullYear().toString();
 
     const efficiency = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
@@ -125,60 +105,36 @@ const calculateStats = async (start: Date, end: Date, label: string, limitDate: 
     };
 };
 
-export const getProductionEfficiencyStats = async (baseDate: Date = new Date()): Promise<{
-    daily: ProductionStat,
-    weekly: ProductionComparison,
-    monthly: ProductionComparison,
-    yearly: ProductionComparison
-}> => {
-    // Normalizar baseDate a medianoche local
+export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) => {
     const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
-    
-    // 1. Daily
     const daily = await calculateStats(today, today, "Día Seleccionado", today, 'day');
-
-    // 2. Weekly
     const startWeek = getMonday(today);
     const endWeek = new Date(startWeek);
     endWeek.setDate(endWeek.getDate() + 6); 
-    
     const startLastWeek = new Date(startWeek);
     startLastWeek.setDate(startLastWeek.getDate() - 7);
     const endLastWeek = new Date(endWeek);
     endLastWeek.setDate(endLastWeek.getDate() - 7);
-    
     const lastWeekLimit = new Date(today);
     lastWeekLimit.setDate(lastWeekLimit.getDate() - 7);
 
     const weeklyCurr = await calculateStats(startWeek, endWeek, "Semana Seleccionada", today, 'day');
-    weeklyCurr.dateLabel = `Semana ${startWeek.getDate()}/${startWeek.getMonth()+1}`;
-
     const weeklyPrev = await calculateStats(startLastWeek, endLastWeek, "Semana Anterior", lastWeekLimit, 'day');
-    weeklyPrev.dateLabel = `Semana ${startLastWeek.getDate()}/${startLastWeek.getMonth()+1}`;
-
-    // 3. Monthly
     const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
     const startLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const endLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-    
     const lastMonthLimit = new Date(today.getFullYear(), today.getMonth() - 1, Math.min(today.getDate(), endLastMonth.getDate()));
 
     const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", today, 'month');
     const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastMonthLimit, 'month');
-
-    // 4. Yearly
     const startYear = new Date(today.getFullYear(), 0, 1);
     const endYear = new Date(today.getFullYear(), 11, 31);
-    
     const startLastYear = new Date(today.getFullYear() - 1, 0, 1);
-    const endLastYear = new Date(today.getFullYear() - 1, 11, 31);
-    
     const lastYearLimit = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
 
     const yearlyCurr = await calculateStats(startYear, endYear, "Año Seleccionado", today, 'year');
-    const yearlyPrev = await calculateStats(startLastYear, endLastYear, "Año Anterior", lastYearLimit, 'year');
+    const yearlyPrev = await calculateStats(startLastYear, new Date(today.getFullYear()-1, 11, 31), "Año Anterior", lastYearLimit, 'year');
 
     const compare = (curr: ProductionStat, prev: ProductionStat): ProductionComparison => ({
         current: curr,
@@ -187,20 +143,10 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()):
         diff: parseFloat((curr.efficiency - prev.efficiency).toFixed(1))
     });
 
-    return {
-        daily,
-        weekly: compare(weeklyCurr, weeklyPrev),
-        monthly: compare(monthlyCurr, monthlyPrev),
-        yearly: compare(yearlyCurr, yearlyPrev)
-    };
+    return { daily, weekly: compare(weeklyCurr, weeklyPrev), monthly: compare(monthlyCurr, monthlyPrev), yearly: compare(yearlyCurr, yearlyPrev) };
 };
 
-/**
- * Calcula el consumo medio (L/h) para una lista de logs de repostaje
- * Lógica: (Suma Litros - Último repostaje) / (Horas Último - Horas Primero)
- */
 export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLabel: string = "Periodo"): FuelConsumptionStat => {
-    // Necesitamos al menos 2 repostajes para tener un intervalo
     if (logs.length < 2) {
         return {
             machineId: '',
@@ -214,21 +160,17 @@ export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLab
         };
     }
 
-    // Ordenar por fecha ascendente
     const sorted = [...logs].sort((a, b) => a.date.getTime() - b.date.getTime());
-    
     const firstLog = sorted[0];
     const lastLog = sorted[sorted.length - 1];
-    
     const workedHours = lastLog.hoursAtExecution - firstLog.hoursAtExecution;
     const totalLiters = sorted.reduce((acc, l) => acc + (l.fuelLitres || 0), 0);
     const consumedLiters = totalLiters - (lastLog.fuelLitres || 0);
-    
     const consumptionPerHour = workedHours > 0 ? (consumedLiters / workedHours) : 0;
 
     return {
         machineId: firstLog.machineId,
-        machineName: '', // Se rellena en el componente si es necesario
+        machineName: '',
         period: periodLabel,
         totalLiters,
         consumedLiters,
@@ -238,23 +180,13 @@ export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLab
     };
 };
 
-export const getMachineFuelStats = async (machineId: string, baseDate: Date = new Date()): Promise<{
-    monthly: FuelConsumptionStat,
-    quarterly: FuelConsumptionStat,
-    yearly: FuelConsumptionStat,
-    logs: OperationLog[]
-}> => {
+export const getMachineFuelStats = async (machineId: string, baseDate: Date = new Date()) => {
     const today = new Date(baseDate);
-    
-    // Rango Año
     const yearStart = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
     const yearLogs = await getFuelLogs(machineId, yearStart, today);
     
-    // Rango Trimestre
     const quarterStart = new Date(today.getFullYear(), today.getMonth() - 3, today.getDate());
     const quarterLogs = yearLogs.filter(l => new Date(l.date) >= quarterStart);
-    
-    // Rango Mes actual
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthLogs = quarterLogs.filter(l => new Date(l.date) >= monthStart);
 
@@ -262,6 +194,6 @@ export const getMachineFuelStats = async (machineId: string, baseDate: Date = ne
         monthly: calculateFuelConsumptionFromLogs(monthLogs, "Mes Actual"),
         quarterly: calculateFuelConsumptionFromLogs(quarterLogs, "Último Trimestre"),
         yearly: calculateFuelConsumptionFromLogs(yearLogs, "Último Año"),
-        logs: yearLogs.slice().reverse() // Todos los logs del último año, orden descendente
+        logs: yearLogs.slice().reverse()
     };
 };
