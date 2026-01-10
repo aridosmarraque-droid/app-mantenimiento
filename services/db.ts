@@ -423,6 +423,21 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
     return (data || []).map(mapLogFromDb);
 };
 
+export const getFuelLogs = async (machineId?: string, startDate?: Date, endDate?: Date): Promise<OperationLog[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('mant_registros')
+        .select('*')
+        .eq('tipo_operacion', 'REFUELING');
+    
+    if (machineId) query = query.eq('maquina_id', machineId);
+    if (startDate) query = query.gte('fecha', toLocalDateString(startDate));
+    if (endDate) query = query.lte('fecha', toLocalDateString(endDate));
+    
+    const { data, error } = await query.order('fecha', { ascending: true });
+    if (error) return [];
+    return (data || []).map(mapLogFromDb);
+};
+
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
     if (!isConfigured) return mock.getServiceProviders();
     const { data } = await supabase.from('mant_proveedores').select('*').order('nombre');
