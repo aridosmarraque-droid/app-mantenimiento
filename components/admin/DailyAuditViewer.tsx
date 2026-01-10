@@ -68,22 +68,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 getCRReportsByRange(selectedDate, selectedDate)
             ]);
             
-            // --- LÓGICA DE DE-DUPLICACIÓN ---
-            const uniqueOpsMap = new Map();
-            data.ops.forEach(op => {
-                const fp = `${op.machineId}-${op.workerId}-${op.hoursAtExecution}-${op.type}-${new Date(op.date).getTime()}`;
-                if (!uniqueOpsMap.has(fp)) uniqueOpsMap.set(fp, op);
-            });
-
-            const uniquePersonalMap = new Map();
-            data.personal.forEach(p => {
-                const fp = `${p.workerId}-${p.machineId || 'none'}-${p.hours}-${new Date(p.date).getTime()}`;
-                if (!uniquePersonalMap.has(fp)) uniquePersonalMap.set(fp, p);
-            });
+            // Se eliminan los filtros de huella digital (fingerprint) para permitir registros duplicados legítimos
+            // Solo de-duplicamos si el ID de base de datos es EXACTAMENTE el mismo (error de query)
+            const uniqueOps = Array.from(new Map(data.ops.map(item => [item.id, item])).values());
+            const uniquePersonal = Array.from(new Map(data.personal.map(item => [item.id, item])).values());
 
             setAuditData({ 
-                ops: Array.from(uniqueOpsMap.values()), 
-                personal: Array.from(uniquePersonalMap.values()),
+                ops: uniqueOps, 
+                personal: uniquePersonal,
                 cp: cpData,
                 cr: crData
             });
