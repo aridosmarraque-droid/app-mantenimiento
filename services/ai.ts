@@ -7,20 +7,14 @@ export const analyzeProductionReport = async (
 ): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `
-            Analiza el reporte de producción:
-            - Eficiencia: ${efficiency.toFixed(1)}%
-            - Incidencias: "${comments}"
-            Dime causa raíz probable y 3 recomendaciones técnicas.
-        `;
+        const prompt = `Analiza reporte producción: Eficiencia ${efficiency.toFixed(1)}%, Comentarios: "${comments}". Causa raíz y 3 recomendaciones.`;
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
         });
-        return response.text || "No se pudo generar el análisis.";
+        return response.text || "Error.";
     } catch (error) {
-        console.error("IA Error:", error);
-        return "Error en IA: Verifique configuración.";
+        return "Error IA.";
     }
 };
 
@@ -33,33 +27,49 @@ export const analyzeFluidHealth = async (
 ): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        // Convertimos las series a un formato legible para la IA
+        const motorSeries = motorTrend.series.map((s: any) => `${s.date}: ${s.hours}h -> +${s.added}L`).join('\n');
+        const hydraulicSeries = hydraulicTrend.series.map((s: any) => `${s.date}: ${s.hours}h -> +${s.added}L`).join('\n');
+        const coolantSeries = coolantTrend.series.map((s: any) => `${s.date}: ${s.hours}h -> +${s.added}L`).join('\n');
+
         const prompt = `
-            Actúa como Ingeniero Jefe de Mantenimiento de Maquinaria Pesada.
-            Analiza las tendencias de consumo de fluidos de la unidad "${machineName}" (Horas: ${totalHours}h).
+            Actúa como Ingeniero de Datos de Caterpillar/Komatsu especializado en patrones de desgaste.
+            Analiza la salud de la unidad "${machineName}" (${totalHours}h totales).
 
-            CONTEXTO TÉCNICO IMPORTANTE: 
-            No juzgues el consumo absoluto como avería solo por ser alto. Una máquina puede tener un consumo histórico elevado (su "Baseline") pero estable. 
-            Tu objetivo es detectar DESVIACIONES y RUPTURAS DE PATRÓN (Anomalías).
+            OBJETIVO: Detectar CUÁNDO y POR QUÉ se rompió la tendencia de consumo.
+            
+            DATOS CRUCIALES (Resumen L/100h):
+            - Motor: Histórico ${motorTrend.baselineRate} vs Reciente ${motorTrend.recentRate} (Desviación ${motorTrend.deviation}%)
+            - Hidráulico: Histórico ${hydraulicTrend.baselineRate} vs Reciente ${hydraulicTrend.recentRate} (Desviación ${hydraulicTrend.deviation}%)
+            - Refrigerante: Histórico ${coolantTrend.baselineRate} vs Reciente ${coolantTrend.recentRate} (Desviación ${coolantTrend.deviation}%)
 
-            DATOS DE CONSUMO (L/100h):
-            1. Aceite Motor: Histórico=${motorTrend.baselineRate} vs Reciente=${motorTrend.recentRate} (Desviación: ${motorTrend.deviation}%)
-            2. Aceite Hidráulico: Histórico=${hydraulicTrend.baselineRate} vs Reciente=${hydraulicTrend.recentRate} (Desviación: ${hydraulicTrend.deviation}%)
-            3. Refrigerante: Histórico=${coolantTrend.baselineRate} vs Reciente=${coolantTrend.recentRate} (Desviación: ${coolantTrend.deviation}%)
+            SERIE CRONOLÓGICA (Últimos registros):
+            MOTOR:
+            ${motorSeries}
+            HIDRÁULICO:
+            ${hydraulicSeries}
+            REFRIGERANTE:
+            ${coolantSeries}
 
             TU TAREA:
-            - Identifica cuál de los tres fluidos presenta una anomalía real (desviación significativa >20%).
-            - Si hay una desviación brusca en refrigerante, sospecha de fugas térmicas o culata.
-            - Si hay desviación brusca en hidráulico, sospecha de rotura de latiguillo o retén de bomba.
-            - Si el consumo es alto pero la desviación es baja (<10%), indica que es un comportamiento estable por desgaste natural.
-            - Proporciona un diagnóstico Markdown conciso con "Estado General", "Anomalías Detectadas" y "Acción Técnica Inmediata".
+            1. Si detectas una anomalía (>25% de desviación), identifica en qué fecha/horas aproximadas el consumo se disparó.
+            2. Determina si es una fuga súbita (salto brusco) o desgaste progresivo (subida escalonada).
+            3. Ignora consumos altos si han sido constantes en todo el historial (eso no es avería, es el estado base de la máquina).
+            4. Proporciona un diagnóstico Markdown MUY CONCISO con:
+               - [ANOMALÍA DETECTADA] (o "Estado Estable")
+               - [ORIGEN TEMPORAL] (Cuándo empezó a fallar si hay fallo)
+               - [ACCIÓN TÉCNICA SUGERIDA]
         `;
+
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3-pro-preview', // Usamos Pro para este análisis complejo de patrones
             contents: prompt,
         });
+
         return response.text || "No se pudo generar el diagnóstico.";
     } catch (error) {
-        console.error("IA Fluid Error:", error);
-        return "Error en diagnóstico IA: Verifique configuración.";
+        console.error("Gemini Error:", error);
+        return "Error en diagnóstico IA: Verifique conectividad y API Key.";
     }
 };
