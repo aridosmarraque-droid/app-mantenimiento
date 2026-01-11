@@ -8,7 +8,7 @@ import { Machine, OperationLog } from '../../types';
 import { 
     ArrowLeft, Loader2, AlertTriangle, Truck, Sparkles, Activity,
     Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown, Minus,
-    Send, BrainCircuit, History, Info, Key
+    Send, BrainCircuit, History, Info
 } from 'lucide-react';
 
 interface Props {
@@ -30,16 +30,8 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [sending, setSending] = useState(false);
-    const [hasApiKey, setHasApiKey] = useState(false);
 
     useEffect(() => {
-        const checkKey = async () => {
-            // @ts-ignore
-            const selected = await window.aistudio.hasSelectedApiKey();
-            setHasApiKey(selected);
-        };
-        checkKey();
-
         const loadInitialData = async () => {
             const [centers, allM] = await Promise.all([
                 getCostCenters(),
@@ -57,15 +49,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         loadInitialData();
     }, []);
 
-    const handleSelectKey = async () => {
-        // @ts-ignore
-        await window.aistudio.openSelectKey();
-        setHasApiKey(true);
-        if (selectedMachineId) loadStats();
-    };
-
     const runAiDiagnosis = useCallback(async (currentStats: any, machine: Machine) => {
-        if (!hasApiKey) return;
         setAnalyzing(true);
         try {
             const result = await analyzeFluidHealth(
@@ -82,7 +66,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         } finally {
             setAnalyzing(false);
         }
-    }, [hasApiKey]);
+    }, []);
 
     const loadStats = useCallback(async () => {
         if (!selectedMachineId) return;
@@ -104,11 +88,6 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     }, [loadStats]);
 
     const handleSendMonthlyReport = async () => {
-        if (!hasApiKey) {
-            alert("Debe seleccionar una API Key antes de generar el informe IA.");
-            handleSelectKey();
-            return;
-        }
         if (!confirm("Se enviará el Monitor de Salud con Resumen de Alertas e IA a aridos@marraque.es. ¿Confirmar?")) return;
         setSending(true);
         try {
@@ -125,7 +104,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             }
 
             if (consolidatedData.length === 0) {
-                alert("Sin datos suficientes.");
+                alert("Sin datos suficientes en la flota.");
                 setSending(false);
                 return;
             }
@@ -134,7 +113,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             const res = await sendEmail(
                 ['aridos@marraque.es'],
                 `Monitor Salud Fluidos - Auditoría ${periodName}`,
-                `<p>Informe técnico generado con <strong>IA de Patrones</strong>. Incluye puntos de ruptura de tendencia.</p>`,
+                `<p>Informe técnico generado con <strong>IA de Patrones</strong>. Analizando rupturas de tendencia.</p>`,
                 pdfBase64,
                 `Salud_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
             );
@@ -159,30 +138,14 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         </p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    {!hasApiKey && (
-                        <button onClick={handleSelectKey} className="bg-amber-100 text-amber-700 p-2.5 rounded-xl border border-amber-200 animate-pulse">
-                            <Key size={20}/>
-                        </button>
-                    )}
-                    <button 
-                        onClick={handleSendMonthlyReport}
-                        disabled={sending || machines.length === 0}
-                        className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
-                    >
-                        {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                    </button>
-                </div>
+                <button 
+                    onClick={handleSendMonthlyReport}
+                    disabled={sending || machines.length === 0}
+                    className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
+                >
+                    {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                </button>
             </div>
-
-            {!hasApiKey && (
-                <div className="mx-1 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col items-center gap-3 text-center">
-                    <AlertTriangle className="text-amber-600" size={32} />
-                    <p className="text-xs font-bold text-amber-800 uppercase tracking-tight">API Key no configurada</p>
-                    <p className="text-[10px] text-amber-600">Para utilizar el diagnóstico IA de patrones, debe seleccionar su clave de Google AI Studio.</p>
-                    <button onClick={handleSelectKey} className="bg-amber-600 text-white px-6 py-2 rounded-lg font-black text-[10px] uppercase shadow-md">Configurar Ahora</button>
-                </div>
-            )}
 
             <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
