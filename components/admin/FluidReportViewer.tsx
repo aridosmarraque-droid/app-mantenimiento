@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllMachines, getCostCenters } from '../../services/db';
 import { getMachineFluidStats, formatDecimal } from '../../services/stats';
-import { analyzeFluidHealth } from '../../services/ai';
-import { generateFluidReportPDF } from '../../services/pdf';
-import { sendEmail } from '../../services/api';
 import { Machine, OperationLog } from '../../types';
 import { 
-    ArrowLeft, Loader2, AlertTriangle, Truck, Sparkles, Activity,
+    ArrowLeft, Loader2, AlertTriangle, Truck, Activity,
     Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown, Minus,
-    Send, BrainCircuit, History, Info
+    History, BarChart2
 } from 'lucide-react';
 
 interface Props {
@@ -27,9 +24,6 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     const [selectedMachineId, setSelectedMachineId] = useState('');
     const [loading, setLoading] = useState(false);
     const [stats, setStats] = useState<any>(null);
-    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-    const [analyzing, setAnalyzing] = useState(false);
-    const [sending, setSending] = useState(false);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -49,107 +43,39 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         loadInitialData();
     }, []);
 
-    const runAiDiagnosis = useCallback(async (currentStats: any, machine: Machine) => {
-        setAnalyzing(true);
-        try {
-            const result = await analyzeFluidHealth(
-                machine.name,
-                currentStats.motor,
-                currentStats.hydraulic,
-                currentStats.coolant,
-                machine.currentHours
-            );
-            setAiAnalysis(result);
-        } catch (e) {
-            console.error(e);
-            setAiAnalysis("Error en diagnóstico IA: Verifique conectividad o clave API.");
-        } finally {
-            setAnalyzing(false);
-        }
-    }, []);
-
     const loadStats = useCallback(async () => {
         if (!selectedMachineId) return;
         setLoading(true);
-        setAiAnalysis(null);
         try {
             const data = await getMachineFluidStats(selectedMachineId);
             setStats(data);
-            const machine = machines.find(m => m.id === selectedMachineId);
-            if (machine && (data.motor.logsCount >= 2 || data.hydraulic.logsCount >= 2 || data.coolant.logsCount >= 2)) {
-                runAiDiagnosis(data, machine);
-            }
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
-    }, [selectedMachineId, machines, runAiDiagnosis]);
+    }, [selectedMachineId]);
 
     useEffect(() => {
         loadStats();
     }, [loadStats]);
-
-    const handleSendMonthlyReport = async () => {
-        if (!confirm("Se enviará el Monitor de Salud con Resumen de Alertas e IA a aridos@marraque.es. ¿Confirmar?")) return;
-        setSending(true);
-        try {
-            const now = new Date();
-            const periodName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
-            const consolidatedData = [];
-
-            for (const m of machines) {
-                const mStats = await getMachineFluidStats(m.id);
-                if (mStats.motor.logsCount >= 2 || mStats.hydraulic.logsCount >= 2 || mStats.coolant.logsCount >= 2) {
-                    const diagnosis = await analyzeFluidHealth(m.name, mStats.motor, mStats.hydraulic, mStats.coolant, m.currentHours);
-                    consolidatedData.push({ machine: m, stats: mStats, aiAnalysis: diagnosis });
-                }
-            }
-
-            if (consolidatedData.length === 0) {
-                alert("Sin datos suficientes en la flota.");
-                setSending(false);
-                return;
-            }
-
-            const pdfBase64 = generateFluidReportPDF(consolidatedData, periodName);
-            const res = await sendEmail(
-                ['aridos@marraque.es'],
-                `Monitor Salud Fluidos - Auditoría ${periodName}`,
-                `<p>Informe técnico generado con <strong>IA de Patrones</strong>. Analizando rupturas de tendencia.</p>`,
-                pdfBase64,
-                `Salud_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
-            );
-
-            if (res.success) alert("Informe enviado correctamente.");
-            else alert("Error al enviar email.");
-        } catch (e) { alert("Error en proceso."); }
-        finally { setSending(false); }
-    };
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
             <div className="flex items-center justify-between border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <div className="flex items-center gap-2">
                     <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
-                        <ArrowLeft className="w-6 h-6" />
+                        <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Salud de Fluidos</h3>
+                        <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Monitor Técnico de Fluidos</h3>
                         <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            <BrainCircuit size={10}/> Detección de Rupturas IA
+                            Análisis de Repostajes vs Horas de Trabajo
                         </p>
                     </div>
                 </div>
-                <button 
-                    onClick={handleSendMonthlyReport}
-                    disabled={sending || machines.length === 0}
-                    className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
-                >
-                    {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                </button>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
-                    <Truck size={12}/> Seleccionar Maquinaria Móvil
+                    <Truck size={12}/> Seleccionar Máquina
                 </label>
                 <select 
                     value={selectedMachineId}
@@ -166,7 +92,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             {loading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={40} />
-                    Analizando Serie Temporal...
+                    Procesando registros históricos...
                 </div>
             ) : stats ? (
                 <div className="space-y-6 px-1">
@@ -176,34 +102,61 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         <TrendCard title="Refrigerante" stat={stats.coolant} icon={Thermometer} />
                     </div>
 
-                    <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-3xl shadow-xl relative overflow-hidden">
-                        <Sparkles className="absolute -right-4 -top-4 w-32 h-32 text-white/5 rotate-12" />
-                        <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-4 flex items-center gap-2">
-                            <BrainCircuit size={16} className="text-indigo-400" /> Diagnóstico Predictivo IA
-                        </h4>
-                        
-                        {analyzing ? (
-                            <div className="flex items-center gap-3 text-indigo-300 py-6 animate-pulse">
-                                <Loader2 className="animate-spin" size={24}/>
-                                <span className="text-xs font-black uppercase tracking-widest">Calculando punto de quiebre...</span>
+                    {/* Gráfico de Barras Técnico para el Ingeniero */}
+                    {(stats.motor.deviation > 25 || stats.hydraulic.deviation > 25 || stats.coolant.deviation > 25) && (
+                        <div className="bg-slate-900 p-6 rounded-3xl shadow-xl border border-white/10">
+                            <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-6 flex items-center gap-2">
+                                <BarChart2 size={16} className="text-red-500" /> Histograma de Ruptura (Litros / 100 Horas)
+                            </h4>
+                            
+                            <div className="space-y-8">
+                                {['motor', 'hydraulic', 'coolant'].map(key => {
+                                    const s = stats[key];
+                                    if (s.deviation <= 25 || s.series.length === 0) return null;
+                                    
+                                    // Determinar el máximo para escalar las barras
+                                    const maxRate = Math.max(...s.series.map((p: any) => p.rate), s.baselineRate) * 1.2;
+
+                                    return (
+                                        <div key={key} className="space-y-2">
+                                            <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase">
+                                                <span>Evolución {key === 'motor' ? 'Aceite Motor' : key === 'hydraulic' ? 'Aceite Hidráulico' : 'Refrigerante'}</span>
+                                                <span className="text-red-400">Anomalía Detectada: {s.deviation.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="flex items-end gap-2 h-32 pt-4">
+                                                {/* Línea de Base (Promedio Histórico) */}
+                                                {s.series.map((point: any, idx: number) => (
+                                                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 group">
+                                                        <div className="w-full relative flex flex-col justify-end h-full">
+                                                            {/* Barra de Consumo */}
+                                                            <div 
+                                                                style={{ height: `${(point.rate / maxRate) * 100}%` }}
+                                                                className={`w-full rounded-t-sm transition-all duration-500 ${point.rate > s.baselineRate * 1.2 ? 'bg-red-500' : 'bg-blue-500 opacity-60'}`}
+                                                            >
+                                                                <div className="hidden group-hover:block absolute -top-6 left-1/2 -translate-x-1/2 bg-white text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg whitespace-nowrap">
+                                                                    {point.rate.toFixed(3)} L/100h
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[8px] text-slate-500 font-bold rotate-45 mt-2">{point.date}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="mt-6 pt-2 border-t border-white/5 text-[8px] text-slate-500 font-bold uppercase flex justify-between">
+                                                <span>Línea Base: {s.baselineRate.toFixed(3)} L/100h</span>
+                                                <span className="text-red-500">Punto Crítico: {s.recentRate.toFixed(3)} L/100h</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        ) : aiAnalysis ? (
-                            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-5 border border-white/10 animate-in zoom-in-95 duration-300">
-                                <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-line font-medium prose prose-invert">
-                                    {aiAnalysis}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="text-slate-500 text-xs italic py-4 flex items-center gap-2">
-                                <Info size={14}/> Datos insuficientes para auditoría profunda.
-                            </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
-                        <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
+                        <div className="p-4 bg-slate-50 border-b">
                             <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest flex items-center gap-1">
-                                <History size={14}/> Historial de Consumos
+                                <History size={14}/> Registros de niveles
                             </h4>
                         </div>
                         <div className="divide-y max-h-80 overflow-y-auto">
@@ -226,7 +179,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             ) : (
                 <div className="py-20 text-center flex flex-col items-center gap-4 opacity-30">
                     <Activity size={64} className="text-slate-300"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione máquina móvil</p>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione una unidad</p>
                 </div>
             )}
         </div>
@@ -256,14 +209,14 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
 
             {isError ? (
                 <div className="text-[9px] text-slate-400 font-bold uppercase italic flex items-center gap-2">
-                    <Minus size={14}/> Serie temporal insuficiente
+                    <Minus size={14}/> Datos insuficientes
                 </div>
             ) : (
                 <div className="space-y-4 relative z-10">
                     <div className="flex items-end justify-between">
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tendencia Reciente</p>
-                            <span className={`text-4xl font-black ${info.color}`}>{formatDecimal(stat.recentRate)}</span>
+                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tasa Reciente</p>
+                            <span className={`text-3xl font-black ${info.color}`}>{formatDecimal(stat.recentRate)}</span>
                             <span className="ml-1 text-[10px] font-bold text-slate-400">L/100h</span>
                         </div>
                         <div className="text-right">
@@ -271,17 +224,6 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
                             <span className={`text-xl font-black ${info.color}`}>
                                 {stat.deviation > 0 ? '+' : ''}{formatDecimal(stat.deviation, 1)}%
                             </span>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-50">
-                        <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Media Base</p>
-                            <p className="text-xs font-black text-slate-500">{formatDecimal(stat.baselineRate)} L/100h</p>
-                        </div>
-                        <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Puntos Serie</p>
-                            <p className="text-xs font-black text-slate-500">{stat.logsCount} Muestras</p>
                         </div>
                     </div>
                 </div>
