@@ -1,23 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 
-const getApiKey = () => {
-    try {
-        return process.env.API_KEY || "";
-    } catch (e) {
-        return "";
-    }
-};
-
 export const analyzeProductionReport = async (
     comments: string, 
     efficiency: number,
     date: Date
 ): Promise<string> => {
-    const apiKey = getApiKey();
-    if (!apiKey) return "API Key no configurada.";
-
     try {
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const prompt = `
             Analiza el reporte de producción:
             - Eficiencia: ${efficiency.toFixed(1)}%
@@ -31,7 +20,7 @@ export const analyzeProductionReport = async (
         return response.text || "No se pudo generar el análisis.";
     } catch (error) {
         console.error("IA Error:", error);
-        return "Error en IA.";
+        return "Error en IA: Verifique configuración.";
     }
 };
 
@@ -42,11 +31,8 @@ export const analyzeFluidHealth = async (
     coolantTrend: any,
     totalHours: number
 ): Promise<string> => {
-    const apiKey = getApiKey();
-    if (!apiKey) return "API Key no configurada.";
-
     try {
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const prompt = `
             Actúa como Ingeniero Jefe de Mantenimiento de Maquinaria Pesada.
             Analiza las tendencias de consumo de fluidos de la unidad "${machineName}" (Horas: ${totalHours}h).
@@ -74,6 +60,6 @@ export const analyzeFluidHealth = async (
         return response.text || "No se pudo generar el diagnóstico.";
     } catch (error) {
         console.error("IA Fluid Error:", error);
-        return "Error en diagnóstico IA.";
+        return "Error en diagnóstico IA: Verifique configuración.";
     }
 };
