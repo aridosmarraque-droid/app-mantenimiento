@@ -53,6 +53,20 @@ const getMonday = (d: Date) => {
     return monday;
 };
 
+const getPlannedHoursForDate = (date: Date, plan: CPWeeklyPlan | null): number => {
+    if (!plan) return 8; // Fallback a 8 si no hay plan configurado
+    const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    
+    switch (dayOfWeek) {
+        case 1: return plan.hoursMon;
+        case 2: return plan.hoursTue;
+        case 3: return plan.hoursWed;
+        case 4: return plan.hoursThu;
+        case 5: return plan.hoursFri;
+        default: return 0; // Sábados y Domingos no suelen tener planificación estándar
+    }
+};
+
 // --- CÁLCULO DE EFICIENCIA DE PRODUCCIÓN ---
 
 export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) => {
@@ -108,16 +122,33 @@ const calculateStats = async (start: Date, end: Date, label: string, limitDate: 
     
     const filtered = reports.filter(r => new Date(r.date) <= cutoff);
     
-    // En Aridos Marraque, la eficiencia se mide por horas de Molino (producción real)
-    // Contra una jornada estándar de 8h por cada parte registrado
-    const totalActual = filtered.reduce((acc, r) => acc + (r.millsEnd - r.millsStart), 0);
-    const totalPlanned = filtered.length * 8; // 8h por cada día con reporte
+    let totalActual = 0;
+    let totalPlanned = 0;
+
+    // Cache de planes semanales para evitar múltiples llamadas en rangos largos (Mes/Año)
+    const planCache = new Map<string, CPWeeklyPlan | null>();
+
+    for (const report of filtered) {
+        const reportDate = new Date(report.date);
+        const mon = getMonday(reportDate).toISOString().split('T')[0];
+        
+        if (!planCache.has(mon)) {
+            const plan = await getCPWeeklyPlan(mon);
+            planCache.set(mon, plan);
+        }
+
+        const plan = planCache.get(mon)!;
+        const plannedForDay = getPlannedHoursForDate(reportDate, plan);
+        
+        totalActual += (report.millsEnd - report.millsStart);
+        totalPlanned += plannedForDay;
+    }
 
     return {
         period: label,
         dateLabel: `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
         totalActualHours: parseFloat(totalActual.toFixed(2)),
-        totalPlannedHours: totalPlanned || 8,
+        totalPlannedHours: parseFloat(totalPlanned.toFixed(2)),
         efficiency: totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0,
         reports: filtered.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     };
