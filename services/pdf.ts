@@ -264,7 +264,7 @@ export const generateFluidReportPDF = (
 
     let currentY = 50;
 
-    machinesData.forEach(({ machine, stats, aiAnalysis }, index) => {
+    machinesData.forEach(({ machine, stats, aiAnalysis }) => {
         if (currentY > 230) { doc.addPage(); currentY = 20; }
         
         doc.setFillColor(245, 247, 250);
@@ -299,9 +299,9 @@ export const generateFluidReportPDF = (
         currentY += 4;
         doc.setFont("helvetica", "italic");
         doc.setTextColor(60, 60, 60);
-        const splitAi = doc.splitTextToSize(aiAnalysis.substring(0, 400), 170);
+        const splitAi = doc.splitTextToSize(aiAnalysis, 170);
         doc.text(splitAi, 20, currentY);
-        currentY += (splitAi.length * 4) + 10;
+        currentY += (splitAi.length * 4) + 12;
     });
 
     doc.setFontSize(7);
