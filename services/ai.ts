@@ -7,7 +7,7 @@ export const analyzeProductionReport = async (
 ): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `Analiza reporte producción: Eficiencia ${efficiency.toFixed(1)}%, Incidencias: "${comments}". Identifica causa raíz y da 3 recomendaciones técnicas.`;
+        const prompt = `Analiza reporte producción: Eficiencia ${efficiency.toFixed(1)}%, Incidencias: "${comments}". Identifica causa raíz técnica y da 3 recomendaciones de mantenimiento preventivo.`;
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -15,7 +15,7 @@ export const analyzeProductionReport = async (
         return response.text || "No se pudo generar el análisis.";
     } catch (error) {
         console.error("IA Error:", error);
-        return "Error en IA: Verifique configuración de clave.";
+        return "Error en IA: Verifique configuración.";
     }
 };
 
@@ -33,15 +33,15 @@ export const analyzeFluidHealth = async (
             series.map((s: any) => `Fecha: ${s.date} | Horas: ${s.hours}h | Añadido: ${s.added}L`).join('\n');
 
         const prompt = `
-            Actúa como Ingeniero de Diagnóstico de Maquinaria Pesada.
-            Analiza la salud de la unidad "${machineName}" (${totalHours}h totales).
+            Actúa como Ingeniero Senior de Diagnóstico Predictivo de Maquinaria Pesada.
+            Analiza la salud de fluidos de la unidad "${machineName}" (${totalHours}h totales).
 
-            RESUMEN DE DESVIACIONES (L/100h):
+            CONTEXTO TÉCNICO:
             - Motor: Histórico ${motorTrend.baselineRate} vs Reciente ${motorTrend.recentRate} (Desviación ${motorTrend.deviation}%)
             - Hidráulico: Histórico ${hydraulicTrend.baselineRate} vs Reciente ${hydraulicTrend.recentRate} (Desviación ${hydraulicTrend.deviation}%)
             - Refrigerante: Histórico ${coolantTrend.baselineRate} vs Reciente ${coolantTrend.recentRate} (Desviación ${coolantTrend.deviation}%)
 
-            HISTORIAL DETALLADO (Para detección de origen de avería):
+            SERIES TEMPORALES DETALLADAS (Para detección de inicio de fallo):
             MOTOR:
             ${formatSeries(motorTrend.series)}
             HIDRÁULICO:
@@ -49,15 +49,15 @@ export const analyzeFluidHealth = async (
             REFRIGERANTE:
             ${formatSeries(coolantTrend.series)}
 
-            INSTRUCCIONES TÉCNICAS:
-            1. Si la desviación supera el 25%, analiza el historial para determinar el "Punto de Ruptura": ¿Cuándo empezó a dispararse el consumo exactamente?
-            2. Evalúa si el incremento es repentino (fuga/rotura) o progresivo (desgaste de retenes/segmentos).
-            3. Si el consumo es alto pero la desviación es <10%, catalógalo como "Estado Estable por Desgaste Natural".
-            4. Responde en Markdown conciso con:
-               - **DIAGNÓSTICO**: (Estado general)
-               - **ANOMALÍA DETECTADA**: (Detalla qué fluido y gravedad)
-               - **ORIGEN ESTIMADO**: (Indica fecha/horas donde se detecta el cambio de tendencia)
-               - **ACCIÓN TÉCNICA**: (Sugerencia inmediata)
+            REQUERIMIENTOS DEL ANÁLISIS:
+            1. Si detectas una desviación >25%, profundiza en la serie temporal para identificar el MOMENTO EXACTO (Fecha/Horas) donde la tendencia se rompió.
+            2. Evalúa si el patrón es una "Ruptura Súbita" (fuga externa o rotura) o un "Desgaste Acelerado" (segmentos, retenes, bomba).
+            3. Si el consumo es alto pero estable (desviación <10%), no lo clasifiques como avería, sino como "Estado Base" por vida útil.
+            4. Responde con un diagnóstico Markdown muy profesional y ejecutivo:
+               - **ESTADO GENERAL**: (Resumen de la unidad)
+               - **DETECCIÓN DE ANOMALÍAS**: (Fluido afectado y severidad)
+               - **PUNTO DE INICIO DE AVERÍA**: (Indica cuándo empezó a fallar basándote en los saltos de horas)
+               - **ESTRATEGIA TÉCNICA RECOMENDADA**: (Acción inmediata)
         `;
 
         const response = await ai.models.generateContent({
