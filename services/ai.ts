@@ -37,9 +37,9 @@ export const analyzeProductionReport = async (
 
 export const analyzeFluidHealth = async (
     machineName: string,
-    motorRate: number,
-    hydraulicRate: number,
-    coolantRate: number,
+    motorTrend: any,
+    hydraulicTrend: any,
+    coolantTrend: any,
     totalHours: number
 ): Promise<string> => {
     const apiKey = getApiKey();
@@ -48,17 +48,24 @@ export const analyzeFluidHealth = async (
     try {
         const ai = new GoogleGenAI({ apiKey });
         const prompt = `
-            Actúa como Ingeniero de Mantenimiento experto en maquinaria pesada.
-            Analiza los siguientes consumos de fluidos para la máquina "${machineName}" (Horas actuales: ${totalHours}):
-            - Aceite Motor: ${motorRate.toFixed(3)} L/100h
-            - Aceite Hidráulico: ${hydraulicRate.toFixed(3)} L/100h
-            - Refrigerante: ${coolantRate.toFixed(3)} L/100h
+            Actúa como Ingeniero Jefe de Mantenimiento de Maquinaria Pesada.
+            Analiza las tendencias de consumo de fluidos de la unidad "${machineName}" (Horas: ${totalHours}h).
 
-            Tu tarea:
-            1. Evalúa si estos valores son normales o indican una avería.
-            2. Si hay consumos elevados, indica qué componente está fallando probablemente (ej. Culata, Segmentos, Bombas, Intercambiador, Mangueras).
-            3. Sugiere pruebas diagnósticas (ej. análisis de aceite, prueba de presión de refrigerante).
-            Responde en Markdown directo y profesional.
+            CONTEXTO TÉCNICO IMPORTANTE: 
+            No juzgues el consumo absoluto como avería solo por ser alto. Una máquina puede tener un consumo histórico elevado (su "Baseline") pero estable. 
+            Tu objetivo es detectar DESVIACIONES y RUPTURAS DE PATRÓN (Anomalías).
+
+            DATOS DE CONSUMO (L/100h):
+            1. Aceite Motor: Histórico=${motorTrend.baselineRate} vs Reciente=${motorTrend.recentRate} (Desviación: ${motorTrend.deviation}%)
+            2. Aceite Hidráulico: Histórico=${hydraulicTrend.baselineRate} vs Reciente=${hydraulicTrend.recentRate} (Desviación: ${hydraulicTrend.deviation}%)
+            3. Refrigerante: Histórico=${coolantTrend.baselineRate} vs Reciente=${coolantTrend.recentRate} (Desviación: ${coolantTrend.deviation}%)
+
+            TU TAREA:
+            - Identifica cuál de los tres fluidos presenta una anomalía real (desviación significativa >20%).
+            - Si hay una desviación brusca en refrigerante, sospecha de fugas térmicas o culata.
+            - Si hay desviación brusca en hidráulico, sospecha de rotura de latiguillo o retén de bomba.
+            - Si el consumo es alto pero la desviación es baja (<10%), indica que es un comportamiento estable por desgaste natural.
+            - Proporciona un diagnóstico Markdown conciso con "Estado General", "Anomalías Detectadas" y "Acción Técnica Inmediata".
         `;
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
