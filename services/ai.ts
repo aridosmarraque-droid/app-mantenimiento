@@ -5,8 +5,16 @@ export const analyzeProductionReport = async (
     efficiency: number,
     date: Date
 ): Promise<string> => {
+    // Diagnóstico de clave en consola
+    const key = process.env.API_KEY;
+    console.log(`[AI DIAGNOSTIC] Key status: ${key ? `Present (Starts with: ${key.substring(0, 4)}...)` : 'MISSING'}`);
+
+    if (!key) {
+        return "Error: La clave de IA no está configurada en el entorno de ejecución.";
+    }
+
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: key });
         const prompt = `Actúa como Gerente de Planta. Analiza el reporte del día ${date.toLocaleDateString()}. 
         Eficiencia: ${efficiency.toFixed(1)}%. 
         Incidencias: "${comments}". 
@@ -17,9 +25,9 @@ export const analyzeProductionReport = async (
             contents: prompt,
         });
         return response.text || "No se pudo generar el análisis.";
-    } catch (error) {
-        console.error("Gemini Error:", error);
-        return "Error de conexión con la IA. Verifique que la API Key esté configurada en el entorno.";
+    } catch (error: any) {
+        console.error("Gemini Critical Error:", error);
+        return `Error de IA: ${error.message || 'Error en la conexión con Gemini'}`;
     }
 };
 
@@ -30,8 +38,11 @@ export const analyzeFluidHealth = async (
     coolantTrend: any,
     totalHours: number
 ): Promise<string> => {
+    const key = process.env.API_KEY;
+    if (!key) return "Error: API_KEY_MISSING";
+
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: key });
         
         const formatSeries = (series: any[]) => 
             series.map((s: any) => `Fecha: ${s.date} | Horas: ${s.hours}h | Añadido: ${s.added}L`).join('\n');
