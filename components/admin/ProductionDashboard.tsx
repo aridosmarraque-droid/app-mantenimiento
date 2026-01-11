@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
 import { updateCPReportAnalysis } from '../../services/db';
 import { analyzeProductionReport } from '../../services/ai';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search, Key } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search } from 'lucide-react';
 import { CPDailyReport } from '../../types';
 
 interface Props {
@@ -14,22 +14,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
-    const [hasApiKey, setHasApiKey] = useState(false);
-
-    useEffect(() => {
-        const checkKey = async () => {
-            // @ts-ignore
-            const selected = await window.aistudio.hasSelectedApiKey();
-            setHasApiKey(selected);
-        };
-        checkKey();
-    }, []);
-
-    const handleSelectKey = async () => {
-        // @ts-ignore
-        await window.aistudio.openSelectKey();
-        setHasApiKey(true);
-    };
 
     const loadStats = useCallback(async () => {
         setLoading(true);
@@ -50,11 +34,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     }, [loadStats]);
 
     const handleAnalyzeClick = async (report: CPDailyReport, efficiency: number) => {
-        if (!hasApiKey) {
-            alert("Seleccione una API Key para usar la IA.");
-            handleSelectKey();
-            return;
-        }
         setAnalyzingId(report.id);
         try {
             const analysis = await analyzeProductionReport(
@@ -65,7 +44,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
             await updateCPReportAnalysis(report.id, analysis);
             await loadStats();
         } catch (error) {
-            alert("Error al analizar con IA");
+            alert("Error al analizar con IA: Verifique configuración de API Key en el entorno.");
         } finally {
             setAnalyzingId(null);
         }
@@ -86,11 +65,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         <TrendingUp className="text-amber-600" /> Panel Eficiencia IA
                     </h2>
                 </div>
-                {!hasApiKey && (
-                    <button onClick={handleSelectKey} className="bg-amber-100 text-amber-700 p-2 rounded-lg border border-amber-200 animate-pulse">
-                        <Key size={18}/>
-                    </button>
-                )}
             </div>
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
