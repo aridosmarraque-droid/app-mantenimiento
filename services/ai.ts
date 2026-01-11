@@ -7,14 +7,15 @@ export const analyzeProductionReport = async (
 ): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `Analiza reporte producción: Eficiencia ${efficiency.toFixed(1)}%, Comentarios: "${comments}". Causa raíz y 3 recomendaciones.`;
+        const prompt = `Analiza reporte producción: Eficiencia ${efficiency.toFixed(1)}%, Incidencias: "${comments}". Identifica causa raíz y da 3 recomendaciones técnicas.`;
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
         });
-        return response.text || "Error.";
+        return response.text || "No se pudo generar el análisis.";
     } catch (error) {
-        return "Error IA.";
+        console.error("IA Error:", error);
+        return "Error en IA: Verifique configuración de clave.";
     }
 };
 
@@ -28,48 +29,45 @@ export const analyzeFluidHealth = async (
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
-        // Convertimos las series a un formato legible para la IA
-        const motorSeries = motorTrend.series.map((s: any) => `${s.date}: ${s.hours}h -> +${s.added}L`).join('\n');
-        const hydraulicSeries = hydraulicTrend.series.map((s: any) => `${s.date}: ${s.hours}h -> +${s.added}L`).join('\n');
-        const coolantSeries = coolantTrend.series.map((s: any) => `${s.date}: ${s.hours}h -> +${s.added}L`).join('\n');
+        const formatSeries = (series: any[]) => 
+            series.map((s: any) => `Fecha: ${s.date} | Horas: ${s.hours}h | Añadido: ${s.added}L`).join('\n');
 
         const prompt = `
-            Actúa como Ingeniero de Datos de Caterpillar/Komatsu especializado en patrones de desgaste.
+            Actúa como Ingeniero de Diagnóstico de Maquinaria Pesada.
             Analiza la salud de la unidad "${machineName}" (${totalHours}h totales).
 
-            OBJETIVO: Detectar CUÁNDO y POR QUÉ se rompió la tendencia de consumo.
-            
-            DATOS CRUCIALES (Resumen L/100h):
+            RESUMEN DE DESVIACIONES (L/100h):
             - Motor: Histórico ${motorTrend.baselineRate} vs Reciente ${motorTrend.recentRate} (Desviación ${motorTrend.deviation}%)
             - Hidráulico: Histórico ${hydraulicTrend.baselineRate} vs Reciente ${hydraulicTrend.recentRate} (Desviación ${hydraulicTrend.deviation}%)
             - Refrigerante: Histórico ${coolantTrend.baselineRate} vs Reciente ${coolantTrend.recentRate} (Desviación ${coolantTrend.deviation}%)
 
-            SERIE CRONOLÓGICA (Últimos registros):
+            HISTORIAL DETALLADO (Para detección de origen de avería):
             MOTOR:
-            ${motorSeries}
+            ${formatSeries(motorTrend.series)}
             HIDRÁULICO:
-            ${hydraulicSeries}
+            ${formatSeries(hydraulicTrend.series)}
             REFRIGERANTE:
-            ${coolantSeries}
+            ${formatSeries(coolantTrend.series)}
 
-            TU TAREA:
-            1. Si detectas una anomalía (>25% de desviación), identifica en qué fecha/horas aproximadas el consumo se disparó.
-            2. Determina si es una fuga súbita (salto brusco) o desgaste progresivo (subida escalonada).
-            3. Ignora consumos altos si han sido constantes en todo el historial (eso no es avería, es el estado base de la máquina).
-            4. Proporciona un diagnóstico Markdown MUY CONCISO con:
-               - [ANOMALÍA DETECTADA] (o "Estado Estable")
-               - [ORIGEN TEMPORAL] (Cuándo empezó a fallar si hay fallo)
-               - [ACCIÓN TÉCNICA SUGERIDA]
+            INSTRUCCIONES TÉCNICAS:
+            1. Si la desviación supera el 25%, analiza el historial para determinar el "Punto de Ruptura": ¿Cuándo empezó a dispararse el consumo exactamente?
+            2. Evalúa si el incremento es repentino (fuga/rotura) o progresivo (desgaste de retenes/segmentos).
+            3. Si el consumo es alto pero la desviación es <10%, catalógalo como "Estado Estable por Desgaste Natural".
+            4. Responde en Markdown conciso con:
+               - **DIAGNÓSTICO**: (Estado general)
+               - **ANOMALÍA DETECTADA**: (Detalla qué fluido y gravedad)
+               - **ORIGEN ESTIMADO**: (Indica fecha/horas donde se detecta el cambio de tendencia)
+               - **ACCIÓN TÉCNICA**: (Sugerencia inmediata)
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', // Usamos Pro para este análisis complejo de patrones
+            model: 'gemini-3-pro-preview',
             contents: prompt,
         });
 
-        return response.text || "No se pudo generar el diagnóstico.";
+        return response.text || "Sin diagnóstico disponible.";
     } catch (error) {
-        console.error("Gemini Error:", error);
-        return "Error en diagnóstico IA: Verifique conectividad y API Key.";
+        console.error("Gemini Fluid Error:", error);
+        return "Error en diagnóstico IA: Verifique configuración de clave o conexión.";
     }
 };
