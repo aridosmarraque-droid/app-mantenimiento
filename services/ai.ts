@@ -1,12 +1,19 @@
-
 import { GoogleGenAI } from "@google/genai";
+
+const getApiKey = () => {
+    try {
+        return process.env.API_KEY || "";
+    } catch (e) {
+        return "";
+    }
+};
 
 export const analyzeProductionReport = async (
     comments: string, 
     efficiency: number,
     date: Date
 ): Promise<string> => {
-    const apiKey = process.env.API_KEY;
+    const apiKey = getApiKey();
     if (!apiKey) return "API Key no configurada.";
 
     try {
@@ -23,6 +30,7 @@ export const analyzeProductionReport = async (
         });
         return response.text || "No se pudo generar el análisis.";
     } catch (error) {
+        console.error("IA Error:", error);
         return "Error en IA.";
     }
 };
@@ -34,7 +42,7 @@ export const analyzeFluidHealth = async (
     coolantRate: number,
     totalHours: number
 ): Promise<string> => {
-    const apiKey = process.env.API_KEY;
+    const apiKey = getApiKey();
     if (!apiKey) return "API Key no configurada.";
 
     try {
@@ -58,6 +66,7 @@ export const analyzeFluidHealth = async (
         });
         return response.text || "No se pudo generar el diagnóstico.";
     } catch (error) {
+        console.error("IA Fluid Error:", error);
         return "Error en diagnóstico IA.";
     }
 };
