@@ -81,7 +81,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         try {
             const period = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
             
-            const mobileMachines = allMachines.filter(m => m.companyCode); // Filtro básico para maquinaria con código
+            const mobileMachines = allMachines.filter(m => m.companyCode); 
             const consolidatedData = [];
 
             for (const m of mobileMachines) {
@@ -92,7 +92,8 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             }
 
             if (consolidatedData.length === 0) {
-                alert("No hay suficientes datos históricos para generar un informe consolidado.");
+                alert("Sin datos suficientes.");
+                setSending(false);
                 return;
             }
 
@@ -101,13 +102,13 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             await sendEmail(
                 ['aridos@marraque.es'],
                 `Informe Integral Fluidos - ${period}`,
-                `<p>Se adjunta el análisis técnico de consumo de fluidos consolidado de la maquinaria.</p>`,
+                `<p>Se adjunta la auditoría técnica de consumo de fluidos L/100h consolidada.</p>`,
                 pdfBase64,
                 `Informe_Integral_Fluidos_${period}.pdf`
             );
-            alert("Informe integral enviado correctamente.");
+            alert("Informe integral enviado.");
         } catch (e) {
-            alert("Error al enviar el informe.");
+            alert("Error al enviar.");
         } finally {
             setSending(false);
         }
@@ -121,17 +122,15 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Monitor de Fluidos</h3>
-                        <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            Análisis Técnico de Tasas L/100h
-                        </p>
+                        <h3 className="text-xl font-bold text-slate-800 tracking-tight">Monitor Fluidos</h3>
+                        <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest">Tasas Técnicas L/100h</p>
                     </div>
                 </div>
                 <button 
                     onClick={handleSendReport}
                     disabled={sending}
                     className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
-                    title="Enviar Informe Integral Flota"
+                    title="Enviar Informe Flota"
                 >
                     {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
                 </button>
@@ -140,21 +139,21 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100 mx-1 space-y-4">
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
-                        <LayoutGrid size={12}/> 1. Subcentro / Sección
+                        <LayoutGrid size={12}/> 1. Subcentro
                     </label>
                     <select 
                         value={selectedSubId}
                         onChange={e => setSelectedSubId(e.target.value)}
                         className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700"
                     >
-                        <option value="">-- Seleccionar Planta --</option>
+                        <option value="">-- Seleccionar Sección --</option>
                         {subCenters.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                 </div>
 
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
-                        <Truck size={12}/> 2. Máquina Específica
+                        <Truck size={12}/> 2. Máquina
                     </label>
                     <select 
                         disabled={!selectedSubId}
@@ -173,7 +172,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             {loading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={40} />
-                    Calculando derivadas de consumo...
+                    Auditando tasas de consumo...
                 </div>
             ) : stats ? (
                 <div className="space-y-6 px-1">
@@ -183,52 +182,60 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         <TrendCard title="Refrigerante" stat={stats.coolant} icon={Thermometer} />
                     </div>
 
-                    {/* Tabla de Evolución Técnica para el Ingeniero */}
+                    {/* TABLA DE EVOLUCIÓN TÉCNICA (L/100h) */}
                     <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
                         <div className="p-4 bg-slate-900 border-b flex justify-between items-center">
                             <h4 className="font-black text-white uppercase text-[10px] tracking-widest flex items-center gap-2">
-                                <Table size={14} className="text-amber-500"/> Tabla de Evolución (L/100h)
+                                <Table size={14} className="text-amber-500"/> Auditoría de Tasas por Intervalo
                             </h4>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="bg-slate-50 border-b">
-                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Fecha</th>
-                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Horas</th>
-                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Motor</th>
-                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Hidr.</th>
-                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Refrig.</th>
+                                    <tr className="bg-slate-50 border-b text-[9px] font-black text-slate-400 uppercase">
+                                        <th className="p-3">Fecha</th>
+                                        <th className="p-3">Horas</th>
+                                        <th className="p-3 text-center">Motor (L/100h)</th>
+                                        <th className="p-3 text-center">Hidr. (L/100h)</th>
+                                        <th className="p-3 text-center">Refrig. (L/100h)</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {stats.history.slice(0, 8).map((log: any) => (
-                                        <tr key={log.id} className="hover:bg-slate-50/50">
-                                            <td className="p-3 text-[10px] font-bold text-slate-600">{new Date(log.date).toLocaleDateString()}</td>
-                                            <td className="p-3 text-[10px] font-mono font-bold text-slate-800">{log.hoursAtExecution}h</td>
-                                            <td className="p-3 text-[10px] text-center">{log.motorOil ? <span className="font-black text-amber-600">{log.motorOil}L</span> : '-'}</td>
-                                            <td className="p-3 text-[10px] text-center">{log.hydraulicOil ? <span className="font-black text-blue-600">{log.hydraulicOil}L</span> : '-'}</td>
-                                            <td className="p-3 text-[10px] text-center">{log.coolant ? <span className="font-black text-teal-600">{log.coolant}L</span> : '-'}</td>
+                                    {stats.evolution.map((point: any, idx: number) => (
+                                        <tr key={idx} className="hover:bg-slate-50/50">
+                                            <td className="p-3 text-[10px] font-bold text-slate-600">{point.date}</td>
+                                            <td className="p-3 text-[10px] font-mono font-bold text-slate-800">{point.hours}h</td>
+                                            <td className="p-3 text-[10px] text-center">
+                                                {point.motorRate !== null ? <span className={`font-black ${point.motorRate > stats.motor.baselineRate * 1.25 ? 'text-red-600' : 'text-slate-700'}`}>{point.motorRate.toFixed(3)}</span> : '-'}
+                                            </td>
+                                            <td className="p-3 text-[10px] text-center">
+                                                {point.hydRate !== null ? <span className={`font-black ${point.hydRate > stats.hydraulic.baselineRate * 1.25 ? 'text-red-600' : 'text-slate-700'}`}>{point.hydRate.toFixed(3)}</span> : '-'}
+                                            </td>
+                                            <td className="p-3 text-[10px] text-center">
+                                                {point.coolRate !== null ? <span className={`font-black ${point.coolRate > stats.coolant.baselineRate * 1.25 ? 'text-red-600' : 'text-slate-700'}`}>{point.coolRate.toFixed(3)}</span> : '-'}
+                                            </td>
                                         </tr>
                                     ))}
+                                    {stats.evolution.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="p-10 text-center text-[10px] font-bold text-slate-400 uppercase italic">Datos insuficientes para calcular intervalos</td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <h4 className="font-black text-slate-400 uppercase text-[9px] tracking-widest flex items-center gap-1 mb-2">
-                            <History size={12}/> Interpretación Técnica
-                        </h4>
-                        <p className="text-[10px] text-slate-500 leading-relaxed italic">
-                            Los valores L/100h se calculan comparando el suministro actual con el anterior y las horas transcurridas entre ambos puntos. Una desviación positiva sostenida indica una posible fuga o consumo interno del componente.
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                        <p className="text-[10px] text-amber-800 leading-relaxed italic">
+                            <strong>Nota Técnica:</strong> Los valores mostrados son el consumo medio calculado entre el registro actual y el anterior. Las celdas en <span className="text-red-600 font-bold">rojo</span> indican una desviación superior al 25% respecto a la media histórica del componente.
                         </p>
                     </div>
                 </div>
             ) : (
-                <div className="py-20 text-center flex flex-col items-center gap-4 opacity-30">
-                    <Activity size={64} className="text-slate-300"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione un subcentro y unidad</p>
+                <div className="py-20 text-center opacity-30">
+                    <Activity size={64} className="mx-auto text-slate-300 mb-4"/>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione subcentro y unidad</p>
                 </div>
             )}
         </div>
@@ -260,7 +267,7 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
                 <div className="space-y-4 relative z-10">
                     <div className="flex items-end justify-between">
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tasa Reciente</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tasa Media Reciente</p>
                             <span className={`text-3xl font-black ${info.color}`}>{formatDecimal(stat.recentRate)}</span>
                             <span className="ml-1 text-[10px] font-bold text-slate-400">L/100h</span>
                         </div>
