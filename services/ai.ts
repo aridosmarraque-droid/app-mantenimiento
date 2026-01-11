@@ -6,8 +6,14 @@ export const analyzeProductionReport = async (
     date: Date
 ): Promise<string> => {
     try {
+        // Inicialización interna para asegurar captura de API_KEY en runtime
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `Analiza reporte producción: Eficiencia ${efficiency.toFixed(1)}%, Incidencias: "${comments}". Identifica causa raíz técnica y da 3 recomendaciones de mantenimiento preventivo.`;
+        const prompt = `Actúa como Gerente de Planta. Analiza el reporte de producción del día ${date.toLocaleDateString()}. 
+        Eficiencia calculada: ${efficiency.toFixed(1)}%. 
+        Comentarios del operario: "${comments}". 
+        Identifica posibles causas técnicas de baja eficiencia si aplica y propón 3 puntos de mejora inmediata. 
+        Responde en formato Markdown ejecutivo.`;
+
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
@@ -15,7 +21,7 @@ export const analyzeProductionReport = async (
         return response.text || "No se pudo generar el análisis.";
     } catch (error) {
         console.error("IA Production Error:", error);
-        return "Error en IA: Verifique conectividad y API Key en el entorno.";
+        return "Error en diagnóstico IA: Verifique configuración de clave o conexión.";
     }
 };
 
@@ -52,11 +58,10 @@ export const analyzeFluidHealth = async (
             REQUERIMIENTOS CRÍTICOS:
             1. Si existe una desviación >25%, rastrea hacia atrás en la serie temporal para identificar el MOMENTO EXACTO (Fecha y Horas) donde el consumo dejó de ser estable.
             2. Determina si es una "Falla de Componente" (salto brusco) o "Desgaste Acelerado" (incremento gradual).
-            3. Si el consumo es alto pero la desviación es mínima (<10%), catalógalo como "Estado Operativo Nominal con Desgaste por Uso".
-            4. Genera un diagnóstico profesional en Markdown:
+            3. Genera un diagnóstico profesional en Markdown:
                - **SITUACIÓN ACTUAL**: (Estado general)
                - **ANOMALÍA DETECTADA**: (Fluido y gravedad)
-               - **PUNTO DE RUPTURA**: (Fecha/Hora de inicio del problema)
+               - **PUNTO DE RUPTURA**: (Identifica cuándo empezó a fallar basándote en los datos)
                - **ACCIÓN TÉCNICA RECOMENDADA**: (Inspección específica)
         `;
 
