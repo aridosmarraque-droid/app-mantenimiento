@@ -1,13 +1,13 @@
 import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
 import { CPDailyReport, PersonalReport, OperationLog, Machine } from '../types';
-import { ProductionComparison, FuelConsumptionStat, FluidTrend, formatDecimal } from './stats';
+import { FuelConsumptionStat, formatDecimal } from './stats';
 
 // Helper para colores semafóricos
 const getDeviationColor = (dev: number): [number, number, number] => {
-    if (dev > 25) return [220, 38, 38]; // Rojo
-    if (dev > 10) return [217, 119, 6]; // Naranja
-    return [22, 163, 74]; // Verde
+    if (dev > 25) return [220, 38, 38]; // Rojo (Avería/Alerta)
+    if (dev > 10) return [245, 158, 11]; // Naranja (Incremento ligero)
+    return [22, 163, 74]; // Verde (Normal)
 };
 
 export const generateCPReportPDF = (report: any, workerName: string, plannedHours: number, efficiency: number): string => {
@@ -22,15 +22,19 @@ export const generatePersonalReportPDF = (report: any, workerName: string): stri
     return doc.output('datauristring').split(',')[1];
 };
 
-export const generateFuelReportPDF = (machinesData: any[], periodLabel: string): string => {
+export const generateFuelReportPDF = (
+    machinesData: { machine: Machine, stats: { monthly: FuelConsumptionStat, quarterly: FuelConsumptionStat, yearly: FuelConsumptionStat } }[],
+    periodLabel: string
+): string => {
     const doc: any = new jsPDF();
     doc.setFillColor(15, 23, 42); 
-    doc.rect(0, 0, 210, 35, 'F');
+    doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.text("ARIDOS MARRAQUE", 15, 18);
-    doc.setFontSize(12);
-    doc.text(`INFORME MENSUAL DE GASOIL - ${periodLabel}`, 15, 28);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("ARIDOS MARRAQUE", 20, 20);
+    doc.setFontSize(14);
+    doc.text(`INFORME DE CONSUMOS DE GASOIL - ${periodLabel}`, 20, 32);
 
     const tableData = machinesData.map(({ machine, stats }) => [
         machine.companyCode ? `[${machine.companyCode}] ${machine.name}` : machine.name,
@@ -41,14 +45,18 @@ export const generateFuelReportPDF = (machinesData: any[], periodLabel: string):
     ]);
 
     doc.autoTable({
-        startY: 45,
-        head: [['Unidad', 'L. Mes', 'Consumo (L/h)', 'Trimestre', 'Anual']],
+        startY: 50,
+        head: [['Unidad', 'L. Mes', 'Media Mes', 'Media Trim.', 'Media Año']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [30, 41, 59] },
-        styles: { fontSize: 8 },
-        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } }
+        styles: { fontSize: 8, halign: 'center' },
+        columnStyles: { 0: { fontStyle: 'bold', halign: 'left', cellWidth: 55 } }
     });
+
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Valores calculados sobre registros de suministro. Formato decimal: Coma (,).", 105, 285, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
@@ -59,7 +67,7 @@ export const generateFluidReportPDF = (
 ): string => {
     const doc: any = new jsPDF();
     
-    // --- PORTADA Y CABECERA ---
+    // --- CABECERA ---
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
@@ -69,36 +77,35 @@ export const generateFluidReportPDF = (
     doc.setFontSize(14);
     doc.text(`MONITOR DE SALUD DE FLUIDOS - ${periodLabel}`, 20, 32);
 
-    let currentY = 50;
+    let currentY = 55;
 
-    // --- SECCIÓN 1: RESUMEN DE ALERTAS (TOP DESVIACIONES) ---
-    doc.setTextColor(30, 41, 59);
+    // --- SECCIÓN 1: RESUMEN EJECUTIVO DE ALERTAS ---
+    doc.setTextColor(15, 23, 42);
     doc.setFontSize(12);
-    doc.text("RESUMEN DE ALERTAS TÉCNICAS", 20, currentY);
+    doc.text("RESUMEN DE DESVIACIONES CRÍTICAS", 20, currentY);
     currentY += 8;
 
-    const alerts = machinesData
+    const criticalAlerts = machinesData
         .flatMap(m => [
-            { machine: m.machine.name, fluid: 'Motor', dev: m.stats.motor.deviation },
-            { machine: m.machine.name, fluid: 'Hidr.', dev: m.stats.hydraulic.deviation },
-            { machine: m.machine.name, fluid: 'Refrig.', dev: m.stats.coolant.deviation }
+            { name: m.machine.name, fluid: 'Aceite Motor', dev: m.stats.motor.deviation },
+            { name: m.machine.name, fluid: 'Aceite Hidráulico', dev: m.stats.hydraulic.deviation },
+            { name: m.machine.name, fluid: 'Refrigerante', dev: m.stats.coolant.deviation }
         ])
         .filter(a => a.dev > 10)
-        .sort((a, b) => b.dev - a.dev)
-        .slice(0, 5);
+        .sort((a, b) => b.dev - a.dev);
 
-    if (alerts.length > 0) {
+    if (criticalAlerts.length > 0) {
         doc.autoTable({
             startY: currentY,
-            head: [['Unidad', 'Fluido', 'Desviación %', 'Gravedad']],
-            body: alerts.map(a => [
-                a.machine, 
-                a.fluid, 
-                `${a.dev > 0 ? '+' : ''}${formatDecimal(a.dev, 1)}%`,
-                a.dev > 25 ? 'ANOMALÍA CRÍTICA' : 'INCREMENTO PREVENTIVO'
+            head: [['Máquina', 'Fluido afectado', 'Desviación %', 'Prioridad']],
+            body: criticalAlerts.map(a => [
+                a.name, a.fluid, `${a.dev > 0 ? '+' : ''}${formatDecimal(a.dev, 1)}%`,
+                a.dev > 25 ? 'ALTA (AVERÍA)' : 'MEDIA (SEGUIMIENTO)'
             ]),
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: [220, 38, 38] },
+            theme: 'grid',
+            headStyles: { fillColor: [185, 28, 28] },
+            styles: { fontSize: 8, halign: 'center' },
+            columnStyles: { 0: { fontStyle: 'bold', halign: 'left' } },
             didParseCell: (data: any) => {
                 if (data.section === 'body' && data.column.index === 2) {
                     const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
@@ -110,16 +117,15 @@ export const generateFluidReportPDF = (
         currentY = doc.lastAutoTable.finalY + 15;
     } else {
         doc.setTextColor(22, 163, 74);
-        doc.setFontSize(10);
-        doc.text("No se detectan desviaciones significativas en la flota.", 20, currentY);
+        doc.text("No se detectan desviaciones anómalas en la flota.", 20, currentY);
         currentY += 15;
     }
 
-    // --- SECCIÓN 2: DETALLE POR MÁQUINA ---
+    // --- SECCIÓN 2: DETALLE INDIVIDUAL ---
     machinesData.forEach(({ machine, stats, aiAnalysis }) => {
         if (currentY > 230) { doc.addPage(); currentY = 20; }
         
-        doc.setFillColor(241, 245, 249);
+        doc.setFillColor(248, 250, 252);
         doc.rect(15, currentY, 180, 10, 'F');
         doc.setTextColor(15, 23, 42);
         doc.setFontSize(11);
@@ -129,7 +135,7 @@ export const generateFluidReportPDF = (
 
         doc.autoTable({
             startY: currentY,
-            head: [['Tipo Fluido', 'Media Histórica', 'Tendencia Rec.', 'Desviación']],
+            head: [['Tipo Fluido', 'Media Base', 'Tendencia Actual', 'Desviación']],
             body: [
                 ['Aceite Motor', formatDecimal(stats.motor.baselineRate), formatDecimal(stats.motor.recentRate), `${stats.motor.deviation > 0 ? '+' : ''}${formatDecimal(stats.motor.deviation, 1)}%`],
                 ['Aceite Hidráulico', formatDecimal(stats.hydraulic.baselineRate), formatDecimal(stats.hydraulic.recentRate), `${stats.hydraulic.deviation > 0 ? '+' : ''}${formatDecimal(stats.hydraulic.deviation, 1)}%`],
@@ -147,23 +153,22 @@ export const generateFluidReportPDF = (
             }
         });
 
-        currentY = doc.lastAutoTable.finalY + 5;
-        doc.setFontSize(9);
+        currentY = doc.lastAutoTable.finalY + 6;
+        doc.setFontSize(8);
         doc.setTextColor(79, 70, 229);
         doc.setFont("helvetica", "bolditalic");
-        doc.text("Análisis Predictivo IA (Series Temporales):", 20, currentY);
-        currentY += 5;
+        doc.text("DIAGNÓSTICO IA (Análisis de Series Temporales):", 20, currentY);
+        currentY += 4;
         doc.setFont("helvetica", "normal");
         doc.setTextColor(60, 60, 60);
-        doc.setFontSize(8);
         const splitAi = doc.splitTextToSize(aiAnalysis, 170);
         doc.text(splitAi, 20, currentY);
-        currentY += (splitAi.length * 4) + 15;
+        currentY += (splitAi.length * 4) + 12;
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores en L/100h. Informe generado por Aridos Marraque IA Engine.", 105, 290, { align: 'center' });
+    doc.text("Valores en Litros / 100 horas. Generado automáticamente por GMAO Marraque.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
