@@ -27,6 +27,7 @@ export const analyzeFluidHealth = async (
     totalHours: number
 ): Promise<string> => {
     try {
+        // Inicialización directa según estándar
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const formatSeries = (series: any[]) => 
@@ -36,12 +37,12 @@ export const analyzeFluidHealth = async (
             Actúa como Ingeniero Senior de Diagnóstico Predictivo de Maquinaria Pesada.
             Analiza la salud de fluidos de la unidad "${machineName}" (${totalHours}h totales).
 
-            CONTEXTO TÉCNICO:
+            DATOS DE TENDENCIA (L/100h):
             - Motor: Histórico ${motorTrend.baselineRate} vs Reciente ${motorTrend.recentRate} (Desviación ${motorTrend.deviation}%)
             - Hidráulico: Histórico ${hydraulicTrend.baselineRate} vs Reciente ${hydraulicTrend.recentRate} (Desviación ${hydraulicTrend.deviation}%)
             - Refrigerante: Histórico ${coolantTrend.baselineRate} vs Reciente ${coolantTrend.recentRate} (Desviación ${coolantTrend.deviation}%)
 
-            SERIES TEMPORALES DETALLADAS (Para detección de inicio de fallo):
+            HISTORIAL CRONOLÓGICO (Serie Temporal):
             MOTOR:
             ${formatSeries(motorTrend.series)}
             HIDRÁULICO:
@@ -49,15 +50,15 @@ export const analyzeFluidHealth = async (
             REFRIGERANTE:
             ${formatSeries(coolantTrend.series)}
 
-            REQUERIMIENTOS DEL ANÁLISIS:
-            1. Si detectas una desviación >25%, profundiza en la serie temporal para identificar el MOMENTO EXACTO (Fecha/Horas) donde la tendencia se rompió.
-            2. Evalúa si el patrón es una "Ruptura Súbita" (fuga externa o rotura) o un "Desgaste Acelerado" (segmentos, retenes, bomba).
-            3. Si el consumo es alto pero estable (desviación <10%), no lo clasifiques como avería, sino como "Estado Base" por vida útil.
-            4. Responde con un diagnóstico Markdown muy profesional y ejecutivo:
-               - **ESTADO GENERAL**: (Resumen de la unidad)
-               - **DETECCIÓN DE ANOMALÍAS**: (Fluido afectado y severidad)
-               - **PUNTO DE INICIO DE AVERÍA**: (Indica cuándo empezó a fallar basándote en los saltos de horas)
-               - **ESTRATEGIA TÉCNICA RECOMENDADA**: (Acción inmediata)
+            REQUERIMIENTOS CRÍTICOS:
+            1. Si existe una desviación >25%, rastrea hacia atrás en la serie temporal para identificar el MOMENTO EXACTO (Fecha y Horas) donde el consumo dejó de ser estable.
+            2. Determina si es una "Falla de Componente" (salto brusco en un solo registro) o "Desgaste Acelerado" (incremento gradual en los últimos 3-4 registros).
+            3. Si el consumo es alto pero la desviación es mínima (<10%), catalógalo como "Estado Operativo Nominal con Desgaste por Uso".
+            4. Genera un diagnóstico profesional en Markdown:
+               - **SITUACIÓN ACTUAL**: (Estado general)
+               - **ANOMALÍA DETECTADA**: (Fluido y gravedad)
+               - **PUNTO DE RUPTURA**: (Fecha/Hora de inicio del problema)
+               - **ACCIÓN TÉCNICA RECOMENDADA**: (Inspección específica)
         `;
 
         const response = await ai.models.generateContent({
