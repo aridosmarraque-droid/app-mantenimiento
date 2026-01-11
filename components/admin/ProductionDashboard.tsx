@@ -1,46 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
-import { updateCPReportAnalysis } from '../../services/db';
-import { analyzeProductionReport } from '../../services/ai';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Key, Sparkles, BrainCircuit, Search, Activity, Clock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Search, Activity, Clock, AlertCircle } from 'lucide-react';
 import { CPDailyReport } from '../../types';
 
 interface Props {
     onBack: () => void;
 }
 
-// Fix: define AIStudio interface to match existing global declarations and avoid window property conflict
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-  interface Window {
-    aistudio: AIStudio;
-  }
-}
-
 export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [analyzingId, setAnalyzingId] = useState<string | null>(null);
-    const [hasKey, setHasKey] = useState<boolean>(true);
-
-    const checkApiKeyStatus = useCallback(async () => {
-        // process.env.API_KEY es la fuente de verdad. 
-        // Si no está, probamos a ver si AI Studio tiene una seleccionada.
-        if (!process.env.API_KEY || process.env.API_KEY === 'undefined') {
-            try {
-                const selected = await window.aistudio.hasSelectedApiKey();
-                setHasKey(selected);
-            } catch (e) {
-                setHasKey(false);
-            }
-        } else {
-            setHasKey(true);
-        }
-    }, []);
 
     const loadStats = useCallback(async () => {
         setLoading(true);
@@ -57,39 +27,10 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     }, [selectedDate]);
 
     useEffect(() => {
-        checkApiKeyStatus();
         loadStats();
-    }, [loadStats, checkApiKeyStatus]);
-
-    const handleOpenKeySelector = async () => {
-        try {
-            await window.aistudio.openSelectKey();
-            setHasKey(true);
-        } catch (e) {
-            console.error("Key selection failed", e);
-        }
-    };
-
-    const handleAnalyzeClick = async (report: CPDailyReport, efficiency: number) => {
-        setAnalyzingId(report.id);
-        try {
-            const analysis = await analyzeProductionReport(
-                report.comments || 'Sin comentarios registrados.',
-                efficiency,
-                new Date(report.date)
-            );
-            await updateCPReportAnalysis(report.id, analysis);
-            await loadStats();
-        } catch (error) {
-            alert("Error al conectar con Gemini IA.");
-        } finally {
-            setAnalyzingId(null);
-        }
-    };
+    }, [loadStats]);
 
     const dailyReports = stats?.daily?.reports || [];
-    const latestReport = dailyReports.length > 0 ? dailyReports[0] : null;
-    const latestEfficiency = stats?.daily?.efficiency || 0;
 
     return (
         <div className="flex flex-col h-full bg-slate-50 min-h-screen">
@@ -99,17 +40,9 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         <ArrowLeft size={24} />
                     </button>
                     <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                        <TrendingUp className="text-amber-600" /> Panel de Eficiencia
+                        <TrendingUp className="text-amber-600" /> Auditoría de Eficiencia
                     </h2>
                 </div>
-                {!hasKey && (
-                    <button 
-                        onClick={handleOpenKeySelector}
-                        className="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 border border-amber-200 animate-pulse"
-                    >
-                        <Key size={14} /> Configurar IA
-                    </button>
-                )}
             </div>
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
@@ -117,7 +50,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                 <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 flex flex-col sm:flex-row gap-4 items-end">
                     <div className="flex-1 w-full">
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
-                            <Calendar size={12}/> Fecha del Informe
+                            <Calendar size={12}/> Fecha del Parte
                         </label>
                         <input 
                             type="date" 
@@ -132,73 +65,38 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         className="w-full sm:w-auto bg-slate-900 text-white px-6 py-3.5 rounded-xl hover:bg-black transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                     >
                         {loading ? <RefreshCw className="animate-spin" size={18} /> : <Search size={18} />} 
-                        <span className="font-bold uppercase text-xs tracking-widest">Consultar</span>
+                        <span className="font-bold uppercase text-xs tracking-widest">Analizar</span>
                     </button>
                 </div>
 
                 {loading ? (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300">
                         <Activity className="animate-pulse mb-4 text-amber-500" size={48} />
-                        <p className="font-black uppercase tracking-widest text-xs">Sincronizando producción...</p>
+                        <p className="font-black uppercase tracking-widest text-xs">Calculando indicadores...</p>
                     </div>
                 ) : stats && (
                     <>
-                        {/* Gerente Virtual Section */}
-                        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 p-6 rounded-3xl shadow-xl border border-white/10 relative overflow-hidden">
-                            <BrainCircuit className="absolute -right-6 -bottom-6 w-32 h-32 text-white/5 rotate-12" />
-                            <div className="relative z-10">
-                                <div className="flex justify-between items-start mb-4">
-                                    <h3 className="font-black text-indigo-300 flex items-center gap-2 uppercase text-[10px] tracking-widest">
-                                        <Sparkles className="w-4 h-4" /> Gerente Virtual (IA)
-                                    </h3>
-                                    {latestReport && (
-                                        latestReport.aiAnalysis ? (
-                                            <span className="bg-green-500/20 text-green-400 text-[9px] font-black uppercase px-2 py-1 rounded-lg border border-green-500/30">
-                                                Auditado
-                                            </span>
-                                        ) : (
-                                            <button 
-                                                onClick={() => handleAnalyzeClick(latestReport, latestEfficiency)}
-                                                disabled={analyzingId === latestReport.id || !hasKey}
-                                                className={`bg-indigo-600 text-white text-[9px] font-black uppercase px-3 py-2 rounded-lg shadow-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50`}
-                                            >
-                                                {analyzingId === latestReport.id ? <RefreshCw className="animate-spin" size={12}/> : <BrainCircuit size={12} />}
-                                                Analizar Incidencias
-                                            </button>
-                                        )
-                                    )}
-                                </div>
-
-                                <div className="text-sm text-slate-200">
-                                    {latestReport ? (
-                                        latestReport.aiAnalysis ? (
-                                            <div className="bg-white/5 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-inner">
-                                                <div className="whitespace-pre-line text-xs leading-relaxed font-medium prose prose-invert max-w-none">
-                                                    {latestReport.aiAnalysis}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="p-6 border border-dashed border-white/10 rounded-2xl text-slate-400 text-center text-xs italic">
-                                                {!hasKey ? "Falta configurar la Clave IA para el análisis." : "Solicite el análisis para evaluar incidencias y eficiencia del día."}
-                                            </div>
-                                        )
-                                    ) : (
-                                        <div className="p-6 text-slate-500 text-center text-xs font-bold uppercase">
-                                            No hay reportes registrados para esta fecha.
-                                        </div>
-                                    )}
-                                </div>
+                        {/* Resumen de Incidencias Técnicas Manuales */}
+                        <div className="bg-slate-800 p-6 rounded-3xl shadow-xl border border-white/10 relative overflow-hidden">
+                            <h3 className="font-black text-amber-400 flex items-center gap-2 uppercase text-[10px] tracking-widest mb-4">
+                                <AlertCircle className="w-4 h-4" /> Observaciones de Planta
+                            </h3>
+                            <div className="space-y-4">
+                                {dailyReports.length > 0 ? dailyReports.map((r: CPDailyReport) => (
+                                    <div key={r.id} className="bg-white/5 p-4 rounded-xl border border-white/5">
+                                        <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Día {new Date(r.date).toLocaleDateString()}</p>
+                                        <p className="text-slate-200 text-sm italic">"{r.comments || 'Sin incidencias reportadas.'}"</p>
+                                    </div>
+                                )) : (
+                                    <p className="text-slate-500 text-xs text-center py-4 italic">No hay registros para este periodo.</p>
+                                )}
                             </div>
                         </div>
 
                         {/* Comparativas Temporales */}
                         <div className="grid grid-cols-1 gap-4">
-                            <StatCard title="Eficiencia del Día" stat={stats.daily} />
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <ComparisonCard title="Semana (vs Ant.)" data={stats.weekly} />
-                                <ComparisonCard title="Mes (vs Ant.)" data={stats.monthly} />
-                            </div>
-                            <ComparisonCard title="Acumulado Anual" data={stats.yearly} />
+                            <StatCard title="Eficiencia Diaria" stat={stats.daily} />
+                            <ComparisonCard title="Semana Actual" data={stats.weekly} />
                         </div>
                     </>
                 )}
@@ -223,7 +121,7 @@ const StatCard = ({ title, stat }: { title: string, stat: any }) => (
                 <Activity size={12} className="text-green-500"/> {stat.totalActualHours}h Reales
             </div>
             <div className="flex items-center justify-end gap-1 text-[11px] font-black text-slate-400 uppercase">
-                <Clock size={12}/> {stat.totalPlannedHours}h Planificadas
+                <Clock size={12}/> {stat.totalPlannedHours}h Plan
             </div>
         </div>
     </div>
@@ -232,7 +130,6 @@ const StatCard = ({ title, stat }: { title: string, stat: any }) => (
 const ComparisonCard = ({ title, data }: { title: string, data: ProductionComparison }) => {
     const isPositive = data.diff >= 0;
     const Icon = isPositive ? TrendingUp : TrendingDown;
-
     return (
         <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 relative overflow-hidden">
             <div className="flex justify-between items-start mb-4">
@@ -243,11 +140,6 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
             </div>
             <div className="flex items-baseline justify-between">
                 <span className="text-3xl font-black text-slate-800">{data.current.efficiency.toFixed(1)}%</span>
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter">Prev: {data.previous.efficiency.toFixed(1)}%</span>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between text-[9px] font-black text-slate-400 uppercase">
-                <span>Real: {data.current.totalActualHours}h</span>
-                <span>Plan: {data.current.totalPlannedHours}h</span>
             </div>
         </div>
     );
