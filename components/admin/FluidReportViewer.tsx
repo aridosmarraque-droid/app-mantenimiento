@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getAllMachines, getCostCenters } from '../../services/db';
+import { getAllMachines, getCostCenters, getSubCentersByCenter } from '../../services/db';
 import { getMachineFluidStats, formatDecimal } from '../../services/stats';
 import { generateFluidReportPDF } from '../../services/pdf';
 import { sendEmail } from '../../services/api';
-import { Machine, OperationLog } from '../../types';
+import { Machine, SubCenter } from '../../types';
 import { 
     ArrowLeft, Loader2, AlertTriangle, Truck, Activity,
-    Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown, Minus,
-    History, BarChart2, Send
+    Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown,
+    History, Table, Send, LayoutGrid
 } from 'lucide-react';
 
 interface Props {
@@ -23,7 +23,10 @@ const getDeviationStatus = (dev: number) => {
 };
 
 export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
-    const [machines, setMachines] = useState<Machine[]>([]);
+    const [subCenters, setSubCenters] = useState<SubCenter[]>([]);
+    const [selectedSubId, setSelectedSubId] = useState('');
+    const [allMachines, setAllMachines] = useState<Machine[]>([]);
+    const [filteredMachines, setFilteredMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState('');
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
@@ -31,21 +34,30 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
 
     useEffect(() => {
         const loadInitialData = async () => {
-            const [centers, allM] = await Promise.all([
+            const [centers, machines] = await Promise.all([
                 getCostCenters(),
                 getAllMachines(false)
             ]);
-            const mobileCenter = centers.find(c => {
-                const name = c.name.toLowerCase();
-                return name.includes('móvil') || name.includes('movil');
-            });
-            setMachines(mobileCenter 
-                ? allM.filter(m => m.costCenterId === mobileCenter.id)
-                : allM.filter(m => m.companyCode)
-            );
+            
+            const mobileCenter = centers.find(c => c.name.toLowerCase().includes('móvil') || c.name.toLowerCase().includes('movil'));
+            if (mobileCenter) {
+                const subs = await getSubCentersByCenter(mobileCenter.id);
+                setSubCenters(subs);
+            }
+            setAllMachines(machines);
         };
         loadInitialData();
     }, []);
+
+    useEffect(() => {
+        if (selectedSubId) {
+            setFilteredMachines(allMachines.filter(m => m.subCenterId === selectedSubId));
+            setSelectedMachineId('');
+            setStats(null);
+        } else {
+            setFilteredMachines([]);
+        }
+    }, [selectedSubId, allMachines]);
 
     const loadStats = useCallback(async () => {
         if (!selectedMachineId) return;
@@ -62,25 +74,38 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     }, [loadStats]);
 
     const handleSendReport = async () => {
-        if (!selectedMachineId || !stats) return;
-        const m = machines.find(mac => mac.id === selectedMachineId);
-        if (!m) return;
-
-        if (!confirm(`¿Enviar informe técnico de fluidos de [${m.companyCode || m.name}] a aridos@marraque.es?`)) return;
+        if (sending) return;
+        if (!confirm(`¿Enviar informe integral de fluidos de TODA la flota a aridos@marraque.es?`)) return;
 
         setSending(true);
         try {
             const period = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
-            const pdfBase64 = generateFluidReportPDF([{ machine: m, stats, aiAnalysis: '' }], period);
+            
+            const mobileMachines = allMachines.filter(m => m.companyCode); // Filtro básico para maquinaria con código
+            const consolidatedData = [];
+
+            for (const m of mobileMachines) {
+                const mStats = await getMachineFluidStats(m.id);
+                if (mStats.motor.logsCount > 1 || mStats.hydraulic.logsCount > 1) {
+                    consolidatedData.push({ machine: m, stats: mStats });
+                }
+            }
+
+            if (consolidatedData.length === 0) {
+                alert("No hay suficientes datos históricos para generar un informe consolidado.");
+                return;
+            }
+
+            const pdfBase64 = generateFluidReportPDF(consolidatedData, period);
             
             await sendEmail(
                 ['aridos@marraque.es'],
-                `Informe Técnico Fluidos - ${m.companyCode || m.name} - ${period}`,
-                `<p>Se adjunta el análisis técnico de consumo de fluidos (L/100h) para la unidad <strong>${m.name}</strong>.</p>`,
+                `Informe Integral Fluidos - ${period}`,
+                `<p>Se adjunta el análisis técnico de consumo de fluidos consolidado de la maquinaria.</p>`,
                 pdfBase64,
-                `Fluidos_${m.companyCode || 'Unidad'}_${period}.pdf`
+                `Informe_Integral_Fluidos_${period}.pdf`
             );
-            alert("Informe enviado correctamente.");
+            alert("Informe integral enviado correctamente.");
         } catch (e) {
             alert("Error al enviar el informe.");
         } finally {
@@ -98,41 +123,57 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                     <div>
                         <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Monitor de Fluidos</h3>
                         <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            Control técnico de consumo L/100h
+                            Análisis Técnico de Tasas L/100h
                         </p>
                     </div>
                 </div>
-                {stats && (
-                    <button 
-                        onClick={handleSendReport}
-                        disabled={sending}
-                        className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg flex items-center gap-2"
-                    >
-                        {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                    </button>
-                )}
+                <button 
+                    onClick={handleSendReport}
+                    disabled={sending}
+                    className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
+                    title="Enviar Informe Integral Flota"
+                >
+                    {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                </button>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
-                    <Truck size={12}/> Seleccionar Máquina
-                </label>
-                <select 
-                    value={selectedMachineId}
-                    onChange={e => setSelectedMachineId(e.target.value)}
-                    className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500"
-                >
-                    <option value="">-- Seleccionar Unidad --</option>
-                    {machines.map(m => (
-                        <option key={m.id} value={m.id}>{m.companyCode ? `[${m.companyCode}] ` : ''}{m.name}</option>
-                    ))}
-                </select>
+            <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100 mx-1 space-y-4">
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
+                        <LayoutGrid size={12}/> 1. Subcentro / Sección
+                    </label>
+                    <select 
+                        value={selectedSubId}
+                        onChange={e => setSelectedSubId(e.target.value)}
+                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700"
+                    >
+                        <option value="">-- Seleccionar Planta --</option>
+                        {subCenters.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
+                        <Truck size={12}/> 2. Máquina Específica
+                    </label>
+                    <select 
+                        disabled={!selectedSubId}
+                        value={selectedMachineId}
+                        onChange={e => setSelectedMachineId(e.target.value)}
+                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 disabled:opacity-50"
+                    >
+                        <option value="">-- Seleccionar Unidad --</option>
+                        {filteredMachines.map(m => (
+                            <option key={m.id} value={m.id}>{m.companyCode ? `[${m.companyCode}] ` : ''}{m.name}</option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
             {loading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={40} />
-                    Procesando registros históricos...
+                    Calculando derivadas de consumo...
                 </div>
             ) : stats ? (
                 <div className="space-y-6 px-1">
@@ -142,90 +183,52 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         <TrendCard title="Refrigerante" stat={stats.coolant} icon={Thermometer} />
                     </div>
 
-                    {/* Histograma de Barras: Se muestra si hay al menos 1 punto de serie */}
-                    <div className="bg-slate-900 p-6 rounded-3xl shadow-xl border border-white/10">
-                        <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-8 flex items-center gap-2">
-                            <BarChart2 size={16} className="text-amber-500" /> Auditoría de Ruptura (Litros / 100 Horas)
-                        </h4>
-                        
-                        <div className="space-y-12">
-                            {['motor', 'hydraulic', 'coolant'].map(key => {
-                                const s = stats[key];
-                                if (s.series.length === 0) return null;
-                                
-                                const maxRate = Math.max(...s.series.map((p: any) => p.rate), s.baselineRate, 0.1);
-
-                                return (
-                                    <div key={key} className="space-y-3">
-                                        <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                            <span className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${key === 'motor' ? 'bg-amber-500' : key === 'hydraulic' ? 'bg-blue-500' : 'bg-teal-500'}`}></div>
-                                                Evolución {key === 'motor' ? 'Aceite Motor' : key === 'hydraulic' ? 'Aceite Hidráulico' : 'Refrigerante'}
-                                            </span>
-                                            {s.deviation > 25 && <span className="text-red-500 animate-pulse">ALERTA: +{s.deviation}%</span>}
-                                        </div>
-                                        
-                                        <div className="flex items-end gap-1.5 h-36 pt-4 border-b border-white/5 pb-2">
-                                            {s.series.map((point: any, idx: number) => {
-                                                const heightPercent = Math.max((point.rate / maxRate) * 100, 4); // Min 4% para visibilidad
-                                                return (
-                                                    <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                                                        {/* Tooltip */}
-                                                        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-slate-900 text-[8px] font-black px-2 py-1 rounded shadow-xl z-20 pointer-events-none whitespace-nowrap">
-                                                            {point.rate.toFixed(3)} L/100h
-                                                        </div>
-                                                        
-                                                        {/* Barra */}
-                                                        <div 
-                                                            style={{ height: `${heightPercent}%` }}
-                                                            className={`w-full rounded-t-md transition-all duration-700 ${
-                                                                point.rate > s.baselineRate * 1.25 ? 'bg-red-500' : 
-                                                                key === 'motor' ? 'bg-amber-500/80' : 
-                                                                key === 'hydraulic' ? 'bg-blue-500/80' : 'bg-teal-500/80'
-                                                            }`}
-                                                        ></div>
-                                                        <span className="text-[7px] text-slate-500 font-bold mt-2 rotate-45 origin-left whitespace-nowrap">{point.date}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        <div className="flex justify-between items-center text-[8px] font-black text-slate-500 uppercase mt-8">
-                                            <span>Media Base: {s.baselineRate.toFixed(3)}</span>
-                                            <span className={s.deviation > 25 ? 'text-red-500' : 'text-slate-400'}>Actual: {s.recentRate.toFixed(3)} L/100h</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                    {/* Tabla de Evolución Técnica para el Ingeniero */}
+                    <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
+                        <div className="p-4 bg-slate-900 border-b flex justify-between items-center">
+                            <h4 className="font-black text-white uppercase text-[10px] tracking-widest flex items-center gap-2">
+                                <Table size={14} className="text-amber-500"/> Tabla de Evolución (L/100h)
+                            </h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b">
+                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Fecha</th>
+                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Horas</th>
+                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Motor</th>
+                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Hidr.</th>
+                                        <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Refrig.</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {stats.history.slice(0, 8).map((log: any) => (
+                                        <tr key={log.id} className="hover:bg-slate-50/50">
+                                            <td className="p-3 text-[10px] font-bold text-slate-600">{new Date(log.date).toLocaleDateString()}</td>
+                                            <td className="p-3 text-[10px] font-mono font-bold text-slate-800">{log.hoursAtExecution}h</td>
+                                            <td className="p-3 text-[10px] text-center">{log.motorOil ? <span className="font-black text-amber-600">{log.motorOil}L</span> : '-'}</td>
+                                            <td className="p-3 text-[10px] text-center">{log.hydraulicOil ? <span className="font-black text-blue-600">{log.hydraulicOil}L</span> : '-'}</td>
+                                            <td className="p-3 text-[10px] text-center">{log.coolant ? <span className="font-black text-teal-600">{log.coolant}L</span> : '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
-                        <div className="p-4 bg-slate-50 border-b">
-                            <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest flex items-center gap-1">
-                                <History size={14}/> Registros de niveles
-                            </h4>
-                        </div>
-                        <div className="divide-y max-h-80 overflow-y-auto">
-                            {stats.history.map((log: OperationLog) => (
-                                <div key={log.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase">{new Date(log.date).toLocaleDateString()}</p>
-                                        <p className="font-mono font-bold text-slate-700 text-sm">{log.hoursAtExecution}h</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {(log.motorOil ?? 0) > 0 && <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-[9px] font-black">M: {formatDecimal(log.motorOil!, 1)}L</span>}
-                                        {(log.hydraulicOil ?? 0) > 0 && <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[9px] font-black">H: {formatDecimal(log.hydraulicOil!, 1)}L</span>}
-                                        {(log.coolant ?? 0) > 0 && <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[9px] font-black">R: {formatDecimal(log.coolant!, 1)}L</span>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h4 className="font-black text-slate-400 uppercase text-[9px] tracking-widest flex items-center gap-1 mb-2">
+                            <History size={12}/> Interpretación Técnica
+                        </h4>
+                        <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                            Los valores L/100h se calculan comparando el suministro actual con el anterior y las horas transcurridas entre ambos puntos. Una desviación positiva sostenida indica una posible fuga o consumo interno del componente.
+                        </p>
                     </div>
                 </div>
             ) : (
                 <div className="py-20 text-center flex flex-col items-center gap-4 opacity-30">
                     <Activity size={64} className="text-slate-300"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione una unidad</p>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione un subcentro y unidad</p>
                 </div>
             )}
         </div>
@@ -253,11 +256,7 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
                 )}
             </div>
 
-            {isError ? (
-                <div className="text-[9px] text-slate-400 font-bold uppercase italic flex items-center gap-2">
-                    <Minus size={14}/> Datos insuficientes
-                </div>
-            ) : (
+            {!isError && (
                 <div className="space-y-4 relative z-10">
                     <div className="flex items-end justify-between">
                         <div>
