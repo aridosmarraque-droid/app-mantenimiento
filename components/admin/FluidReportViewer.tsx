@@ -39,7 +39,6 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                 getAllMachines(false)
             ]);
 
-            // Filtrar estrictamente por el nombre del centro "Maquinaria Móvil"
             const mobileCenter = centers.find(c => {
                 const name = c.name.toLowerCase();
                 return name.includes('móvil') || name.includes('movil') || name.includes('maquinaria movil');
@@ -67,6 +66,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             setAiAnalysis(result);
         } catch (e) {
             console.error(e);
+            setAiAnalysis("Error de conexión con IA.");
         } finally {
             setAnalyzing(false);
         }
@@ -80,8 +80,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             const data = await getMachineFluidStats(selectedMachineId);
             setStats(data);
             const machine = machines.find(m => m.id === selectedMachineId);
-            if (machine) {
-                // Ejecución automática de IA al cargar datos de una máquina
+            if (machine && (data.motor.logsCount >= 3 || data.hydraulic.logsCount >= 3 || data.coolant.logsCount >= 3)) {
                 runAiDiagnosis(data, machine);
             }
         } catch (e) {
@@ -105,7 +104,6 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
 
             for (const m of machines) {
                 const mStats = await getMachineFluidStats(m.id);
-                // Solo incluir si tiene registros mínimos
                 if (mStats.motor.logsCount >= 3 || mStats.hydraulic.logsCount >= 3 || mStats.coolant.logsCount >= 3) {
                     const diagnosis = await analyzeFluidHealth(m.name, mStats.motor, mStats.hydraulic, mStats.coolant, m.currentHours);
                     consolidatedData.push({ machine: m, stats: mStats, aiAnalysis: diagnosis });
@@ -151,7 +149,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                 <button 
                     onClick={handleSendMonthlyReport}
                     disabled={sending || machines.length === 0}
-                    className="bg-slate-900 text-white p-2 rounded-lg hover:bg-black transition-all disabled:opacity-30"
+                    className="bg-slate-900 text-white p-2 rounded-lg hover:bg-black transition-all disabled:opacity-30 flex items-center gap-2"
                     title="Enviar Informe Mensual Consolidado"
                 >
                     {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
@@ -187,7 +185,6 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         <TrendCard title="Refrigerante" stat={stats.coolant} icon={Thermometer} />
                     </div>
 
-                    {/* AI Diagnosis Auto-Loaded */}
                     <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-3xl shadow-xl relative overflow-hidden">
                         <Sparkles className="absolute -right-4 -top-4 w-32 h-32 text-white/5 rotate-12" />
                         <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-4 flex items-center gap-2">
@@ -206,7 +203,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-slate-500 text-xs italic py-4">Sin datos suficientes para análisis IA.</div>
+                            <div className="text-slate-500 text-xs italic py-4">Sin datos suficientes para análisis IA. Mínimo 3 registros requeridos.</div>
                         )}
                     </div>
 
