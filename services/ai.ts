@@ -14,8 +14,8 @@ export const analyzeProductionReport = async (
         });
         return response.text || "No se pudo generar el análisis.";
     } catch (error) {
-        console.error("IA Error:", error);
-        return "Error en IA: Verifique configuración.";
+        console.error("IA Production Error:", error);
+        return "Error en IA: Verifique conectividad y API Key en el entorno.";
     }
 };
 
@@ -27,7 +27,6 @@ export const analyzeFluidHealth = async (
     totalHours: number
 ): Promise<string> => {
     try {
-        // Inicialización directa según estándar
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const formatSeries = (series: any[]) => 
@@ -52,7 +51,7 @@ export const analyzeFluidHealth = async (
 
             REQUERIMIENTOS CRÍTICOS:
             1. Si existe una desviación >25%, rastrea hacia atrás en la serie temporal para identificar el MOMENTO EXACTO (Fecha y Horas) donde el consumo dejó de ser estable.
-            2. Determina si es una "Falla de Componente" (salto brusco en un solo registro) o "Desgaste Acelerado" (incremento gradual en los últimos 3-4 registros).
+            2. Determina si es una "Falla de Componente" (salto brusco) o "Desgaste Acelerado" (incremento gradual).
             3. Si el consumo es alto pero la desviación es mínima (<10%), catalógalo como "Estado Operativo Nominal con Desgaste por Uso".
             4. Genera un diagnóstico profesional en Markdown:
                - **SITUACIÓN ACTUAL**: (Estado general)
