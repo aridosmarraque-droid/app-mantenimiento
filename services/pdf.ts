@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
-import { CPDailyReport, PersonalReport, OperationLog, Machine } from '../types';
-import { ProductionComparison, FuelConsumptionStat, FluidTrend, formatDecimal } from './stats';
+import { Machine } from '../types';
+import { FuelConsumptionStat, formatDecimal } from './stats';
 
 // Helper para colores semafóricos en el PDF
 const getDeviationColor = (dev: number): [number, number, number] => {
@@ -56,7 +56,7 @@ export const generateFuelReportPDF = (
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores calculados sobre registros de suministro. Formato decimal: Coma (,).", 105, 285, { align: 'center' });
+    doc.text("Valores calculados sobre suministros. Formato decimal: Coma (,).", 105, 285, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
@@ -67,7 +67,7 @@ export const generateFluidReportPDF = (
 ): string => {
     const doc: any = new jsPDF();
     
-    // --- PORTADA Y CABECERA ---
+    // --- CABECERA ---
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
@@ -79,7 +79,7 @@ export const generateFluidReportPDF = (
 
     let currentY = 55;
 
-    // --- SECCIÓN 1: CUADRO DE MANDO DE ALERTAS (RESUMEN INICIAL) ---
+    // --- RESUMEN EJECUTIVO (MÁXIMAS DESVIACIONES) ---
     doc.setTextColor(15, 23, 42);
     doc.setFontSize(14);
     doc.text("RESUMEN EJECUTIVO DE ALERTAS", 20, currentY);
@@ -97,12 +97,12 @@ export const generateFluidReportPDF = (
     if (criticalAlerts.length > 0) {
         doc.autoTable({
             startY: currentY,
-            head: [['Unidad', 'Fluido', 'Desviación %', 'Estado Crítico']],
+            head: [['Unidad', 'Fluido', 'Desviación %', 'Clasificación']],
             body: criticalAlerts.map(a => [
                 a.code ? `[${a.code}] ${a.name}` : a.name,
                 a.fluid,
                 `${a.dev > 0 ? '+' : ''}${formatDecimal(a.dev, 1)}%`,
-                a.dev > 25 ? 'AVERÍA INMINENTE' : 'SEGUIMIENTO PREVENTIVO'
+                a.dev > 25 ? 'ANOMALÍA (AVERÍA)' : 'INCREMENTO LIGERO'
             ]),
             theme: 'grid',
             headStyles: { fillColor: [185, 28, 28] },
@@ -110,8 +110,7 @@ export const generateFluidReportPDF = (
             columnStyles: { 0: { fontStyle: 'bold', halign: 'left' } },
             didParseCell: (data: any) => {
                 if (data.section === 'body' && data.column.index === 2) {
-                    const valStr = data.cell.raw.replace('%', '').replace(',', '.');
-                    const val = parseFloat(valStr);
+                    const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
                     data.cell.styles.textColor = getDeviationColor(val);
                     data.cell.styles.fontStyle = 'bold';
                 }
@@ -121,11 +120,11 @@ export const generateFluidReportPDF = (
     } else {
         doc.setTextColor(22, 163, 74);
         doc.setFontSize(10);
-        doc.text("No se detectan desviaciones anómalas en la flota actualmente.", 20, currentY);
+        doc.text("No se detectan desviaciones significativas en la flota actualmente.", 20, currentY);
         currentY += 15;
     }
 
-    // --- SECCIÓN 2: DETALLE TÉCNICO POR UNIDAD ---
+    // --- DETALLE INDIVIDUAL ---
     machinesData.forEach(({ machine, stats, aiAnalysis }) => {
         if (currentY > 230) { doc.addPage(); currentY = 20; }
         
@@ -139,7 +138,7 @@ export const generateFluidReportPDF = (
 
         doc.autoTable({
             startY: currentY,
-            head: [['Parámetro de Fluido', 'Media Base', 'Media Reciente', 'Desviación %']],
+            head: [['Fluido', 'Media Base', 'Media Reciente', 'Desviación %']],
             body: [
                 ['Aceite Motor', formatDecimal(stats.motor.baselineRate), formatDecimal(stats.motor.recentRate), `${stats.motor.deviation > 0 ? '+' : ''}${formatDecimal(stats.motor.deviation, 1)}%`],
                 ['Aceite Hidráulico', formatDecimal(stats.hydraulic.baselineRate), formatDecimal(stats.hydraulic.recentRate), `${stats.hydraulic.deviation > 0 ? '+' : ''}${formatDecimal(stats.hydraulic.deviation, 1)}%`],
@@ -162,7 +161,7 @@ export const generateFluidReportPDF = (
         doc.setFontSize(9);
         doc.setTextColor(79, 70, 229);
         doc.setFont("helvetica", "bolditalic");
-        doc.text("ANÁLISIS DE RUPTURA DE TENDENCIA (IA):", 20, currentY);
+        doc.text("ESTUDIO DE RUPTURA TEMPORAL (IA):", 20, currentY);
         currentY += 5;
         doc.setFont("helvetica", "normal");
         doc.setTextColor(60, 60, 60);
@@ -174,7 +173,7 @@ export const generateFluidReportPDF = (
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores normalizados en Litros / 100 horas. Diagnóstico generado por Aridos Marraque Engine.", 105, 290, { align: 'center' });
+    doc.text("Valores normalizados en L/100h. Generado por Aridos Marraque Engine.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
