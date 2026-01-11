@@ -4,11 +4,10 @@ import 'jspdf-autotable';
 import { Machine } from '../types';
 import { FuelConsumptionStat, formatDecimal } from './stats';
 
-// Helper para colores semafóricos en el PDF
 const getDeviationColor = (dev: number): [number, number, number] => {
-    if (dev > 25) return [220, 38, 38]; // Rojo (Avería/Alerta)
-    if (dev > 10) return [245, 158, 11]; // Naranja (Incremento ligero)
-    return [22, 163, 74]; // Verde (Normal)
+    if (dev > 25) return [220, 38, 38]; 
+    if (dev > 10) return [245, 158, 11]; 
+    return [22, 163, 74]; 
 };
 
 export const generateCPReportPDF = (report: any, workerName: string, plannedHours: number, efficiency: number): string => {
@@ -85,27 +84,66 @@ export const generateFuelReportPDF = (
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores calculados sobre suministros. Formato decimal: Coma (,).", 105, 285, { align: 'center' });
+    doc.text("Valores calculados sobre suministros. Generado por GMAO Marraque.", 105, 285, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
 
 export const generateFluidReportPDF = (
-    machinesData: { machine: Machine, stats: any, aiAnalysis: string }[],
+    machinesData: { machine: Machine, stats: any }[],
     periodLabel: string
 ): string => {
     const doc: any = new jsPDF();
     
+    // Header
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
-    doc.text("ARIDOS MARRAQUE", 20, 20);
+    doc.text("ARIDOS MARRAQUE", 20, 18);
     doc.setFontSize(12);
-    doc.text(`MONITOR TÉCNICO DE FLUIDOS - ${periodLabel}`, 20, 32);
+    doc.text(`INFORME TÉCNICO INTEGRAL DE FLUIDOS - ${periodLabel}`, 20, 30);
 
-    let currentY = 55;
+    // --- SECCIÓN 1: RESUMEN DE ALERTAS ---
+    const alertedMachines = machinesData.filter(m => 
+        m.stats.motor.deviation > 25 || 
+        m.stats.hydraulic.deviation > 25 || 
+        m.stats.coolant.deviation > 25
+    );
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(14);
+    doc.text("RESUMEN DE ALERTAS CRÍTICAS (>25% Desviación)", 20, 50);
+
+    if (alertedMachines.length === 0) {
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text("No se han detectado anomalías graves en la flota durante este periodo.", 20, 60);
+    } else {
+        const alertRows = alertedMachines.map(m => {
+            const issues = [];
+            if (m.stats.motor.deviation > 25) issues.push(`Motor (+${m.stats.motor.deviation}%)`);
+            if (m.stats.hydraulic.deviation > 25) issues.push(`Hidr. (+${m.stats.hydraulic.deviation}%)`);
+            if (m.stats.coolant.deviation > 25) issues.push(`Refrig. (+${m.stats.coolant.deviation}%)`);
+            return [
+                m.machine.companyCode ? `[${m.machine.companyCode}] ${m.machine.name}` : m.machine.name,
+                issues.join(', ')
+            ];
+        });
+
+        doc.autoTable({
+            startY: 55,
+            head: [['Unidad', 'Componentes Afectados']],
+            body: alertRows,
+            theme: 'grid',
+            headStyles: { fillColor: [185, 28, 28] },
+            styles: { fontSize: 9 }
+        });
+    }
+
+    // --- SECCIÓN 2: DETALLE POR MÁQUINA ---
+    let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 70;
 
     machinesData.forEach(({ machine, stats }) => {
         if (currentY > 230) { doc.addPage(); currentY = 20; }
@@ -118,6 +156,7 @@ export const generateFluidReportPDF = (
         doc.text(`${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name.toUpperCase()}`, 20, currentY + 7);
         currentY += 15;
 
+        // Tabla de medias
         doc.autoTable({
             startY: currentY,
             head: [['Fluido', 'Media Base (L/100h)', 'Media Reciente (L/100h)', 'Desviación %']],
@@ -131,20 +170,19 @@ export const generateFluidReportPDF = (
             styles: { fontSize: 8, halign: 'center' },
             didParseCell: (data: any) => {
                 if (data.section === 'body' && data.column.index === 3) {
-                    const valStr = data.cell.raw.replace('%', '').replace(',', '.');
-                    const val = parseFloat(valStr);
+                    const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
                     data.cell.styles.textColor = getDeviationColor(val);
                     data.cell.styles.fontStyle = 'bold';
                 }
             }
         });
 
-        currentY = doc.lastAutoTable.finalY + 15;
+        currentY = doc.lastAutoTable.finalY + 10;
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Informe técnico basado en análisis de repostajes. Generado por GMAO Marraque.", 105, 290, { align: 'center' });
+    doc.text("Documento técnico de auditoría preventiva. Aridos Marraque SL.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
