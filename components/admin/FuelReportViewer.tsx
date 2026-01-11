@@ -7,7 +7,7 @@ import { sendEmail } from '../../services/api';
 import { Machine, OperationLog, SubCenter } from '../../types';
 import { 
     ArrowLeft, Fuel, Calendar, TrendingUp, Search, Loader2, 
-    Send, Truck, BarChart3, AlertTriangle, Mail, RefreshCw, Clock, Info, LayoutGrid
+    Send, Truck, BarChart3, AlertTriangle, Mail, RefreshCw, Clock, Info, LayoutGrid, ArrowUpRight
 } from 'lucide-react';
 
 interface Props {
@@ -24,7 +24,6 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
     const [stats, setStats] = useState<any>(null);
-    const [isLastDay, setIsLastDay] = useState(false);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -40,10 +39,6 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
             }
             
             setAllMachines(machines);
-
-            const now = new Date();
-            const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-            if (tomorrow.getDate() === 1) setIsLastDay(true);
         };
         loadInitialData();
     }, []);
@@ -72,15 +67,14 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
         loadStats();
     }, [loadStats]);
 
-    const handleSendMonthlyReport = async (isForced: boolean = false) => {
-        if (!confirm("¿Enviar informe mensual consolidado de Gasoil de TODA la flota a aridos@marraque.es?")) return;
+    const handleSendMonthlyReport = async () => {
+        if (!confirm("¿Enviar informe integral de Gasoil (Semafórico) de TODA la flota a aridos@marraque.es?")) return;
 
         setSending(true);
         try {
             const now = new Date();
             const periodName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
             
-            // Consolidamos TODA la maquinaria móvil (aquellas con código de empresa)
             const mobileMachines = allMachines.filter(m => m.companyCode);
             const consolidatedData = [];
 
@@ -92,24 +86,23 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
             }
 
             if (consolidatedData.length === 0) {
-                alert("Sin datos suficientes para generar el informe.");
+                alert("Sin datos suficientes.");
                 setSending(false);
                 return;
             }
 
             const pdfBase64 = generateFuelReportPDF(consolidatedData, periodName);
-            const res = await sendEmail(
+            await sendEmail(
                 ['aridos@marraque.es'],
-                `Informe Mensual Gasoil - ${periodName}`,
-                `<p>Informe consolidado de consumos de la maquinaria móvil correspondiente a ${periodName}.</p>`,
+                `Auditoría Consumo Gasoil - ${periodName}`,
+                `<p>Análisis semafórico de consumo de combustible. Naranja >10%, Rojo >25% sobre media anual.</p>`,
                 pdfBase64,
-                `Gasoil_Consolidado_${periodName.replace(/\s+/g, '_')}.pdf`
+                `Gasoil_Auditoria_${periodName.replace(/\s+/g, '_')}.pdf`
             );
 
-            if (res.success) alert("Informe enviado con éxito.");
-            else alert("Error en el servidor de correo.");
+            alert("Informe integral enviado con éxito.");
         } catch (e) {
-            alert("Error en la generación del PDF.");
+            alert("Error al generar el informe.");
         } finally {
             setSending(false);
         }
@@ -123,12 +116,12 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-800 leading-none">Control Gasoil</h3>
-                        <p className="text-[10px] font-black text-blue-600 uppercase mt-1 tracking-widest">Maquinaria Móvil</p>
+                        <h3 className="text-xl font-bold text-slate-800 leading-none tracking-tight">Auditoría Gasoil</h3>
+                        <p className="text-[10px] font-black text-blue-600 uppercase mt-1 tracking-widest">Semáforo de Consumo</p>
                     </div>
                 </div>
                 <button 
-                    onClick={() => handleSendMonthlyReport(true)}
+                    onClick={handleSendMonthlyReport}
                     disabled={sending}
                     className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
                 >
@@ -136,7 +129,7 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
                 </button>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1 space-y-4">
+            <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100 mx-1 space-y-4">
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
                         <LayoutGrid size={12}/> 1. Subcentro / Sección
@@ -153,7 +146,7 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
 
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
-                        <Truck size={12}/> 2. Máquina Específica
+                        <Truck size={12}/> 2. Unidad
                     </label>
                     <select 
                         disabled={!selectedSubId}
@@ -172,26 +165,37 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
             {loading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
                     <Loader2 className="animate-spin mb-4 text-blue-500" size={40} />
-                    Auditando suministros...
+                    Analizando promedios anuales...
                 </div>
             ) : stats ? (
                 <div className="space-y-6 px-1">
-                    <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
-                        <TrendingUp className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10 rotate-12" />
-                        <h4 className="font-black uppercase text-[10px] tracking-widest opacity-80 mb-2">Consumo Promedio Mes</h4>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-black">{formatDecimal(stats.monthly.consumptionPerHour, 2)}</span>
-                            <span className="text-xl font-bold opacity-80">L/h</span>
+                    <div className={`p-6 rounded-2xl shadow-lg relative overflow-hidden transition-colors duration-500 ${
+                        stats.fuelDeviation >= 25 ? 'bg-red-600' : 
+                        stats.fuelDeviation >= 10 ? 'bg-orange-500' : 'bg-blue-600'
+                    } text-white`}>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h4 className="font-black uppercase text-[10px] tracking-widest opacity-80 mb-2">Desviación vs Año</h4>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-black">{stats.fuelDeviation > 0 ? '+' : ''}{stats.fuelDeviation.toFixed(1)}%</span>
+                                    <ArrowUpRight size={24} className={stats.fuelDeviation > 10 ? 'animate-bounce' : 'opacity-40'} />
+                                </div>
+                            </div>
+                            {stats.fuelDeviation >= 10 && (
+                                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-md">
+                                    <AlertTriangle size={32} />
+                                </div>
+                            )}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4">
-                        <ComparisonCard title="Cierre Mes Actual" stat={stats.monthly} />
-                        <ComparisonCard title="Promedio Año" stat={stats.yearly} />
+                        <ComparisonCard title="Consumo Mes Actual" stat={stats.monthly} isMain={true} dev={stats.fuelDeviation} />
+                        <ComparisonCard title="Media Anual (Referencia)" stat={stats.yearly} isMain={false} dev={0} />
                     </div>
 
                     <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
-                        <div className="p-4 bg-slate-50 border-b">
+                        <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
                             <h4 className="font-black text-slate-600 uppercase text-[10px] tracking-widest">Suministros Registrados</h4>
                         </div>
                         <div className="divide-y max-h-80 overflow-y-auto">
@@ -208,44 +212,60 @@ export const FuelReportViewer: React.FC<Props> = ({ onBack }) => {
                     </div>
                 </div>
             ) : (
-                <div className="py-20 text-center opacity-30">
-                    <BarChart3 size={64} className="mx-auto text-slate-300 mb-4"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Filtre por sección y unidad</p>
+                <div className="py-20 text-center opacity-30 flex flex-col items-center gap-4">
+                    <BarChart3 size={64} className="text-slate-300"/>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Filtre para iniciar auditoría</p>
                 </div>
             )}
         </div>
     );
 };
 
-const ComparisonCard = ({ title, stat }: any) => {
+const ComparisonCard = ({ title, stat, isMain, dev }: any) => {
     const isError = stat.logsCount < 2;
+    
+    // Colores de borde y texto dinámicos para el "Mes Actual"
+    const getStyles = () => {
+        if (!isMain) return 'border-slate-100 bg-white';
+        if (dev >= 25) return 'border-red-200 bg-red-50';
+        if (dev >= 10) return 'border-orange-200 bg-orange-50';
+        return 'border-green-100 bg-green-50';
+    };
+
+    const getTextColor = () => {
+        if (!isMain) return 'text-slate-800';
+        if (dev >= 25) return 'text-red-700';
+        if (dev >= 10) return 'text-orange-700';
+        return 'text-green-700';
+    };
+
     return (
-        <div className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100 ${isError ? 'opacity-60' : ''}`}>
+        <div className={`p-5 rounded-2xl shadow-sm border-2 transition-all ${getStyles()} ${isError ? 'opacity-60' : ''}`}>
             <div className="flex justify-between items-start mb-3">
                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</h5>
-                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-50 border text-slate-400 uppercase">
-                    {stat.logsCount} Repostajes
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white border text-slate-400 uppercase shadow-sm">
+                    {stat.logsCount} Puntos
                 </span>
             </div>
 
             {isError ? (
                 <div className="text-[9px] text-red-400 font-black uppercase italic flex items-center gap-1">
-                    <AlertTriangle size={12}/> Datos Insuficientes
+                    <AlertTriangle size={12}/> Historial insuficiente
                 </div>
             ) : (
                 <div className="space-y-4">
                     <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-slate-800">{formatDecimal(stat.consumptionPerHour, 2)}</span>
+                        <span className={`text-3xl font-black ${getTextColor()}`}>{formatDecimal(stat.consumptionPerHour, 2)}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase">L/h</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-50">
+                    <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200/50">
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Total Suministrado</p>
-                            <p className="text-xs font-black text-slate-600">{formatDecimal(stat.consumedLiters, 1)} L</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Suministrado</p>
+                            <p className={`text-xs font-black ${isMain ? getTextColor() : 'text-slate-600'}`}>{formatDecimal(stat.consumedLiters, 1)} L</p>
                         </div>
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Horas Trabajadas</p>
-                            <p className="text-xs font-black text-slate-600">{stat.workedHours} h</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Horas Trabajo</p>
+                            <p className={`text-xs font-black ${isMain ? getTextColor() : 'text-slate-600'}`}>{stat.workedHours} h</p>
                         </div>
                     </div>
                 </div>
