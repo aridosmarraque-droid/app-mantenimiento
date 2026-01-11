@@ -43,19 +43,20 @@ export const formatDecimal = (num: number, decimals: number = 3): string => {
     return num.toFixed(decimals).replace('.', ',');
 };
 
-const getMonday = (d: Date) => {
+// Obtener el lunes de la semana en formato YYYY-MM-DD sin desfases de zona horaria
+const getMondayISO = (d: Date) => {
     const date = new Date(d);
-    const day = date.getDay();
+    const day = date.getDay(); // 0=Dom, 1=Lun...
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(date);
-    monday.setDate(diff);
-    monday.setHours(0,0,0,0);
-    return monday;
+    const monday = new Date(date.setDate(diff));
+    return monday.toISOString().split('T')[0];
 };
 
 const getPlannedHoursForDate = (date: Date, plan: CPWeeklyPlan | null): number => {
-    if (!plan) return 8; // Fallback a 8 si no hay plan configurado
-    const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    if (!plan) return 8; // Fallback razonable si no hay plan
+    
+    // Usamos el día local para que coincida con lo que el usuario ve en el calendario
+    const dayOfWeek = date.getDay(); 
     
     switch (dayOfWeek) {
         case 1: return plan.hoursMon;
@@ -63,34 +64,32 @@ const getPlannedHoursForDate = (date: Date, plan: CPWeeklyPlan | null): number =
         case 3: return plan.hoursWed;
         case 4: return plan.hoursThu;
         case 5: return plan.hoursFri;
-        default: return 0; // Sábados y Domingos no suelen tener planificación estándar
+        default: return 0; // Fines de semana no suelen planificarse
     }
 };
 
-// --- CÁLCULO DE EFICIENCIA DE PRODUCCIÓN ---
-
 export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) => {
     const today = new Date(baseDate);
-    today.setHours(0,0,0,0);
+    today.setHours(12, 0, 0, 0); // Evitar cambios de día por zona horaria
 
-    // 1. DÍA SELECCIONADO
     const daily = await calculateStats(today, today, "Día", today);
 
-    // 2. SEMANA ACTUAL VS ANTERIOR
-    const thisMon = getMonday(today);
-    const lastMon = new Date(thisMon);
-    lastMon.setDate(lastMon.getDate() - 7);
-    const thisSun = new Date(thisMon);
-    thisSun.setDate(thisSun.getDate() + 6);
-    const lastSun = new Date(lastMon);
-    lastSun.setDate(lastSun.getDate() + 6);
+    // Comparativas
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    
+    const startOfPrevWeek = new Date(startOfWeek);
+    startOfPrevWeek.setDate(startOfWeek.getDate() - 7);
+    const endOfPrevWeek = new Date(startOfPrevWeek);
+    endOfPrevWeek.setDate(startOfPrevWeek.getDate() + 6);
 
     const weekly = await compareStats(
-        await calculateStats(thisMon, thisSun, "Esta Semana", today),
-        await calculateStats(lastMon, lastSun, "Semana Anterior", lastSun)
+        await calculateStats(startOfWeek, endOfWeek, "Esta Semana", today),
+        await calculateStats(startOfPrevWeek, endOfPrevWeek, "Semana Anterior", endOfPrevWeek)
     );
 
-    // 3. MES ACTUAL VS ANTERIOR
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -101,15 +100,9 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) 
         await calculateStats(lastMonthStart, lastMonthEnd, "Mes Anterior", lastMonthEnd)
     );
 
-    // 4. AÑO ACTUAL VS ANTERIOR
-    const thisYearStart = new Date(today.getFullYear(), 0, 1);
-    const lastYearStart = new Date(today.getFullYear() - 1, 0, 1);
-    const thisYearEnd = new Date(today.getFullYear(), 11, 31);
-    const lastYearEnd = new Date(today.getFullYear() - 1, 11, 31);
-
     const yearly = await compareStats(
-        await calculateStats(thisYearStart, thisYearEnd, "Año Actual", today),
-        await calculateStats(lastYearStart, lastYearEnd, "Año Anterior", lastYearEnd)
+        await calculateStats(new Date(today.getFullYear(), 0, 1), new Date(today.getFullYear(), 11, 31), "Año Actual", today),
+        await calculateStats(new Date(today.getFullYear() - 1, 0, 1), new Date(today.getFullYear() - 1, 11, 31), "Año Anterior", new Date(today.getFullYear() - 1, 11, 31))
     );
 
     return { daily, weekly, monthly, yearly };
@@ -117,31 +110,31 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) 
 
 const calculateStats = async (start: Date, end: Date, label: string, limitDate: Date): Promise<ProductionStat> => {
     const reports = await getCPReportsByRange(start, end);
-    const cutoff = new Date(limitDate);
-    cutoff.setHours(23, 59, 59, 999);
+    const cutoffStr = limitDate.toISOString().split('T')[0];
     
-    const filtered = reports.filter(r => new Date(r.date) <= cutoff);
+    const filtered = reports.filter(r => {
+        const rDate = new Date(r.date).toISOString().split('T')[0];
+        return rDate <= cutoffStr;
+    });
     
     let totalActual = 0;
     let totalPlanned = 0;
-
-    // Cache de planes semanales para evitar múltiples llamadas en rangos largos (Mes/Año)
     const planCache = new Map<string, CPWeeklyPlan | null>();
 
     for (const report of filtered) {
         const reportDate = new Date(report.date);
-        const mon = getMonday(reportDate).toISOString().split('T')[0];
+        const mondayStr = getMondayISO(reportDate);
         
-        if (!planCache.has(mon)) {
-            const plan = await getCPWeeklyPlan(mon);
-            planCache.set(mon, plan);
+        if (!planCache.has(mondayStr)) {
+            const plan = await getCPWeeklyPlan(mondayStr);
+            planCache.set(mondayStr, plan);
         }
 
-        const plan = planCache.get(mon)!;
-        const plannedForDay = getPlannedHoursForDate(reportDate, plan);
+        const plan = planCache.get(mondayStr) || null;
+        const plannedHours = getPlannedHoursForDate(reportDate, plan);
         
         totalActual += (report.millsEnd - report.millsStart);
-        totalPlanned += plannedForDay;
+        totalPlanned += plannedHours;
     }
 
     return {
@@ -164,7 +157,7 @@ const compareStats = (current: ProductionStat, previous: ProductionStat): Produc
     };
 };
 
-// --- MANTENIMIENTO Y FLUIDOS ---
+// --- MANTENIMIENTO Y FLUIDOS (Se mantienen igual) ---
 
 const getRateFromLogs = (logs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'COOLANT'): number => {
     if (logs.length < 2) return 0;
@@ -186,7 +179,7 @@ const getRateFromLogs = (logs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'CO
     if (type === 'HYDRAULIC') lastAdded = last.hydraulicOil || 0;
     if (type === 'COOLANT') lastAdded = last.coolant || 0;
 
-    return ((totalLiters - lastAdded) / hours) * 100; // Normalizado a L / 100h
+    return ((totalLiters - lastAdded) / hours) * 100;
 };
 
 export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'COOLANT'): FluidTrend => {
