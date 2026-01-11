@@ -1,4 +1,3 @@
-
 import { getCPReportsByRange, getCPWeeklyPlan, getFuelLogs, getMachineLogs } from './db';
 import { CPDailyReport, CPWeeklyPlan, OperationLog } from '../types';
 
@@ -34,7 +33,7 @@ export interface FluidConsumptionStat {
     totalLiters: number;
     consumedLiters: number;
     workedHours: number;
-    consumptionPer100h: number; // Usamos escala 100h para mejor lectura
+    consumptionPer100h: number;
     logsCount: number;
 }
 
@@ -137,7 +136,7 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) 
     const lastMonthLimit = new Date(today.getFullYear(), today.getMonth() - 1, Math.min(today.getDate(), endLastMonth.getDate()));
 
     const monthlyCurr = await calculateStats(startMonth, endMonth, "Mes Seleccionado", today, 'month');
-    const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastWeekLimit, 'month');
+    const monthlyPrev = await calculateStats(startLastMonth, endLastMonth, "Mes Anterior", lastMonthLimit, 'month');
     const startYear = new Date(today.getFullYear(), 0, 1);
     const endYear = new Date(today.getFullYear(), 11, 31);
     const startLastYear = new Date(today.getFullYear() - 1, 0, 1);
@@ -186,16 +185,15 @@ export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLab
         consumedLiters,
         workedHours,
         consumptionPerHour: parseFloat(consumptionPerHour.toFixed(2)),
-        logsCount: logs.length
+        logsCount: sorted.length
     };
 };
 
 export const calculateFluidConsumptionFromLogs = (logs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'COOLANT'): FluidConsumptionStat => {
-    // Filtrar solo los registros que tienen valor para ese fluido
     const fluidLogs = logs.filter(l => {
-        if (type === 'MOTOR') return l.motorOil !== undefined && l.motorOil > 0;
-        if (type === 'HYDRAULIC') return l.hydraulicOil !== undefined && l.hydraulicOil > 0;
-        if (type === 'COOLANT') return l.coolant !== undefined && l.coolant > 0;
+        if (type === 'MOTOR') return (l.motorOil ?? 0) > 0;
+        if (type === 'HYDRAULIC') return (l.hydraulicOil ?? 0) > 0;
+        if (type === 'COOLANT') return (l.coolant ?? 0) > 0;
         return false;
     });
 
@@ -212,11 +210,7 @@ export const calculateFluidConsumptionFromLogs = (logs: OperationLog[], type: 'M
     const sorted = [...fluidLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
     const firstLog = sorted[0];
     const lastLog = sorted[sorted.length - 1];
-    
-    // Diferencia de horas entre primer y último registro con fluidos
     const workedHours = lastLog.hoursAtExecution - firstLog.hoursAtExecution;
-    
-    // Suma total de litros
     const totalLiters = sorted.reduce((acc, l) => {
         if (type === 'MOTOR') return acc + (l.motorOil || 0);
         if (type === 'HYDRAULIC') return acc + (l.hydraulicOil || 0);
@@ -224,7 +218,6 @@ export const calculateFluidConsumptionFromLogs = (logs: OperationLog[], type: 'M
         return acc;
     }, 0);
 
-    // Aplicando metodología: Restar último repostaje
     let lastAdded = 0;
     if (type === 'MOTOR') lastAdded = lastLog.motorOil || 0;
     if (type === 'HYDRAULIC') lastAdded = lastLog.hydraulicOil || 0;
@@ -239,7 +232,7 @@ export const calculateFluidConsumptionFromLogs = (logs: OperationLog[], type: 'M
         consumedLiters,
         workedHours,
         consumptionPer100h: parseFloat(consumptionPer100h.toFixed(3)),
-        logsCount: fluidLogs.length
+        logsCount: sorted.length
     };
 };
 
@@ -264,8 +257,6 @@ export const getMachineFuelStats = async (machineId: string, baseDate: Date = ne
 export const getMachineFluidStats = async (machineId: string, baseDate: Date = new Date()) => {
     const today = new Date(baseDate);
     const yearStart = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-    
-    // Obtenemos todos los registros de tipo niveles para la máquina
     const allLogs = await getMachineLogs(machineId, yearStart, today, ['LEVELS']);
     
     return {
