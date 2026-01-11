@@ -30,12 +30,17 @@ export interface FuelConsumptionStat {
 
 export interface FluidTrend {
     fluidType: 'MOTOR' | 'HYDRAULIC' | 'COOLANT';
-    baselineRate: number; // Media histórica larga
-    recentRate: number;    // Media últimos registros o periodo actual
-    deviation: number;     // % de cambio
+    baselineRate: number; 
+    recentRate: number;    
+    deviation: number;     
     workedHoursRecent: number;
     logsCount: number;
 }
+
+// Helper para formato español (comas)
+export const formatDecimal = (num: number, decimals: number = 3): string => {
+    return num.toFixed(decimals).replace('.', ',');
+};
 
 const getMonday = (d: Date) => {
     const date = new Date(d);
@@ -211,11 +216,9 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         return { fluidType: type, baselineRate: 0, recentRate: 0, deviation: 0, workedHoursRecent: 0, logsCount: fluidLogs.length };
     }
 
-    // Tendencia Reciente: Últimos 4 registros
     const recentLogs = fluidLogs.slice(-4);
     const recentRate = getRateFromLogs(recentLogs, type);
     
-    // Línea de Base: Todo lo anterior (excluyendo el último periodo si es posible, o todo el histórico)
     const baselineLogs = fluidLogs.length > 5 ? fluidLogs.slice(0, -3) : fluidLogs;
     const baselineRate = getRateFromLogs(baselineLogs, type);
 
