@@ -34,6 +34,14 @@ export interface FluidDataPoint {
     hours: number;
 }
 
+export interface CombinedFluidEvolution {
+    date: string;
+    hours: number;
+    motorRate: number | null;
+    hydRate: number | null;
+    coolRate: number | null;
+}
+
 export const formatDecimal = (num: number, decimals: number = 3): string => {
     if (num === null || num === undefined) return '0,000';
     return num.toFixed(decimals).replace('.', ',');
@@ -116,7 +124,6 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
     }).sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const series: FluidDataPoint[] = [];
-    // Necesitamos al menos 2 logs para calcular una tasa entre puntos
     for (let i = 1; i < fluidLogs.length; i++) {
         const prev = fluidLogs[i - 1];
         const curr = fluidLogs[i];
@@ -126,7 +133,7 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         if (hDiff > 0) {
             series.push({
                 date: new Date(curr.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
-                rate: (added / hDiff) * 100, // Tasa L/100h
+                rate: (added / hDiff) * 100, 
                 added,
                 hours: curr.hoursAtExecution
             });
@@ -143,8 +150,58 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         recentRate: Number(recentRate.toFixed(3)),
         deviation: Number(deviation.toFixed(1)),
         logsCount: fluidLogs.length,
-        series: series.slice(-8) // Devolvemos los últimos 8 puntos para la gráfica
+        series: series.slice(-10)
     };
+};
+
+export const getCombinedFluidEvolution = (allLogs: OperationLog[]): CombinedFluidEvolution[] => {
+    const sortedLogs = [...allLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const evolution: CombinedFluidEvolution[] = [];
+    
+    // Rastreadores del último registro con valor para cada fluido
+    let lastMotor: OperationLog | null = null;
+    let lastHyd: OperationLog | null = null;
+    let lastCool: OperationLog | null = null;
+
+    for (const log of sortedLogs) {
+        let mRate = null, hRate = null, cRate = null;
+
+        if ((log.motorOil ?? 0) > 0) {
+            if (lastMotor) {
+                const hDiff = log.hoursAtExecution - lastMotor.hoursAtExecution;
+                if (hDiff > 0) mRate = (log.motorOil! / hDiff) * 100;
+            }
+            lastMotor = log;
+        }
+
+        if ((log.hydraulicOil ?? 0) > 0) {
+            if (lastHyd) {
+                const hDiff = log.hoursAtExecution - lastHyd.hoursAtExecution;
+                if (hDiff > 0) hRate = (log.hydraulicOil! / hDiff) * 100;
+            }
+            lastHyd = log;
+        }
+
+        if ((log.coolant ?? 0) > 0) {
+            if (lastCool) {
+                const hDiff = log.hoursAtExecution - lastCool.hoursAtExecution;
+                if (hDiff > 0) cRate = (log.coolant! / hDiff) * 100;
+            }
+            lastCool = log;
+        }
+
+        if (mRate !== null || hRate !== null || cRate !== null) {
+            evolution.push({
+                date: new Date(log.date).toLocaleDateString('es-ES'),
+                hours: log.hoursAtExecution,
+                motorRate: mRate,
+                hydRate: hRate,
+                coolRate: cRate
+            });
+        }
+    }
+
+    return evolution.reverse().slice(0, 10); // Últimos 10 intervalos
 };
 
 export const getMachineFuelStats = async (machineId: string, baseDate: Date = new Date()) => {
@@ -171,6 +228,7 @@ export const getMachineFluidStats = async (machineId: string, baseDate: Date = n
         motor: analyzeFluidTrend(allLogs, 'MOTOR'),
         hydraulic: analyzeFluidTrend(allLogs, 'HYDRAULIC'),
         coolant: analyzeFluidTrend(allLogs, 'COOLANT'),
+        evolution: getCombinedFluidEvolution(allLogs),
         history: allLogs.slice().reverse()
     };
 };
