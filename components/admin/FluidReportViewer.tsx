@@ -9,7 +9,7 @@ import {
     ArrowLeft, Droplet, Search, Loader2, 
     AlertTriangle, Truck, Info, Sparkles, Activity,
     Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown, Minus,
-    Send, Calendar, FileText
+    Send, Calendar, FileText, BrainCircuit
 } from 'lucide-react';
 
 interface Props {
@@ -20,7 +20,7 @@ const getDeviationStatus = (dev: number) => {
     if (dev <= 10 && dev >= -10) return { color: 'text-green-600', bg: 'bg-green-50', label: 'Estable', icon: ShieldCheck };
     if (dev > 10 && dev <= 25) return { color: 'text-amber-600', bg: 'bg-amber-50', label: 'Incremento Ligero', icon: TrendingUp };
     if (dev > 25) return { color: 'text-red-600', bg: 'bg-red-50', label: 'ANOMALÍA / ALERTA', icon: AlertTriangle };
-    return { color: 'text-blue-600', bg: 'bg-blue-50', label: 'Mejora / Reducción', icon: TrendingDown };
+    return { color: 'text-blue-600', bg: 'bg-blue-50', label: 'Reducción', icon: TrendingDown };
 };
 
 export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
@@ -66,7 +66,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             setAiAnalysis(result);
         } catch (e) {
             console.error(e);
-            setAiAnalysis("Error de conexión con IA.");
+            setAiAnalysis("Error en diagnóstico IA: Verifique conexión o API Key.");
         } finally {
             setAnalyzing(false);
         }
@@ -80,7 +80,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             const data = await getMachineFluidStats(selectedMachineId);
             setStats(data);
             const machine = machines.find(m => m.id === selectedMachineId);
-            if (machine && (data.motor.logsCount >= 3 || data.hydraulic.logsCount >= 3 || data.coolant.logsCount >= 3)) {
+            if (machine && (data.motor.logsCount >= 2 || data.hydraulic.logsCount >= 2 || data.coolant.logsCount >= 2)) {
                 runAiDiagnosis(data, machine);
             }
         } catch (e) {
@@ -95,7 +95,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     }, [loadStats]);
 
     const handleSendMonthlyReport = async () => {
-        if (!confirm("Se enviará el Monitor de Salud consolidado de toda la Maquinaria Móvil a aridos@marraque.es. ¿Confirmar?")) return;
+        if (!confirm("Se enviará el Monitor de Salud (PDF Color + IA) de toda la Maquinaria Móvil a aridos@marraque.es. ¿Confirmar?")) return;
         setSending(true);
         try {
             const now = new Date();
@@ -104,14 +104,14 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
 
             for (const m of machines) {
                 const mStats = await getMachineFluidStats(m.id);
-                if (mStats.motor.logsCount >= 3 || mStats.hydraulic.logsCount >= 3 || mStats.coolant.logsCount >= 3) {
+                if (mStats.motor.logsCount >= 2 || mStats.hydraulic.logsCount >= 2 || mStats.coolant.logsCount >= 2) {
                     const diagnosis = await analyzeFluidHealth(m.name, mStats.motor, mStats.hydraulic, mStats.coolant, m.currentHours);
                     consolidatedData.push({ machine: m, stats: mStats, aiAnalysis: diagnosis });
                 }
             }
 
             if (consolidatedData.length === 0) {
-                alert("Sin datos suficientes para generar informe consolidado.");
+                alert("Sin datos suficientes.");
                 setSending(false);
                 return;
             }
@@ -120,15 +120,15 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             const res = await sendEmail(
                 ['aridos@marraque.es'],
                 `Monitor Salud Fluidos - Cierre ${periodName}`,
-                `<p>Informe técnico automatizado del estado de salud de los fluidos de la <strong>Maquinaria Móvil</strong>.</p>`,
+                `<p>Informe técnico de salud de fluidos generado con <strong>Inteligencia Artificial de Patrones</strong>.</p>`,
                 pdfBase64,
                 `Salud_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
             );
 
-            if (res.success) alert("Informe enviado correctamente.");
-            else alert("Error en el servidor de correo.");
+            if (res.success) alert("Informe consolidado enviado.");
+            else alert("Error al enviar email.");
         } catch (e) {
-            alert("Error en proceso consolidado.");
+            alert("Error en proceso.");
         } finally {
             setSending(false);
         }
@@ -143,14 +143,16 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                     </button>
                     <div>
                         <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Salud de Fluidos</h3>
-                        <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest">Maquinaria Móvil</p>
+                        <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
+                            <BrainCircuit size={10}/> Análisis de Patrones IA
+                        </p>
                     </div>
                 </div>
                 <button 
                     onClick={handleSendMonthlyReport}
                     disabled={sending || machines.length === 0}
-                    className="bg-slate-900 text-white p-2 rounded-lg hover:bg-black transition-all disabled:opacity-30 flex items-center gap-2"
-                    title="Enviar Informe Mensual Consolidado"
+                    className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 flex items-center gap-2 shadow-lg"
+                    title="Cierre Mensual PDF"
                 >
                     {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
                 </button>
@@ -158,7 +160,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
 
             <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
-                    <Truck size={12}/> Seleccionar Máquina Móvil
+                    <Truck size={12}/> Seleccionar Maquinaria Móvil
                 </label>
                 <select 
                     value={selectedMachineId}
@@ -175,7 +177,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             {loading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={40} />
-                    <p className="font-black uppercase tracking-widest text-[10px]">Analizando histórico y patrones...</p>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Consultando Series Temporales...</p>
                 </div>
             ) : stats ? (
                 <div className="space-y-6 px-1">
@@ -188,28 +190,28 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                     <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-3xl shadow-xl relative overflow-hidden">
                         <Sparkles className="absolute -right-4 -top-4 w-32 h-32 text-white/5 rotate-12" />
                         <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-4 flex items-center gap-2">
-                            <Sparkles size={16} className="text-indigo-400" /> Diagnóstico Predictivo IA
+                            <BrainCircuit size={16} className="text-indigo-400" /> Diagnóstico de Serie Temporal IA
                         </h4>
                         
                         {analyzing ? (
-                            <div className="flex items-center gap-3 text-indigo-300 py-4 animate-pulse">
+                            <div className="flex items-center gap-3 text-indigo-300 py-6 animate-pulse">
                                 <Loader2 className="animate-spin" size={24}/>
-                                <span className="text-xs font-black uppercase tracking-widest">IA Procesando Desviaciones...</span>
+                                <span className="text-xs font-black uppercase tracking-widest">Analizando quiebres de tendencia...</span>
                             </div>
                         ) : aiAnalysis ? (
                             <div className="bg-white/5 backdrop-blur-md rounded-2xl p-5 border border-white/10 animate-in zoom-in-95 duration-300">
-                                <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-line font-medium italic">
+                                <div className="text-slate-200 text-xs leading-relaxed whitespace-pre-line font-medium prose prose-invert max-w-none">
                                     {aiAnalysis}
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-slate-500 text-xs italic py-4">Sin datos suficientes para análisis IA. Mínimo 3 registros requeridos.</div>
+                            <div className="text-slate-500 text-xs italic py-4">Datos insuficientes para análisis cronológico profundo.</div>
                         )}
                     </div>
 
                     <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b">
-                            <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest">Historial Reciente (Litros Añadidos)</h4>
+                            <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest">Historial de Consumo (L)</h4>
                         </div>
                         <div className="divide-y max-h-80 overflow-y-auto">
                             {stats.history.map((log: OperationLog) => (
@@ -230,8 +232,8 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             ) : (
                 <div className="py-20 text-center flex flex-col items-center gap-4 opacity-30">
-                    <Activity size={64} className="text-slate-300"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione máquina móvil para auditoría</p>
+                    <BrainCircuit size={64} className="text-slate-300"/>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione máquina móvil</p>
                 </div>
             )}
         </div>
@@ -239,7 +241,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
 };
 
 const TrendCard = ({ title, stat, icon: Icon }: any) => {
-    const isError = stat.logsCount < 3;
+    const isError = stat.logsCount < 2;
     const info = getDeviationStatus(stat.deviation);
     const StatusIcon = info.icon;
 
@@ -261,13 +263,13 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
 
             {isError ? (
                 <div className="text-[9px] text-slate-400 font-bold uppercase italic flex items-center gap-2">
-                    <Minus size={14}/> Datos insuficientes (min. 3 registros)
+                    <Minus size={14}/> Datos insuficientes para serie (min. 2)
                 </div>
             ) : (
                 <div className="space-y-4 relative z-10">
                     <div className="flex items-end justify-between">
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tendencia Reciente</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tendencia Actual</p>
                             <span className={`text-4xl font-black ${info.color}`}>{formatDecimal(stat.recentRate)}</span>
                             <span className="ml-1 text-[10px] font-bold text-slate-400">L/100h</span>
                         </div>
@@ -281,12 +283,12 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
                     
                     <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-50">
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Media Histórica</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Media Base</p>
                             <p className="text-xs font-black text-slate-500">{formatDecimal(stat.baselineRate)} L/100h</p>
                         </div>
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Horas Muestreadas</p>
-                            <p className="text-xs font-black text-slate-500">{stat.workedHoursRecent} h</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Puntos Serie</p>
+                            <p className="text-xs font-black text-slate-500">{stat.logsCount} registros</p>
                         </div>
                     </div>
                 </div>
