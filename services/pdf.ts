@@ -51,7 +51,7 @@ export const generatePersonalReportPDF = (report: any, workerName: string): stri
 };
 
 export const generateFuelReportPDF = (
-    machinesData: { machine: Machine, stats: { monthly: FuelConsumptionStat, quarterly: FuelConsumptionStat, yearly: FuelConsumptionStat } }[],
+    machinesData: { machine: Machine, stats: any }[],
     periodLabel: string
 ): string => {
     const doc: any = new jsPDF();
@@ -64,27 +64,44 @@ export const generateFuelReportPDF = (
     doc.setFontSize(14);
     doc.text(`INFORME DE CONSUMOS DE GASOIL - ${periodLabel}`, 20, 32);
 
-    const tableData = machinesData.map(({ machine, stats }) => [
-        machine.companyCode ? `[${machine.companyCode}] ${machine.name}` : machine.name,
-        `${formatDecimal(stats.monthly.totalLiters, 1)} L`,
-        `${formatDecimal(stats.monthly.consumptionPerHour, 2)} L/h`,
-        `${formatDecimal(stats.quarterly.consumptionPerHour, 2)} L/h`,
-        `${formatDecimal(stats.yearly.consumptionPerHour, 2)} L/h`,
-    ]);
+    const tableData = machinesData.map(({ machine, stats }) => {
+        const dev = stats.fuelDeviation || 0;
+        return [
+            machine.companyCode ? `[${machine.companyCode}] ${machine.name}` : machine.name,
+            `${formatDecimal(stats.monthly.totalLiters, 1)} L`,
+            `${formatDecimal(stats.monthly.consumptionPerHour, 2)} L/h`,
+            `${formatDecimal(stats.yearly.consumptionPerHour, 2)} L/h`,
+            `${dev > 0 ? '+' : ''}${dev.toFixed(1)}%`
+        ];
+    });
 
     doc.autoTable({
         startY: 50,
-        head: [['Unidad', 'L. Mes', 'Media Mes', 'Media Trim.', 'Media Año']],
+        head: [['Unidad', 'L. Mes', 'Prom. Mes', 'Prom. Año', 'Desvío %']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [30, 41, 59] },
         styles: { fontSize: 8, halign: 'center' },
-        columnStyles: { 0: { fontStyle: 'bold', halign: 'left', cellWidth: 55 } }
+        columnStyles: { 0: { fontStyle: 'bold', halign: 'left', cellWidth: 60 } },
+        didParseCell: (data: any) => {
+            if (data.section === 'body' && data.column.index === 4) {
+                const val = parseFloat(data.cell.raw.replace('%', '').replace('+', ''));
+                if (val >= 25) {
+                    data.cell.styles.fillColor = [254, 226, 226]; // Rojo claro
+                    data.cell.styles.textColor = [185, 28, 28]; // Rojo oscuro
+                    data.cell.styles.fontStyle = 'bold';
+                } else if (val >= 10) {
+                    data.cell.styles.fillColor = [255, 247, 237]; // Naranja claro
+                    data.cell.styles.textColor = [194, 65, 12]; // Naranja oscuro
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+        }
     });
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores calculados sobre suministros. Generado por GMAO Marraque.", 105, 285, { align: 'center' });
+    doc.text("Auditoría: Comparación Consumo Mensual vs Media Anual. Naranja >10%, Rojo >25%.", 105, 285, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
@@ -114,70 +131,85 @@ export const generateFluidReportPDF = (
 
     doc.setTextColor(15, 23, 42);
     doc.setFontSize(14);
-    doc.text("RESUMEN DE ALERTAS CRÍTICAS (>25% Desviación)", 20, 50);
+    doc.text("RESUMEN DE ALERTAS CRÍTICAS (Desviación > 25%)", 20, 50);
 
     if (alertedMachines.length === 0) {
         doc.setFontSize(10);
         doc.setTextColor(100, 100, 100);
-        doc.text("No se han detectado anomalías graves en la flota.", 20, 60);
+        doc.text("No se han detectado anomalías de consumo en la flota (6 meses atrás).", 20, 60);
     } else {
         const alertRows = alertedMachines.map(m => {
             const issues = [];
-            if (m.stats.motor.deviation > 25) issues.push(`Motor (+${m.stats.motor.deviation}%)`);
-            if (m.stats.hydraulic.deviation > 25) issues.push(`Hidr. (+${m.stats.hydraulic.deviation}%)`);
-            if (m.stats.coolant.deviation > 25) issues.push(`Refrig. (+${m.stats.coolant.deviation}%)`);
+            if (m.stats.motor.deviation > 25) issues.push(`ACEITE MOTOR (+${m.stats.motor.deviation}%)`);
+            if (m.stats.hydraulic.deviation > 25) issues.push(`HIDRÁULICO (+${m.stats.hydraulic.deviation}%)`);
+            if (m.stats.coolant.deviation > 25) issues.push(`REFRIGERANTE (+${m.stats.coolant.deviation}%)`);
             return [
                 m.machine.companyCode ? `[${m.machine.companyCode}] ${m.machine.name}` : m.machine.name,
-                issues.join(', ')
+                issues.join('\n')
             ];
         });
 
         doc.autoTable({
             startY: 55,
-            head: [['Unidad', 'Componentes Afectados']],
+            head: [['Unidad', 'Componentes con Consumo Excesivo']],
             body: alertRows,
             theme: 'grid',
             headStyles: { fillColor: [185, 28, 28] },
-            styles: { fontSize: 9 }
+            styles: { fontSize: 9, cellPadding: 3 }
         });
     }
 
-    // --- SECCIÓN 2: DETALLE POR MÁQUINA ---
+    // --- SECCIÓN 2: DETALLE POR MÁQUINA (SOLO FLUIDOS IMPLICADOS) ---
     let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 70;
 
     machinesData.forEach(({ machine, stats }) => {
-        if (currentY > 210) { doc.addPage(); currentY = 20; }
+        const problematicFluids = [];
+        if (stats.motor.deviation > 25) problematicFluids.push('MOTOR');
+        if (stats.hydraulic.deviation > 25) problematicFluids.push('HYDRAULIC');
+        if (stats.coolant.deviation > 25) problematicFluids.push('COOLANT');
+
+        // Si no es problemática, saltamos el detalle extenso o lo reducimos
+        if (problematicFluids.length === 0) return;
+
+        if (currentY > 200) { doc.addPage(); currentY = 20; }
         
         doc.setFillColor(241, 245, 249);
         doc.rect(15, currentY, 180, 8, 'F');
-        doc.setTextColor(15, 23, 42);
+        doc.setTextColor(185, 28, 28);
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.text(`${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name.toUpperCase()}`, 20, currentY + 6);
+        doc.text(`ALERTA: ${machine.name.toUpperCase()} - Detalle de Componentes Afectados`, 20, currentY + 6);
         currentY += 12;
 
-        // Tabla de Evolución de Tasas (Intervalos)
-        const evolutionRows = stats.evolution.slice(0, 6).map((p: any) => [
-            p.date,
-            `${p.hours}h`,
-            p.motorRate !== null ? p.motorRate.toFixed(3) : '-',
-            p.hydRate !== null ? p.hydRate.toFixed(3) : '-',
-            p.coolRate !== null ? p.coolRate.toFixed(3) : '-'
-        ]);
+        // Construir tabla dinámica solo con los fluidos implicados
+        const headers = ['Fecha', 'Horas'];
+        if (problematicFluids.includes('MOTOR')) headers.push('Motor (L/100h)');
+        if (problematicFluids.includes('HYDRAULIC')) headers.push('Hidr. (L/100h)');
+        if (problematicFluids.includes('COOLANT')) headers.push('Refrig. (L/100h)');
+
+        const evolutionRows = stats.evolution.slice(0, 15).map((p: any) => {
+            const row = [p.date, `${p.hours}h`];
+            if (problematicFluids.includes('MOTOR')) row.push(p.motorRate !== null ? p.motorRate.toFixed(3) : '-');
+            if (problematicFluids.includes('HYDRAULIC')) row.push(p.hydRate !== null ? p.hydRate.toFixed(3) : '-');
+            if (problematicFluids.includes('COOLANT')) row.push(p.coolRate !== null ? p.coolRate.toFixed(3) : '-');
+            return row;
+        });
 
         doc.autoTable({
             startY: currentY,
-            head: [['Fecha', 'Horas', 'Motor (L/100h)', 'Hidr. (L/100h)', 'Refrig. (L/100h)']],
+            head: [headers],
             body: evolutionRows,
-            theme: 'striped',
+            theme: 'grid',
             headStyles: { fillColor: [51, 65, 85] },
             styles: { fontSize: 7, halign: 'center' },
             didParseCell: (data: any) => {
                 if (data.section === 'body' && data.column.index >= 2) {
                     const val = parseFloat(data.cell.raw);
                     if (!isNaN(val)) {
-                        const baseline = data.column.index === 2 ? stats.motor.baselineRate : 
-                                        data.column.index === 3 ? stats.hydraulic.baselineRate : 
+                        // El índice depende de qué fluidos se han incluido, mapeamos de nuevo
+                        const fluidName = problematicFluids[data.column.index - 2];
+                        const baseline = fluidName === 'MOTOR' ? stats.motor.baselineRate : 
+                                        fluidName === 'HYDRAULIC' ? stats.hydraulic.baselineRate : 
                                         stats.coolant.baselineRate;
                         if (val > baseline * 1.25) {
                             data.cell.styles.textColor = [185, 28, 28];
@@ -188,12 +220,12 @@ export const generateFluidReportPDF = (
             }
         });
 
-        currentY = doc.lastAutoTable.finalY + 10;
+        currentY = doc.lastAutoTable.finalY + 15;
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Documento técnico de auditoría preventiva. Aridos Marraque SL.", 105, 290, { align: 'center' });
+    doc.text("Auditoría basada en los últimos 6 meses de registros. Aridos Marraque SL.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
