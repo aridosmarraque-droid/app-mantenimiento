@@ -1,3 +1,4 @@
+
 import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
 import { Machine } from '../types';
@@ -11,14 +12,42 @@ const getDeviationColor = (dev: number): [number, number, number] => {
 };
 
 export const generateCPReportPDF = (report: any, workerName: string, plannedHours: number, efficiency: number): string => {
-    const doc = new jsPDF();
-    doc.text("Parte Diario", 20, 20);
+    const doc: any = new jsPDF();
+    doc.setFontSize(20);
+    doc.text("ARIDOS MARRAQUE - Auditoría Producción", 20, 20);
+    doc.setFontSize(10);
+    doc.text(`Fecha: ${new Date(report.date).toLocaleDateString()}`, 20, 30);
+    doc.text(`Operario: ${workerName}`, 20, 35);
+    
+    doc.autoTable({
+        startY: 45,
+        head: [['Instalación', 'Inicio', 'Fin', 'Total Horas']],
+        body: [
+            ['Machacadora', report.crusherStart, report.crusherEnd, report.crusherEnd - report.crusherStart],
+            ['Molinos / Planta', report.millsStart, report.millsEnd, report.millsEnd - report.millsStart],
+        ],
+        theme: 'grid'
+    });
+
+    doc.text(`Eficiencia calculada: ${efficiency.toFixed(1)}% (Plan: ${plannedHours}h)`, 20, doc.lastAutoTable.finalY + 10);
+    if (report.comments) {
+        doc.text("Observaciones:", 20, doc.lastAutoTable.finalY + 20);
+        doc.setFontSize(8);
+        doc.text(doc.splitTextToSize(report.comments, 170), 20, doc.lastAutoTable.finalY + 25);
+    }
+
     return doc.output('datauristring').split(',')[1];
 };
 
 export const generatePersonalReportPDF = (report: any, workerName: string): string => {
     const doc = new jsPDF();
-    doc.text("Parte Personal", 20, 20);
+    doc.text("Aridos Marraque - Parte Personal", 20, 20);
+    doc.text(`Trabajador: ${workerName}`, 20, 30);
+    doc.text(`Fecha: ${new Date(report.date).toLocaleDateString()}`, 20, 35);
+    doc.text(`Horas: ${report.hours}`, 20, 40);
+    doc.text(`Ubicación: ${report.location || 'N/A'}`, 20, 45);
+    doc.text("Tareas:", 20, 55);
+    doc.text(doc.splitTextToSize(report.description || '', 170), 20, 60);
     return doc.output('datauristring').split(',')[1];
 };
 
@@ -67,7 +96,6 @@ export const generateFluidReportPDF = (
 ): string => {
     const doc: any = new jsPDF();
     
-    // --- CABECERA ---
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
@@ -75,57 +103,11 @@ export const generateFluidReportPDF = (
     doc.setFont("helvetica", "bold");
     doc.text("ARIDOS MARRAQUE", 20, 20);
     doc.setFontSize(12);
-    doc.text(`MONITOR DE SALUD DE FLUIDOS - ${periodLabel}`, 20, 32);
+    doc.text(`MONITOR TÉCNICO DE FLUIDOS - ${periodLabel}`, 20, 32);
 
     let currentY = 55;
 
-    // --- RESUMEN EJECUTIVO (MÁXIMAS DESVIACIONES) ---
-    doc.setTextColor(15, 23, 42);
-    doc.setFontSize(14);
-    doc.text("RESUMEN EJECUTIVO DE ALERTAS", 20, currentY);
-    currentY += 8;
-
-    const criticalAlerts = machinesData
-        .flatMap(m => [
-            { name: m.machine.name, fluid: 'Aceite Motor', dev: m.stats.motor.deviation, code: m.machine.companyCode },
-            { name: m.machine.name, fluid: 'Aceite Hidráulico', dev: m.stats.hydraulic.deviation, code: m.machine.companyCode },
-            { name: m.machine.name, fluid: 'Refrigerante', dev: m.stats.coolant.deviation, code: m.machine.companyCode }
-        ])
-        .filter(a => a.dev > 10)
-        .sort((a, b) => b.dev - a.dev);
-
-    if (criticalAlerts.length > 0) {
-        doc.autoTable({
-            startY: currentY,
-            head: [['Unidad', 'Fluido', 'Desviación %', 'Clasificación']],
-            body: criticalAlerts.map(a => [
-                a.code ? `[${a.code}] ${a.name}` : a.name,
-                a.fluid,
-                `${a.dev > 0 ? '+' : ''}${formatDecimal(a.dev, 1)}%`,
-                a.dev > 25 ? 'ANOMALÍA (AVERÍA)' : 'INCREMENTO LIGERO'
-            ]),
-            theme: 'grid',
-            headStyles: { fillColor: [185, 28, 28] },
-            styles: { fontSize: 8, halign: 'center' },
-            columnStyles: { 0: { fontStyle: 'bold', halign: 'left' } },
-            didParseCell: (data: any) => {
-                if (data.section === 'body' && data.column.index === 2) {
-                    const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
-                    data.cell.styles.textColor = getDeviationColor(val);
-                    data.cell.styles.fontStyle = 'bold';
-                }
-            }
-        });
-        currentY = doc.lastAutoTable.finalY + 15;
-    } else {
-        doc.setTextColor(22, 163, 74);
-        doc.setFontSize(10);
-        doc.text("No se detectan desviaciones significativas en la flota actualmente.", 20, currentY);
-        currentY += 15;
-    }
-
-    // --- DETALLE INDIVIDUAL ---
-    machinesData.forEach(({ machine, stats, aiAnalysis }) => {
+    machinesData.forEach(({ machine, stats }) => {
         if (currentY > 230) { doc.addPage(); currentY = 20; }
         
         doc.setFillColor(241, 245, 249);
@@ -138,7 +120,7 @@ export const generateFluidReportPDF = (
 
         doc.autoTable({
             startY: currentY,
-            head: [['Fluido', 'Media Base', 'Media Reciente', 'Desviación %']],
+            head: [['Fluido', 'Media Base (L/100h)', 'Media Reciente (L/100h)', 'Desviación %']],
             body: [
                 ['Aceite Motor', formatDecimal(stats.motor.baselineRate), formatDecimal(stats.motor.recentRate), `${stats.motor.deviation > 0 ? '+' : ''}${formatDecimal(stats.motor.deviation, 1)}%`],
                 ['Aceite Hidráulico', formatDecimal(stats.hydraulic.baselineRate), formatDecimal(stats.hydraulic.recentRate), `${stats.hydraulic.deviation > 0 ? '+' : ''}${formatDecimal(stats.hydraulic.deviation, 1)}%`],
@@ -157,23 +139,12 @@ export const generateFluidReportPDF = (
             }
         });
 
-        currentY = doc.lastAutoTable.finalY + 6;
-        doc.setFontSize(9);
-        doc.setTextColor(79, 70, 229);
-        doc.setFont("helvetica", "bolditalic");
-        doc.text("ESTUDIO DE RUPTURA TEMPORAL (IA):", 20, currentY);
-        currentY += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(60, 60, 60);
-        doc.setFontSize(8);
-        const splitAi = doc.splitTextToSize(aiAnalysis, 175);
-        doc.text(splitAi, 20, currentY);
-        currentY += (splitAi.length * 4) + 12;
+        currentY = doc.lastAutoTable.finalY + 15;
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores normalizados en L/100h. Generado por Aridos Marraque Engine.", 105, 290, { align: 'center' });
+    doc.text("Informe técnico basado en análisis de repostajes. Generado por GMAO Marraque.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
