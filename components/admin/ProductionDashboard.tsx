@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
 import { updateCPReportAnalysis } from '../../services/db';
 import { analyzeProductionReport } from '../../services/ai';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search, ChevronRight, Activity } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search, Activity, Clock } from 'lucide-react';
 import { CPDailyReport } from '../../types';
 
 interface Props {
@@ -23,7 +23,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
             const data = await getProductionEfficiencyStats(dateObj);
             setStats(data);
         } catch (e) {
-            console.error(e);
+            console.error("Error loading stats:", e);
         } finally {
             setLoading(false);
         }
@@ -104,7 +104,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                             <div className="relative z-10">
                                 <div className="flex justify-between items-start mb-4">
                                     <h3 className="font-black text-indigo-300 flex items-center gap-2 uppercase text-[10px] tracking-widest">
-                                        <Sparkles className="w-4 h-4" /> Gerente Virtual (Gemini 3)
+                                        <Sparkles className="w-4 h-4" /> Gerente Virtual (IA)
                                     </h3>
                                     {latestReport && (
                                         latestReport.aiAnalysis ? (
@@ -118,7 +118,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                                 className="bg-indigo-600 text-white text-[9px] font-black uppercase px-3 py-2 rounded-lg shadow-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"
                                             >
                                                 {analyzingId === latestReport.id ? <RefreshCw className="animate-spin" size={12}/> : <BrainCircuit size={12} />}
-                                                Diagnosticar Día
+                                                Analizar Incidencias
                                             </button>
                                         )
                                     )}
@@ -134,7 +134,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                             </div>
                                         ) : (
                                             <div className="p-6 border border-dashed border-white/10 rounded-2xl text-slate-400 text-center text-xs italic">
-                                                "Sin diagnóstico. Solicite el análisis para evaluar incidencias y eficiencia."
+                                                "Sin diagnóstico. Solicite el análisis para evaluar incidencias y eficiencia del día."
                                             </div>
                                         )
                                     ) : (
@@ -163,7 +163,8 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
 };
 
 const StatCard = ({ title, stat }: { title: string, stat: any }) => (
-    <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 flex justify-between items-center">
+    <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 flex justify-between items-center relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
         <div>
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</h4>
             <div className="flex items-baseline gap-2">
@@ -172,9 +173,13 @@ const StatCard = ({ title, stat }: { title: string, stat: any }) => (
                 </span>
             </div>
         </div>
-        <div className="text-right">
-            <p className="text-[10px] font-bold text-slate-300 uppercase">{stat.reports.length} Partes</p>
-            <p className="text-xs font-black text-slate-700">{stat.totalActualHours}h Reales</p>
+        <div className="text-right space-y-1">
+            <div className="flex items-center justify-end gap-1 text-[10px] font-black text-slate-700 uppercase">
+                <Activity size={12} className="text-green-500"/> {stat.totalActualHours}h Reales
+            </div>
+            <div className="flex items-center justify-end gap-1 text-[10px] font-black text-slate-400 uppercase">
+                <Clock size={12}/> {stat.totalPlannedHours}h Planificadas
+            </div>
         </div>
     </div>
 );
@@ -196,8 +201,8 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
                 <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter">Prev: {data.previous.efficiency.toFixed(1)}%</span>
             </div>
             <div className="mt-3 pt-3 border-t border-slate-50 flex justify-between text-[9px] font-bold text-slate-400 uppercase">
-                <span>Actual: {data.current.totalActualHours}h</span>
-                <span>Anterior: {data.previous.totalActualHours}h</span>
+                <span>Real: {data.current.totalActualHours}h</span>
+                <span>Plan: {data.current.totalPlannedHours}h</span>
             </div>
         </div>
     );
