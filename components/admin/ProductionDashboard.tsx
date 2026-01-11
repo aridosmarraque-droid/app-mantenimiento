@@ -1,6 +1,9 @@
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Search, Activity, Clock, AlertCircle } from 'lucide-react';
+import { generateCPReportPDF } from '../../services/pdf';
+import { sendEmail } from '../../services/api';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Search, Activity, Clock, AlertCircle, Send, Loader2 } from 'lucide-react';
 import { CPDailyReport } from '../../types';
 
 interface Props {
@@ -10,6 +13,7 @@ interface Props {
 export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [sending, setSending] = useState(false);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
     const loadStats = useCallback(async () => {
@@ -30,6 +34,32 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
         loadStats();
     }, [loadStats]);
 
+    const handleSendEmail = async () => {
+        if (!stats?.daily?.reports?.length) return;
+        
+        if (!confirm("¿Enviar auditoría de producción de hoy a aridos@marraque.es?")) return;
+
+        setSending(true);
+        try {
+            const report = stats.daily.reports[0];
+            const pdfBase64 = generateCPReportPDF(report, "Sistema", stats.daily.totalPlannedHours, stats.daily.efficiency);
+            
+            await sendEmail(
+                ['aridos@marraque.es'],
+                `Auditoría de Eficiencia Producción - ${new Date(report.date).toLocaleDateString()}`,
+                `<p>Se adjunta el análisis de eficiencia del día <strong>${new Date(report.date).toLocaleDateString()}</strong>.</p>
+                 <p>Eficiencia real: <strong>${stats.daily.efficiency.toFixed(1)}%</strong></p>`,
+                pdfBase64,
+                `Auditoria_Produccion_${selectedDate}.pdf`
+            );
+            alert("Informe enviado.");
+        } catch (e) {
+            alert("Error al enviar.");
+        } finally {
+            setSending(false);
+        }
+    };
+
     const dailyReports = stats?.daily?.reports || [];
 
     return (
@@ -43,6 +73,15 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         <TrendingUp className="text-amber-600" /> Auditoría de Eficiencia
                     </h2>
                 </div>
+                {stats && dailyReports.length > 0 && (
+                    <button 
+                        onClick={handleSendEmail}
+                        disabled={sending}
+                        className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
+                    >
+                        {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                    </button>
+                )}
             </div>
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
@@ -88,7 +127,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                         <p className="text-slate-200 text-sm italic">"{r.comments || 'Sin incidencias reportadas.'}"</p>
                                     </div>
                                 )) : (
-                                    <p className="text-slate-500 text-xs text-center py-4 italic">No hay registros para este periodo.</p>
+                                    <p className="text-slate-500 text-xs text-center py-4 italic">No hay reportes de producción registrados para esta fecha.</p>
                                 )}
                             </div>
                         </div>
