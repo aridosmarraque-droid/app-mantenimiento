@@ -1,11 +1,14 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllMachines, getCostCenters } from '../../services/db';
 import { getMachineFluidStats, formatDecimal } from '../../services/stats';
+import { generateFluidReportPDF } from '../../services/pdf';
+import { sendEmail } from '../../services/api';
 import { Machine, OperationLog } from '../../types';
 import { 
     ArrowLeft, Loader2, AlertTriangle, Truck, Activity,
     Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown, Minus,
-    History, BarChart2
+    History, BarChart2, Send
 } from 'lucide-react';
 
 interface Props {
@@ -23,6 +26,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState('');
     const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
     const [stats, setStats] = useState<any>(null);
 
     useEffect(() => {
@@ -57,20 +61,56 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         loadStats();
     }, [loadStats]);
 
+    const handleSendReport = async () => {
+        if (!selectedMachineId || !stats) return;
+        const m = machines.find(mac => mac.id === selectedMachineId);
+        if (!m) return;
+
+        if (!confirm(`¿Enviar informe técnico de fluidos de [${m.companyCode || m.name}] a aridos@marraque.es?`)) return;
+
+        setSending(true);
+        try {
+            const period = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+            const pdfBase64 = generateFluidReportPDF([{ machine: m, stats, aiAnalysis: '' }], period);
+            
+            await sendEmail(
+                ['aridos@marraque.es'],
+                `Informe Técnico Fluidos - ${m.companyCode || m.name} - ${period}`,
+                `<p>Se adjunta el análisis técnico de consumo de fluidos (L/100h) para la unidad <strong>${m.name}</strong>.</p>`,
+                pdfBase64,
+                `Fluidos_${m.companyCode || 'Unidad'}_${period}.pdf`
+            );
+            alert("Informe enviado correctamente.");
+        } catch (e) {
+            alert("Error al enviar el informe.");
+        } finally {
+            setSending(false);
+        }
+    };
+
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
-            <div className="flex items-center justify-between border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
+            <div className="flex items-center justify-between border-b pb-4 bg-white p-4 rounded-xl shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-2">
                     <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Monitor Técnico de Fluidos</h3>
+                        <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Monitor de Fluidos</h3>
                         <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            Análisis de Repostajes vs Horas de Trabajo
+                            Control técnico de consumo L/100h
                         </p>
                     </div>
                 </div>
+                {stats && (
+                    <button 
+                        onClick={handleSendReport}
+                        disabled={sending}
+                        className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg flex items-center gap-2"
+                    >
+                        {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                    </button>
+                )}
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
@@ -102,56 +142,62 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                         <TrendCard title="Refrigerante" stat={stats.coolant} icon={Thermometer} />
                     </div>
 
-                    {/* Gráfico de Barras Técnico para el Ingeniero */}
-                    {(stats.motor.deviation > 25 || stats.hydraulic.deviation > 25 || stats.coolant.deviation > 25) && (
-                        <div className="bg-slate-900 p-6 rounded-3xl shadow-xl border border-white/10">
-                            <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-6 flex items-center gap-2">
-                                <BarChart2 size={16} className="text-red-500" /> Histograma de Ruptura (Litros / 100 Horas)
-                            </h4>
-                            
-                            <div className="space-y-8">
-                                {['motor', 'hydraulic', 'coolant'].map(key => {
-                                    const s = stats[key];
-                                    if (s.deviation <= 25 || s.series.length === 0) return null;
-                                    
-                                    // Determinar el máximo para escalar las barras
-                                    const maxRate = Math.max(...s.series.map((p: any) => p.rate), s.baselineRate) * 1.2;
+                    {/* Histograma de Barras: Se muestra si hay al menos 1 punto de serie */}
+                    <div className="bg-slate-900 p-6 rounded-3xl shadow-xl border border-white/10">
+                        <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-8 flex items-center gap-2">
+                            <BarChart2 size={16} className="text-amber-500" /> Auditoría de Ruptura (Litros / 100 Horas)
+                        </h4>
+                        
+                        <div className="space-y-12">
+                            {['motor', 'hydraulic', 'coolant'].map(key => {
+                                const s = stats[key];
+                                if (s.series.length === 0) return null;
+                                
+                                const maxRate = Math.max(...s.series.map((p: any) => p.rate), s.baselineRate, 0.1);
 
-                                    return (
-                                        <div key={key} className="space-y-2">
-                                            <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase">
-                                                <span>Evolución {key === 'motor' ? 'Aceite Motor' : key === 'hydraulic' ? 'Aceite Hidráulico' : 'Refrigerante'}</span>
-                                                <span className="text-red-400">Anomalía Detectada: {s.deviation.toFixed(1)}%</span>
-                                            </div>
-                                            <div className="flex items-end gap-2 h-32 pt-4">
-                                                {/* Línea de Base (Promedio Histórico) */}
-                                                {s.series.map((point: any, idx: number) => (
-                                                    <div key={idx} className="flex-1 flex flex-col items-center gap-2 group">
-                                                        <div className="w-full relative flex flex-col justify-end h-full">
-                                                            {/* Barra de Consumo */}
-                                                            <div 
-                                                                style={{ height: `${(point.rate / maxRate) * 100}%` }}
-                                                                className={`w-full rounded-t-sm transition-all duration-500 ${point.rate > s.baselineRate * 1.2 ? 'bg-red-500' : 'bg-blue-500 opacity-60'}`}
-                                                            >
-                                                                <div className="hidden group-hover:block absolute -top-6 left-1/2 -translate-x-1/2 bg-white text-slate-900 text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg whitespace-nowrap">
-                                                                    {point.rate.toFixed(3)} L/100h
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <span className="text-[8px] text-slate-500 font-bold rotate-45 mt-2">{point.date}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <div className="mt-6 pt-2 border-t border-white/5 text-[8px] text-slate-500 font-bold uppercase flex justify-between">
-                                                <span>Línea Base: {s.baselineRate.toFixed(3)} L/100h</span>
-                                                <span className="text-red-500">Punto Crítico: {s.recentRate.toFixed(3)} L/100h</span>
-                                            </div>
+                                return (
+                                    <div key={key} className="space-y-3">
+                                        <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <span className="flex items-center gap-2">
+                                                <div className={`w-2 h-2 rounded-full ${key === 'motor' ? 'bg-amber-500' : key === 'hydraulic' ? 'bg-blue-500' : 'bg-teal-500'}`}></div>
+                                                Evolución {key === 'motor' ? 'Aceite Motor' : key === 'hydraulic' ? 'Aceite Hidráulico' : 'Refrigerante'}
+                                            </span>
+                                            {s.deviation > 25 && <span className="text-red-500 animate-pulse">ALERTA: +{s.deviation}%</span>}
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                        
+                                        <div className="flex items-end gap-1.5 h-36 pt-4 border-b border-white/5 pb-2">
+                                            {s.series.map((point: any, idx: number) => {
+                                                const heightPercent = Math.max((point.rate / maxRate) * 100, 4); // Min 4% para visibilidad
+                                                return (
+                                                    <div key={idx} className="flex-1 flex flex-col items-center group relative">
+                                                        {/* Tooltip */}
+                                                        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-slate-900 text-[8px] font-black px-2 py-1 rounded shadow-xl z-20 pointer-events-none whitespace-nowrap">
+                                                            {point.rate.toFixed(3)} L/100h
+                                                        </div>
+                                                        
+                                                        {/* Barra */}
+                                                        <div 
+                                                            style={{ height: `${heightPercent}%` }}
+                                                            className={`w-full rounded-t-md transition-all duration-700 ${
+                                                                point.rate > s.baselineRate * 1.25 ? 'bg-red-500' : 
+                                                                key === 'motor' ? 'bg-amber-500/80' : 
+                                                                key === 'hydraulic' ? 'bg-blue-500/80' : 'bg-teal-500/80'
+                                                            }`}
+                                                        ></div>
+                                                        <span className="text-[7px] text-slate-500 font-bold mt-2 rotate-45 origin-left whitespace-nowrap">{point.date}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex justify-between items-center text-[8px] font-black text-slate-500 uppercase mt-8">
+                                            <span>Media Base: {s.baselineRate.toFixed(3)}</span>
+                                            <span className={s.deviation > 25 ? 'text-red-500' : 'text-slate-400'}>Actual: {s.recentRate.toFixed(3)} L/100h</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    )}
+                    </div>
 
                     <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b">
