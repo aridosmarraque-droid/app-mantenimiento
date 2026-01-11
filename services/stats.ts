@@ -150,15 +150,15 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         recentRate: Number(recentRate.toFixed(3)),
         deviation: Number(deviation.toFixed(1)),
         logsCount: fluidLogs.length,
-        series: series.slice(-10)
+        series: series.slice(-15) // Aumentado para tener más contexto
     };
 };
 
 export const getCombinedFluidEvolution = (allLogs: OperationLog[]): CombinedFluidEvolution[] => {
+    // Fix: Access date.getTime() on 'b' instead of 'b.getTime()' which was causing a property not found error.
     const sortedLogs = [...allLogs].sort((a, b) => a.date.getTime() - b.date.getTime());
     const evolution: CombinedFluidEvolution[] = [];
     
-    // Rastreadores del último registro con valor para cada fluido
     let lastMotor: OperationLog | null = null;
     let lastHyd: OperationLog | null = null;
     let lastCool: OperationLog | null = null;
@@ -201,15 +201,24 @@ export const getCombinedFluidEvolution = (allLogs: OperationLog[]): CombinedFlui
         }
     }
 
-    return evolution.reverse().slice(0, 10); // Últimos 10 intervalos
+    return evolution.reverse();
 };
 
 export const getMachineFuelStats = async (machineId: string, baseDate: Date = new Date()) => {
-    const yearLogs = await getFuelLogs(machineId, new Date(baseDate.getFullYear() - 1, 0, 1), baseDate);
+    const yearLogs = await getFuelLogs(machineId, new Date(baseDate.getFullYear() - 1, baseDate.getMonth(), baseDate.getDate()), baseDate);
+    const monthly = calculateFuelConsumptionFromLogs(yearLogs.filter(l => l.date >= new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)), "Mes Actual");
+    const yearly = calculateFuelConsumptionFromLogs(yearLogs, "Media Año");
+    
+    // Calcular desviación combustible
+    const fuelDeviation = yearly.consumptionPerHour > 0 
+        ? ((monthly.consumptionPerHour - yearly.consumptionPerHour) / yearly.consumptionPerHour) * 100 
+        : 0;
+
     return {
-        monthly: calculateFuelConsumptionFromLogs(yearLogs.slice(-5), "Mes Actual"),
+        monthly,
         quarterly: calculateFuelConsumptionFromLogs(yearLogs.slice(-15), "Trimestre"),
-        yearly: calculateFuelConsumptionFromLogs(yearLogs, "Año"),
+        yearly,
+        fuelDeviation,
         logs: yearLogs.slice().reverse()
     };
 };
@@ -218,12 +227,16 @@ export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLab
     if (logs.length < 2) return { period: periodLabel, totalLiters: 0, consumedLiters: 0, workedHours: 0, consumptionPerHour: 0, logsCount: logs.length };
     const sorted = [...logs].sort((a, b) => a.date.getTime() - b.date.getTime());
     const workedHours = sorted[sorted.length-1].hoursAtExecution - sorted[0].hoursAtExecution;
-    const consumedLiters = sorted.reduce((acc, l) => acc + (l.fuelLitres || 0), 0) - (sorted[sorted.length-1].fuelLitres || 0);
+    const consumedLiters = sorted.reduce((acc, l) => acc + (l.fuelLitres || 0), 0) - (sorted[0].fuelLitres || 0);
     return { period: periodLabel, totalLiters: consumedLiters, consumedLiters, workedHours, consumptionPerHour: workedHours > 0 ? consumedLiters / workedHours : 0, logsCount: sorted.length };
 };
 
 export const getMachineFluidStats = async (machineId: string, baseDate: Date = new Date()) => {
-    const allLogs = await getMachineLogs(machineId, undefined, baseDate, ['LEVELS']);
+    // Para fluidos pedimos histórico de 6 meses (aprox 180 días)
+    const startDate = new Date(baseDate);
+    startDate.setMonth(startDate.getMonth() - 6);
+    
+    const allLogs = await getMachineLogs(machineId, startDate, baseDate, ['LEVELS']);
     return {
         motor: analyzeFluidTrend(allLogs, 'MOTOR'),
         hydraulic: analyzeFluidTrend(allLogs, 'HYDRAULIC'),
