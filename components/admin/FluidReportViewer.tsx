@@ -8,7 +8,7 @@ import { Machine, OperationLog } from '../../types';
 import { 
     ArrowLeft, Loader2, AlertTriangle, Truck, Sparkles, Activity,
     Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown, Minus,
-    Send, BrainCircuit, History, Info
+    Send, BrainCircuit, History, Info, Key
 } from 'lucide-react';
 
 interface Props {
@@ -30,19 +30,25 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [sending, setSending] = useState(false);
+    const [hasApiKey, setHasApiKey] = useState(false);
 
     useEffect(() => {
+        const checkKey = async () => {
+            // @ts-ignore
+            const selected = await window.aistudio.hasSelectedApiKey();
+            setHasApiKey(selected);
+        };
+        checkKey();
+
         const loadInitialData = async () => {
             const [centers, allM] = await Promise.all([
                 getCostCenters(),
                 getAllMachines(false)
             ]);
-
             const mobileCenter = centers.find(c => {
                 const name = c.name.toLowerCase();
                 return name.includes('móvil') || name.includes('movil');
             });
-            
             setMachines(mobileCenter 
                 ? allM.filter(m => m.costCenterId === mobileCenter.id)
                 : allM.filter(m => m.companyCode)
@@ -51,7 +57,15 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         loadInitialData();
     }, []);
 
+    const handleSelectKey = async () => {
+        // @ts-ignore
+        await window.aistudio.openSelectKey();
+        setHasApiKey(true);
+        if (selectedMachineId) loadStats();
+    };
+
     const runAiDiagnosis = useCallback(async (currentStats: any, machine: Machine) => {
+        if (!hasApiKey) return;
         setAnalyzing(true);
         try {
             const result = await analyzeFluidHealth(
@@ -68,7 +82,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
         } finally {
             setAnalyzing(false);
         }
-    }, []);
+    }, [hasApiKey]);
 
     const loadStats = useCallback(async () => {
         if (!selectedMachineId) return;
@@ -90,7 +104,12 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     }, [loadStats]);
 
     const handleSendMonthlyReport = async () => {
-        if (!confirm("Se enviará el Monitor de Salud de la Flota (con Resumen de Alertas e IA) a aridos@marraque.es. ¿Confirmar?")) return;
+        if (!hasApiKey) {
+            alert("Debe seleccionar una API Key antes de generar el informe IA.");
+            handleSelectKey();
+            return;
+        }
+        if (!confirm("Se enviará el Monitor de Salud con Resumen de Alertas e IA a aridos@marraque.es. ¿Confirmar?")) return;
         setSending(true);
         try {
             const now = new Date();
@@ -106,7 +125,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             }
 
             if (consolidatedData.length === 0) {
-                alert("Sin datos suficientes en la flota para generar informe.");
+                alert("Sin datos suficientes.");
                 setSending(false);
                 return;
             }
@@ -115,18 +134,15 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             const res = await sendEmail(
                 ['aridos@marraque.es'],
                 `Monitor Salud Fluidos - Auditoría ${periodName}`,
-                `<p>Informe técnico generado con <strong>Gemini 3 Pro</strong> analizando rupturas de tendencia en fluidos.</p>`,
+                `<p>Informe técnico generado con <strong>IA de Patrones</strong>. Incluye puntos de ruptura de tendencia.</p>`,
                 pdfBase64,
                 `Salud_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
             );
 
             if (res.success) alert("Informe enviado correctamente.");
             else alert("Error al enviar email.");
-        } catch (e) {
-            alert("Error en proceso consolidado.");
-        } finally {
-            setSending(false);
-        }
+        } catch (e) { alert("Error en proceso."); }
+        finally { setSending(false); }
     };
 
     return (
@@ -139,27 +155,43 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                     <div>
                         <h3 className="text-xl font-bold text-slate-800 tracking-tight leading-none">Salud de Fluidos</h3>
                         <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            <BrainCircuit size={10}/> Auditoría de Patrones
+                            <BrainCircuit size={10}/> Detección de Rupturas IA
                         </p>
                     </div>
                 </div>
-                <button 
-                    onClick={handleSendMonthlyReport}
-                    disabled={sending || machines.length === 0}
-                    className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
-                >
-                    {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                </button>
+                <div className="flex gap-2">
+                    {!hasApiKey && (
+                        <button onClick={handleSelectKey} className="bg-amber-100 text-amber-700 p-2.5 rounded-xl border border-amber-200 animate-pulse">
+                            <Key size={20}/>
+                        </button>
+                    )}
+                    <button 
+                        onClick={handleSendMonthlyReport}
+                        disabled={sending || machines.length === 0}
+                        className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
+                    >
+                        {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                    </button>
+                </div>
             </div>
+
+            {!hasApiKey && (
+                <div className="mx-1 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col items-center gap-3 text-center">
+                    <AlertTriangle className="text-amber-600" size={32} />
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-tight">API Key no configurada</p>
+                    <p className="text-[10px] text-amber-600">Para utilizar el diagnóstico IA de patrones, debe seleccionar su clave de Google AI Studio.</p>
+                    <button onClick={handleSelectKey} className="bg-amber-600 text-white px-6 py-2 rounded-lg font-black text-[10px] uppercase shadow-md">Configurar Ahora</button>
+                </div>
+            )}
 
             <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
-                    <Truck size={12}/> Seleccionar Máquina para Auditoría
+                    <Truck size={12}/> Seleccionar Maquinaria Móvil
                 </label>
                 <select 
                     value={selectedMachineId}
                     onChange={e => setSelectedMachineId(e.target.value)}
-                    className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500"
                 >
                     <option value="">-- Seleccionar Unidad --</option>
                     {machines.map(m => (
@@ -171,7 +203,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             {loading ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={40} />
-                    Consultando Historial Cronológico...
+                    Analizando Serie Temporal...
                 </div>
             ) : stats ? (
                 <div className="space-y-6 px-1">
@@ -184,13 +216,13 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                     <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-3xl shadow-xl relative overflow-hidden">
                         <Sparkles className="absolute -right-4 -top-4 w-32 h-32 text-white/5 rotate-12" />
                         <h4 className="text-white font-black uppercase text-[10px] tracking-widest mb-4 flex items-center gap-2">
-                            <BrainCircuit size={16} className="text-indigo-400" /> Detección de Ruptura de Tendencia (Gemini 3 Pro)
+                            <BrainCircuit size={16} className="text-indigo-400" /> Diagnóstico Predictivo IA
                         </h4>
                         
                         {analyzing ? (
                             <div className="flex items-center gap-3 text-indigo-300 py-6 animate-pulse">
                                 <Loader2 className="animate-spin" size={24}/>
-                                <span className="text-xs font-black uppercase tracking-widest">Identificando punto de quiebre...</span>
+                                <span className="text-xs font-black uppercase tracking-widest">Calculando punto de quiebre...</span>
                             </div>
                         ) : aiAnalysis ? (
                             <div className="bg-white/5 backdrop-blur-md rounded-2xl p-5 border border-white/10 animate-in zoom-in-95 duration-300">
@@ -200,7 +232,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                             </div>
                         ) : (
                             <div className="text-slate-500 text-xs italic py-4 flex items-center gap-2">
-                                <Info size={14}/> Datos insuficientes para análisis cronológico profundo.
+                                <Info size={14}/> Datos insuficientes para auditoría profunda.
                             </div>
                         )}
                     </div>
@@ -208,7 +240,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                     <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
                         <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
                             <h4 className="font-black text-slate-500 uppercase text-[10px] tracking-widest flex items-center gap-1">
-                                <History size={14}/> Serie Temporal de Añadidos
+                                <History size={14}/> Historial de Consumos
                             </h4>
                         </div>
                         <div className="divide-y max-h-80 overflow-y-auto">
@@ -231,7 +263,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             ) : (
                 <div className="py-20 text-center flex flex-col items-center gap-4 opacity-30">
                     <Activity size={64} className="text-slate-300"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione máquina móvil para iniciar auditoría</p>
+                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione máquina móvil</p>
                 </div>
             )}
         </div>
@@ -261,13 +293,13 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
 
             {isError ? (
                 <div className="text-[9px] text-slate-400 font-bold uppercase italic flex items-center gap-2">
-                    <Minus size={14}/> Serie temporal insuficiente (min. 2)
+                    <Minus size={14}/> Serie temporal insuficiente
                 </div>
             ) : (
                 <div className="space-y-4 relative z-10">
                     <div className="flex items-end justify-between">
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tendencia Actual</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tendencia Reciente</p>
                             <span className={`text-4xl font-black ${info.color}`}>{formatDecimal(stat.recentRate)}</span>
                             <span className="ml-1 text-[10px] font-bold text-slate-400">L/100h</span>
                         </div>
@@ -285,8 +317,8 @@ const TrendCard = ({ title, stat, icon: Icon }: any) => {
                             <p className="text-xs font-black text-slate-500">{formatDecimal(stat.baselineRate)} L/100h</p>
                         </div>
                         <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase">Muestras Serie</p>
-                            <p className="text-xs font-black text-slate-500">{stat.logsCount} Puntos</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Puntos Serie</p>
+                            <p className="text-xs font-black text-slate-500">{stat.logsCount} Muestras</p>
                         </div>
                     </div>
                 </div>
