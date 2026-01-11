@@ -119,7 +119,7 @@ export const generateFluidReportPDF = (
     if (alertedMachines.length === 0) {
         doc.setFontSize(10);
         doc.setTextColor(100, 100, 100);
-        doc.text("No se han detectado anomalías graves en la flota durante este periodo.", 20, 60);
+        doc.text("No se han detectado anomalías graves en la flota.", 20, 60);
     } else {
         const alertRows = alertedMachines.map(m => {
             const issues = [];
@@ -146,33 +146,44 @@ export const generateFluidReportPDF = (
     let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 70;
 
     machinesData.forEach(({ machine, stats }) => {
-        if (currentY > 230) { doc.addPage(); currentY = 20; }
+        if (currentY > 210) { doc.addPage(); currentY = 20; }
         
         doc.setFillColor(241, 245, 249);
-        doc.rect(15, currentY, 180, 10, 'F');
+        doc.rect(15, currentY, 180, 8, 'F');
         doc.setTextColor(15, 23, 42);
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.text(`${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name.toUpperCase()}`, 20, currentY + 7);
-        currentY += 15;
+        doc.text(`${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name.toUpperCase()}`, 20, currentY + 6);
+        currentY += 12;
 
-        // Tabla de medias
+        // Tabla de Evolución de Tasas (Intervalos)
+        const evolutionRows = stats.evolution.slice(0, 6).map((p: any) => [
+            p.date,
+            `${p.hours}h`,
+            p.motorRate !== null ? p.motorRate.toFixed(3) : '-',
+            p.hydRate !== null ? p.hydRate.toFixed(3) : '-',
+            p.coolRate !== null ? p.coolRate.toFixed(3) : '-'
+        ]);
+
         doc.autoTable({
             startY: currentY,
-            head: [['Fluido', 'Media Base (L/100h)', 'Media Reciente (L/100h)', 'Desviación %']],
-            body: [
-                ['Aceite Motor', formatDecimal(stats.motor.baselineRate), formatDecimal(stats.motor.recentRate), `${stats.motor.deviation > 0 ? '+' : ''}${formatDecimal(stats.motor.deviation, 1)}%`],
-                ['Aceite Hidráulico', formatDecimal(stats.hydraulic.baselineRate), formatDecimal(stats.hydraulic.recentRate), `${stats.hydraulic.deviation > 0 ? '+' : ''}${formatDecimal(stats.hydraulic.deviation, 1)}%`],
-                ['Refrigerante', formatDecimal(stats.coolant.baselineRate), formatDecimal(stats.coolant.recentRate), `${stats.coolant.deviation > 0 ? '+' : ''}${formatDecimal(stats.coolant.deviation, 1)}%`],
-            ],
+            head: [['Fecha', 'Horas', 'Motor (L/100h)', 'Hidr. (L/100h)', 'Refrig. (L/100h)']],
+            body: evolutionRows,
             theme: 'striped',
             headStyles: { fillColor: [51, 65, 85] },
-            styles: { fontSize: 8, halign: 'center' },
+            styles: { fontSize: 7, halign: 'center' },
             didParseCell: (data: any) => {
-                if (data.section === 'body' && data.column.index === 3) {
-                    const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
-                    data.cell.styles.textColor = getDeviationColor(val);
-                    data.cell.styles.fontStyle = 'bold';
+                if (data.section === 'body' && data.column.index >= 2) {
+                    const val = parseFloat(data.cell.raw);
+                    if (!isNaN(val)) {
+                        const baseline = data.column.index === 2 ? stats.motor.baselineRate : 
+                                        data.column.index === 3 ? stats.hydraulic.baselineRate : 
+                                        stats.coolant.baselineRate;
+                        if (val > baseline * 1.25) {
+                            data.cell.styles.textColor = [185, 28, 28];
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    }
                 }
             }
         });
