@@ -2,11 +2,22 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
 import { updateCPReportAnalysis } from '../../services/db';
 import { analyzeProductionReport } from '../../services/ai';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search, Activity, Clock } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Key, Sparkles, BrainCircuit, Search, Activity, Clock, AlertTriangle } from 'lucide-react';
 import { CPDailyReport } from '../../types';
 
 interface Props {
     onBack: () => void;
+}
+
+// Fix: define AIStudio interface to match existing global declarations and avoid window property conflict
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
+  interface Window {
+    aistudio: AIStudio;
+  }
 }
 
 export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
@@ -14,6 +25,22 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+    const [hasKey, setHasKey] = useState<boolean>(true);
+
+    const checkApiKeyStatus = useCallback(async () => {
+        // process.env.API_KEY es la fuente de verdad. 
+        // Si no está, probamos a ver si AI Studio tiene una seleccionada.
+        if (!process.env.API_KEY || process.env.API_KEY === 'undefined') {
+            try {
+                const selected = await window.aistudio.hasSelectedApiKey();
+                setHasKey(selected);
+            } catch (e) {
+                setHasKey(false);
+            }
+        } else {
+            setHasKey(true);
+        }
+    }, []);
 
     const loadStats = useCallback(async () => {
         setLoading(true);
@@ -30,8 +57,18 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     }, [selectedDate]);
 
     useEffect(() => {
+        checkApiKeyStatus();
         loadStats();
-    }, [loadStats]);
+    }, [loadStats, checkApiKeyStatus]);
+
+    const handleOpenKeySelector = async () => {
+        try {
+            await window.aistudio.openSelectKey();
+            setHasKey(true);
+        } catch (e) {
+            console.error("Key selection failed", e);
+        }
+    };
 
     const handleAnalyzeClick = async (report: CPDailyReport, efficiency: number) => {
         setAnalyzingId(report.id);
@@ -62,9 +99,17 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         <ArrowLeft size={24} />
                     </button>
                     <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                        <TrendingUp className="text-amber-600" /> Panel Eficiencia IA
+                        <TrendingUp className="text-amber-600" /> Panel de Eficiencia
                     </h2>
                 </div>
+                {!hasKey && (
+                    <button 
+                        onClick={handleOpenKeySelector}
+                        className="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 border border-amber-200 animate-pulse"
+                    >
+                        <Key size={14} /> Configurar IA
+                    </button>
+                )}
             </div>
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
@@ -94,7 +139,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                 {loading ? (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-300">
                         <Activity className="animate-pulse mb-4 text-amber-500" size={48} />
-                        <p className="font-black uppercase tracking-widest text-xs">Calculando indicadores...</p>
+                        <p className="font-black uppercase tracking-widest text-xs">Sincronizando producción...</p>
                     </div>
                 ) : stats && (
                     <>
@@ -114,8 +159,8 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                         ) : (
                                             <button 
                                                 onClick={() => handleAnalyzeClick(latestReport, latestEfficiency)}
-                                                disabled={analyzingId === latestReport.id}
-                                                className="bg-indigo-600 text-white text-[9px] font-black uppercase px-3 py-2 rounded-lg shadow-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"
+                                                disabled={analyzingId === latestReport.id || !hasKey}
+                                                className={`bg-indigo-600 text-white text-[9px] font-black uppercase px-3 py-2 rounded-lg shadow-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50`}
                                             >
                                                 {analyzingId === latestReport.id ? <RefreshCw className="animate-spin" size={12}/> : <BrainCircuit size={12} />}
                                                 Analizar Incidencias
@@ -128,18 +173,18 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                     {latestReport ? (
                                         latestReport.aiAnalysis ? (
                                             <div className="bg-white/5 backdrop-blur-md p-5 rounded-2xl border border-white/10 shadow-inner">
-                                                <div className="whitespace-pre-line text-xs leading-relaxed font-medium">
+                                                <div className="whitespace-pre-line text-xs leading-relaxed font-medium prose prose-invert max-w-none">
                                                     {latestReport.aiAnalysis}
                                                 </div>
                                             </div>
                                         ) : (
                                             <div className="p-6 border border-dashed border-white/10 rounded-2xl text-slate-400 text-center text-xs italic">
-                                                "Sin diagnóstico. Solicite el análisis para evaluar incidencias y eficiencia del día."
+                                                {!hasKey ? "Falta configurar la Clave IA para el análisis." : "Solicite el análisis para evaluar incidencias y eficiencia del día."}
                                             </div>
                                         )
                                     ) : (
                                         <div className="p-6 text-slate-500 text-center text-xs font-bold uppercase">
-                                            No hay reportes de producción en esta fecha.
+                                            No hay reportes registrados para esta fecha.
                                         </div>
                                     )}
                                 </div>
@@ -164,7 +209,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
 
 const StatCard = ({ title, stat }: { title: string, stat: any }) => (
     <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 flex justify-between items-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
         <div>
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</h4>
             <div className="flex items-baseline gap-2">
@@ -174,10 +219,10 @@ const StatCard = ({ title, stat }: { title: string, stat: any }) => (
             </div>
         </div>
         <div className="text-right space-y-1">
-            <div className="flex items-center justify-end gap-1 text-[10px] font-black text-slate-700 uppercase">
+            <div className="flex items-center justify-end gap-1 text-[11px] font-black text-slate-700 uppercase">
                 <Activity size={12} className="text-green-500"/> {stat.totalActualHours}h Reales
             </div>
-            <div className="flex items-center justify-end gap-1 text-[10px] font-black text-slate-400 uppercase">
+            <div className="flex items-center justify-end gap-1 text-[11px] font-black text-slate-400 uppercase">
                 <Clock size={12}/> {stat.totalPlannedHours}h Planificadas
             </div>
         </div>
@@ -200,7 +245,7 @@ const ComparisonCard = ({ title, data }: { title: string, data: ProductionCompar
                 <span className="text-3xl font-black text-slate-800">{data.current.efficiency.toFixed(1)}%</span>
                 <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter">Prev: {data.previous.efficiency.toFixed(1)}%</span>
             </div>
-            <div className="mt-3 pt-3 border-t border-slate-50 flex justify-between text-[9px] font-bold text-slate-400 uppercase">
+            <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between text-[9px] font-black text-slate-400 uppercase">
                 <span>Real: {data.current.totalActualHours}h</span>
                 <span>Plan: {data.current.totalPlannedHours}h</span>
             </div>
