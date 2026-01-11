@@ -1,3 +1,4 @@
+
 import { getCPReportsByRange, getCPWeeklyPlan, getFuelLogs, getMachineLogs } from './db';
 import { CPDailyReport, CPWeeklyPlan, OperationLog } from '../types';
 
@@ -72,9 +73,9 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) 
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     const weekly = await compareStats(
         await calculateStats(startOfWeek, endOfWeek, "Esta Semana", today),
-        await calculateStats(startOfWeek, endOfWeek, "Semana Anterior", today) // Simplificado
+        await calculateStats(startOfWeek, endOfWeek, "Semana Anterior", today)
     );
-    return { daily, weekly, monthly: weekly, yearly: weekly }; // Simplificado para enfoque técnico
+    return { daily, weekly, monthly: weekly, yearly: weekly };
 };
 
 const calculateStats = async (start: Date, end: Date, label: string, limitDate: Date): Promise<ProductionStat> => {
@@ -110,13 +111,12 @@ const compareStats = (current: ProductionStat, previous: ProductionStat): Produc
 
 export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'COOLANT'): any => {
     const fluidLogs = allLogs.filter(l => {
-        if (type === 'MOTOR') return (l.motorOil ?? 0) > 0;
-        if (type === 'HYDRAULIC') return (l.hydraulicOil ?? 0) > 0;
-        if (type === 'COOLANT') return (l.coolant ?? 0) > 0;
-        return false;
+        const val = type === 'MOTOR' ? l.motorOil : type === 'HYDRAULIC' ? l.hydraulicOil : l.coolant;
+        return (val ?? 0) > 0;
     }).sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const series: FluidDataPoint[] = [];
+    // Necesitamos al menos 2 logs para calcular una tasa entre puntos
     for (let i = 1; i < fluidLogs.length; i++) {
         const prev = fluidLogs[i - 1];
         const curr = fluidLogs[i];
@@ -126,7 +126,7 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         if (hDiff > 0) {
             series.push({
                 date: new Date(curr.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
-                rate: (added / hDiff) * 100,
+                rate: (added / hDiff) * 100, // Tasa L/100h
                 added,
                 hours: curr.hoursAtExecution
             });
@@ -134,7 +134,7 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
     }
 
     const recentRate = series.length > 0 ? series[series.length - 1].rate : 0;
-    const baselineRate = series.length > 3 ? series.slice(0, -2).reduce((acc, p) => acc + p.rate, 0) / (series.length - 2) : recentRate;
+    const baselineRate = series.length > 3 ? series.slice(0, -2).reduce((acc, p) => acc + p.rate, 0) / (series.length - 2) : (series.length > 0 ? series[0].rate : 0);
     const deviation = baselineRate > 0 ? ((recentRate - baselineRate) / baselineRate) * 100 : 0;
 
     return {
@@ -143,7 +143,7 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         recentRate: Number(recentRate.toFixed(3)),
         deviation: Number(deviation.toFixed(1)),
         logsCount: fluidLogs.length,
-        series: series.slice(-6) // Últimos 6 puntos para la gráfica
+        series: series.slice(-8) // Devolvemos los últimos 8 puntos para la gráfica
     };
 };
 
