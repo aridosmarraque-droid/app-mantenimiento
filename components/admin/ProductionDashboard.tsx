@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { getProductionEfficiencyStats, ProductionComparison } from '../../services/stats';
 import { updateCPReportAnalysis } from '../../services/db';
 import { analyzeProductionReport } from '../../services/ai';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, AlertCircle, Sparkles, BrainCircuit, Search, Key } from 'lucide-react';
 import { CPDailyReport } from '../../types';
 
 interface Props {
@@ -14,11 +14,26 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+    const [hasApiKey, setHasApiKey] = useState(false);
+
+    useEffect(() => {
+        const checkKey = async () => {
+            // @ts-ignore
+            const selected = await window.aistudio.hasSelectedApiKey();
+            setHasApiKey(selected);
+        };
+        checkKey();
+    }, []);
+
+    const handleSelectKey = async () => {
+        // @ts-ignore
+        await window.aistudio.openSelectKey();
+        setHasApiKey(true);
+    };
 
     const loadStats = useCallback(async () => {
         setLoading(true);
         try {
-            // Parseo robusto para evitar desfases UTC
             const [year, month, day] = selectedDate.split('-').map(Number);
             const dateObj = new Date(year, month - 1, day);
             const data = await getProductionEfficiencyStats(dateObj);
@@ -35,6 +50,11 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     }, [loadStats]);
 
     const handleAnalyzeClick = async (report: CPDailyReport, efficiency: number) => {
+        if (!hasApiKey) {
+            alert("Seleccione una API Key para usar la IA.");
+            handleSelectKey();
+            return;
+        }
         setAnalyzingId(report.id);
         try {
             const analysis = await analyzeProductionReport(
@@ -57,13 +77,20 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 min-h-screen">
-            <div className="bg-white p-4 shadow-sm border-b flex items-center gap-2 sticky top-0 z-10">
-                <button onClick={onBack} className="text-slate-500 hover:text-slate-800 transition-colors">
-                    <ArrowLeft size={24} />
-                </button>
-                <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="text-amber-600" /> Panel de Eficiencia IA
-                </h2>
+            <div className="bg-white p-4 shadow-sm border-b flex items-center justify-between sticky top-0 z-10">
+                <div className="flex items-center gap-2">
+                    <button onClick={onBack} className="text-slate-500 hover:text-slate-800 transition-colors">
+                        <ArrowLeft size={24} />
+                    </button>
+                    <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <TrendingUp className="text-amber-600" /> Panel Eficiencia IA
+                    </h2>
+                </div>
+                {!hasApiKey && (
+                    <button onClick={handleSelectKey} className="bg-amber-100 text-amber-700 p-2 rounded-lg border border-amber-200 animate-pulse">
+                        <Key size={18}/>
+                    </button>
+                )}
             </div>
 
             <div className="p-4 max-w-2xl mx-auto w-full space-y-6">
@@ -72,28 +99,21 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-1">
                             <Calendar size={12}/> Fecha del Informe
                         </label>
-                        <div className="relative">
-                            <input 
-                                type="date" 
-                                value={selectedDate} 
-                                onChange={e => setSelectedDate(e.target.value)} 
-                                className="w-full p-3 pl-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 font-bold text-slate-700 bg-slate-50"
-                            />
-                        </div>
+                        <input 
+                            type="date" 
+                            value={selectedDate} 
+                            onChange={e => setSelectedDate(e.target.value)} 
+                            className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 font-bold text-slate-700 bg-slate-50"
+                        />
                     </div>
                     <button 
                         onClick={loadStats}
                         disabled={loading}
-                        className="w-full sm:w-auto bg-amber-600 text-white px-6 py-3 rounded-xl hover:bg-amber-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-200 disabled:opacity-50"
+                        className="w-full sm:w-auto bg-amber-600 text-white px-6 py-3 rounded-xl hover:bg-amber-700 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                     >
                         {loading ? <RefreshCw className="animate-spin" size={18} /> : <Search size={18} />} 
                         <span className="font-bold">Consultar</span>
                     </button>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl text-sm text-blue-800 flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <p>Análisis <strong>Period-to-Date</strong>: Las comparativas muestran la eficiencia hasta el día seleccionado relativo a cada periodo.</p>
                 </div>
 
                 {loading ? (
@@ -131,18 +151,18 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                                     <>
                                         <p className="mb-3 text-slate-500 text-[10px] uppercase font-black">Partes de: {new Date(latestReport.date).toLocaleDateString()}</p>
                                         {latestReport.aiAnalysis ? (
-                                            <div className="prose prose-sm prose-indigo bg-white p-4 rounded-xl border border-indigo-100 shadow-inner">
+                                            <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-inner">
                                                 <div className="whitespace-pre-line text-xs font-medium leading-relaxed">{latestReport.aiAnalysis}</div>
                                             </div>
                                         ) : (
                                             <div className="bg-white/50 p-6 rounded-xl border border-indigo-100 italic text-slate-400 text-center text-xs">
-                                                "Sin análisis generado. Solicita un análisis para obtener conclusiones técnicas sobre este día."
+                                                "Solicite un análisis para obtener conclusiones técnicas."
                                             </div>
                                         )}
                                     </>
                                 ) : (
                                     <div className="bg-white/50 p-6 rounded-xl border border-dashed border-slate-200 text-slate-400 text-center text-xs font-bold uppercase">
-                                        No hay reportes registrados para la fecha seleccionada.
+                                        No hay reportes hoy.
                                     </div>
                                 )}
                             </div>
@@ -154,31 +174,6 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                             <ComparisonCard title="Eficiencia Mensual" data={stats.monthly} />
                             <ComparisonCard title="Eficiencia Anual" data={stats.yearly} />
                         </div>
-
-                        <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100">
-                            <h3 className="font-black text-slate-800 mb-4 border-b pb-3 flex items-center gap-2 text-xs uppercase tracking-widest">
-                                <Calendar className="w-5 h-5 text-amber-500" /> Incidencias del Periodo
-                            </h3>
-                            <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                                {stats.monthly.current.reports.slice().reverse().map((r: any) => (
-                                    <div key={r.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-amber-200 transition-all">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase">{new Date(r.date).toLocaleDateString()}</span>
-                                            <span className="text-[10px] font-black bg-white text-slate-600 px-2 py-1 rounded-full border border-slate-200">
-                                                {r.millsEnd - r.millsStart}h Molienda
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-700 italic leading-relaxed">"{r.comments || 'Sin comentarios registrados.'}"</p>
-                                    </div>
-                                ))}
-                                {stats.monthly.current.reports.length === 0 && (
-                                    <div className="py-10 text-center flex flex-col items-center gap-2 opacity-40">
-                                        <TrendingDown size={32}/>
-                                        <p className="text-xs font-black uppercase">Sin registros en este mes</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     </>
                 )}
             </div>
@@ -187,66 +182,30 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
 };
 
 const StatCard = ({ title, stat }: { title: string, stat: any }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:border-amber-200 transition-all">
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex justify-between items-start">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</h4>
             <span className="text-[10px] font-black bg-slate-100 px-2 py-1 rounded-full text-slate-500 uppercase">{stat.dateLabel}</span>
         </div>
-        
         <div className="flex items-baseline mt-2">
-            <span className={`text-3xl font-black ${getColor(stat.efficiency)}`}>
+            <span className={`text-3xl font-black ${stat.efficiency >= 85 ? 'text-green-600' : 'text-amber-600'}`}>
                 {stat.efficiency.toFixed(1)}%
             </span>
-            <span className="ml-2 text-[10px] font-bold text-slate-300 uppercase tracking-tighter">Eficiencia</span>
-        </div>
-        <div className="mt-3 text-[10px] font-bold text-slate-500 flex justify-between uppercase">
-            <span>Real: <strong>{stat.totalActualHours}h</strong></span>
-            <span className="text-slate-300">/</span>
-            <span>Plan: <strong>{stat.totalPlannedHours}h</strong></span>
         </div>
     </div>
 );
 
 const ComparisonCard = ({ title, data }: { title: string, data: ProductionComparison }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:border-amber-200 transition-all">
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex justify-between items-start">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</h4>
-            <div className={`flex items-center text-[10px] font-black px-2 py-1 rounded-full border ${data.trend === 'up' ? 'bg-green-50 text-green-700 border-green-100' : data.trend === 'down' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>
-                {data.trend === 'up' ? <TrendingUp size={12} className="mr-1"/> : data.trend === 'down' ? <TrendingDown size={12} className="mr-1"/> : null}
+            <div className={`flex items-center text-[10px] font-black px-2 py-1 rounded-full border ${data.trend === 'up' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
                 {data.diff > 0 ? '+' : ''}{data.diff}%
             </div>
         </div>
-        <div className="text-[10px] font-black text-amber-600/60 mt-1 mb-1 uppercase">{data.current.dateLabel}</div>
-        
-        <div className="flex items-baseline mt-1">
-            <span className={`text-3xl font-black ${getColor(data.current.efficiency)}`}>
-                {data.current.efficiency.toFixed(1)}%
-            </span>
+        <div className="flex items-baseline mt-2">
+            <span className="text-3xl font-black text-slate-800">{data.current.efficiency.toFixed(1)}%</span>
             <span className="ml-2 text-[10px] font-bold text-slate-300 uppercase tracking-tighter">vs {data.previous.efficiency.toFixed(1)}%</span>
-        </div>
-        
-        <div className="mt-3 text-[10px] font-bold text-slate-500 mb-3 flex justify-between uppercase">
-            <span>Real: <strong>{data.current.totalActualHours}h</strong></span>
-            <span>Plan: <strong>{data.current.totalPlannedHours}h</strong></span>
-        </div>
-
-        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-            <div 
-                className={`h-1.5 rounded-full transition-all duration-1000 ${getColorBg(data.current.efficiency)}`} 
-                style={{ width: `${Math.min(data.current.efficiency, 100)}%` }}
-            ></div>
         </div>
     </div>
 );
-
-const getColor = (eff: number) => {
-    if (eff >= 90) return 'text-green-600';
-    if (eff >= 75) return 'text-amber-600';
-    return 'text-red-600';
-};
-
-const getColorBg = (eff: number) => {
-    if (eff >= 90) return 'bg-green-600';
-    if (eff >= 75) return 'bg-amber-600';
-    return 'bg-red-600';
-};
