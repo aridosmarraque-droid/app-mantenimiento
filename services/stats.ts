@@ -43,19 +43,20 @@ export const formatDecimal = (num: number, decimals: number = 3): string => {
     return num.toFixed(decimals).replace('.', ',');
 };
 
-// Obtener el lunes de la semana en formato YYYY-MM-DD sin desfases de zona horaria
+// Helper para obtener el lunes de la semana sin desfases horarios
 const getMondayISO = (d: Date) => {
     const date = new Date(d);
-    const day = date.getDay(); // 0=Dom, 1=Lun...
+    date.setHours(12, 0, 0, 0); // Estabilizar mediodía
+    const day = date.getDay(); 
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(date.setDate(diff));
     return monday.toISOString().split('T')[0];
 };
 
 const getPlannedHoursForDate = (date: Date, plan: CPWeeklyPlan | null): number => {
-    if (!plan) return 8; // Fallback razonable si no hay plan
+    if (!plan) return 9; // Fallback a 9h si no hay plan configurado
     
-    // Usamos el día local para que coincida con lo que el usuario ve en el calendario
+    // getDay: 0=Dom, 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab
     const dayOfWeek = date.getDay(); 
     
     switch (dayOfWeek) {
@@ -64,17 +65,18 @@ const getPlannedHoursForDate = (date: Date, plan: CPWeeklyPlan | null): number =
         case 3: return plan.hoursWed;
         case 4: return plan.hoursThu;
         case 5: return plan.hoursFri;
-        default: return 0; // Fines de semana no suelen planificarse
+        default: return 0; 
     }
 };
 
 export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) => {
     const today = new Date(baseDate);
-    today.setHours(12, 0, 0, 0); // Evitar cambios de día por zona horaria
+    today.setHours(12, 0, 0, 0);
 
+    // 1. DÍA SELECCIONADO
     const daily = await calculateStats(today, today, "Día", today);
 
-    // Comparativas
+    // 2. SEMANA
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
     const endOfWeek = new Date(startOfWeek);
@@ -90,6 +92,7 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) 
         await calculateStats(startOfPrevWeek, endOfPrevWeek, "Semana Anterior", endOfPrevWeek)
     );
 
+    // 3. MES
     const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -100,6 +103,7 @@ export const getProductionEfficiencyStats = async (baseDate: Date = new Date()) 
         await calculateStats(lastMonthStart, lastMonthEnd, "Mes Anterior", lastMonthEnd)
     );
 
+    // 4. AÑO
     const yearly = await compareStats(
         await calculateStats(new Date(today.getFullYear(), 0, 1), new Date(today.getFullYear(), 11, 31), "Año Actual", today),
         await calculateStats(new Date(today.getFullYear() - 1, 0, 1), new Date(today.getFullYear() - 1, 11, 31), "Año Anterior", new Date(today.getFullYear() - 1, 11, 31))
@@ -157,8 +161,7 @@ const compareStats = (current: ProductionStat, previous: ProductionStat): Produc
     };
 };
 
-// --- MANTENIMIENTO Y FLUIDOS (Se mantienen igual) ---
-
+// --- RESTO DE SERVICIOS (Igual) ---
 const getRateFromLogs = (logs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'COOLANT'): number => {
     if (logs.length < 2) return 0;
     const sorted = [...logs].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -166,19 +169,16 @@ const getRateFromLogs = (logs: OperationLog[], type: 'MOTOR' | 'HYDRAULIC' | 'CO
     const last = sorted[sorted.length - 1];
     const hours = last.hoursAtExecution - first.hoursAtExecution;
     if (hours <= 0) return 0;
-
     const totalLiters = sorted.reduce((acc, l) => {
         if (type === 'MOTOR') return acc + (l.motorOil || 0);
         if (type === 'HYDRAULIC') return acc + (l.hydraulicOil || 0);
         if (type === 'COOLANT') return acc + (l.coolant || 0);
         return acc;
     }, 0);
-
     let lastAdded = 0;
     if (type === 'MOTOR') lastAdded = last.motorOil || 0;
     if (type === 'HYDRAULIC') lastAdded = last.hydraulicOil || 0;
     if (type === 'COOLANT') lastAdded = last.coolant || 0;
-
     return ((totalLiters - lastAdded) / hours) * 100;
 };
 
@@ -189,32 +189,18 @@ export const analyzeFluidTrend = (allLogs: OperationLog[], type: 'MOTOR' | 'HYDR
         if (type === 'COOLANT') return (l.coolant ?? 0) > 0;
         return false;
     }).sort((a, b) => a.date.getTime() - b.date.getTime());
-
     const series = fluidLogs.map(l => ({
         date: new Date(l.date).toLocaleDateString('es-ES'),
         hours: l.hoursAtExecution,
         added: (type === 'MOTOR' ? l.motorOil : type === 'HYDRAULIC' ? l.hydraulicOil : l.coolant) || 0
     }));
-
-    if (fluidLogs.length < 3) {
-        return { fluidType: type, baselineRate: 0, recentRate: 0, deviation: 0, workedHoursRecent: 0, logsCount: fluidLogs.length, series };
-    }
-
+    if (fluidLogs.length < 3) return { fluidType: type, baselineRate: 0, recentRate: 0, deviation: 0, workedHoursRecent: 0, logsCount: fluidLogs.length, series };
     const recentLogs = fluidLogs.slice(-4);
     const recentRate = getRateFromLogs(recentLogs, type);
     const baselineLogs = fluidLogs.length > 5 ? fluidLogs.slice(0, -3) : fluidLogs;
     const baselineRate = getRateFromLogs(baselineLogs, type);
     const deviation = baselineRate > 0 ? ((recentRate - baselineRate) / baselineRate) * 100 : 0;
-
-    return {
-        fluidType: type,
-        baselineRate: parseFloat(baselineRate.toFixed(3)),
-        recentRate: parseFloat(recentRate.toFixed(3)),
-        deviation: parseFloat(deviation.toFixed(1)),
-        workedHoursRecent: recentLogs[recentLogs.length-1].hoursAtExecution - recentLogs[0].hoursAtExecution,
-        logsCount: fluidLogs.length,
-        series
-    };
+    return { fluidType: type, baselineRate: parseFloat(baselineRate.toFixed(3)), recentRate: parseFloat(recentRate.toFixed(3)), deviation: parseFloat(deviation.toFixed(1)), workedHoursRecent: recentLogs[recentLogs.length-1].hoursAtExecution - recentLogs[0].hoursAtExecution, logsCount: fluidLogs.length, series };
 };
 
 export const getMachineFuelStats = async (machineId: string, baseDate: Date = new Date()) => {
@@ -234,20 +220,12 @@ export const calculateFuelConsumptionFromLogs = (logs: OperationLog[], periodLab
     const sorted = [...logs].sort((a, b) => a.date.getTime() - b.date.getTime());
     const workedHours = sorted[sorted.length-1].hoursAtExecution - sorted[0].hoursAtExecution;
     const consumedLiters = sorted.reduce((acc, l) => acc + (l.fuelLitres || 0), 0) - (sorted[sorted.length-1].fuelLitres || 0);
-    return {
-        machineId: sorted[0].machineId, machineName: '', period: periodLabel, totalLiters: consumedLiters,
-        consumedLiters, workedHours, consumptionPerHour: workedHours > 0 ? consumedLiters / workedHours : 0, logsCount: sorted.length
-    };
+    return { machineId: sorted[0].machineId, machineName: '', period: periodLabel, totalLiters: consumedLiters, consumedLiters, workedHours, consumptionPerHour: workedHours > 0 ? consumedLiters / workedHours : 0, logsCount: sorted.length };
 };
 
 export const getMachineFluidStats = async (machineId: string, baseDate: Date = new Date()) => {
     const today = new Date(baseDate);
     const yearStart = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
     const allLogs = await getMachineLogs(machineId, yearStart, today, ['LEVELS']);
-    return {
-        motor: analyzeFluidTrend(allLogs, 'MOTOR'),
-        hydraulic: analyzeFluidTrend(allLogs, 'HYDRAULIC'),
-        coolant: analyzeFluidTrend(allLogs, 'COOLANT'),
-        history: allLogs.slice().reverse()
-    };
+    return { motor: analyzeFluidTrend(allLogs, 'MOTOR'), hydraulic: analyzeFluidTrend(allLogs, 'HYDRAULIC'), coolant: analyzeFluidTrend(allLogs, 'COOLANT'), history: allLogs.slice().reverse() };
 };
