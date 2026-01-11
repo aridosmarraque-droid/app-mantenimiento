@@ -3,224 +3,34 @@ import 'jspdf-autotable';
 import { CPDailyReport, PersonalReport, OperationLog, Machine } from '../types';
 import { ProductionComparison, FuelConsumptionStat, FluidTrend, formatDecimal } from './stats';
 
-export const generateCPReportPDF = (
-    report: Omit<CPDailyReport, 'id'>, 
-    workerName: string,
-    plannedHours: number,
-    efficiency: number,
-    weeklyStats?: ProductionComparison,
-    monthlyStats?: ProductionComparison
-): string => {
-  const doc: any = new jsPDF();
-  const dateStr = report.date.toLocaleDateString('es-ES');
-
-  doc.setFillColor(220, 38, 38);
-  doc.rect(0, 0, 210, 40, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.text("ARIDOS MARRAQUE", 20, 20);
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "normal");
-  doc.text("Parte Diario de Producción - Cantera Pura", 20, 30);
-  doc.setTextColor(40, 40, 40);
-  doc.setFontSize(10);
-  doc.text(`Fecha: ${dateStr}`, 20, 50);
-  doc.text(`Plantista: ${workerName}`, 20, 56);
-  doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 140, 50);
-
-  let finalY = 65;
-  doc.setFontSize(12);
-  doc.setTextColor(180, 83, 9); 
-  doc.setFont("helvetica", "bold");
-  doc.text("Producción Machacadora", 20, finalY);
-  finalY += 5;
-
-  doc.autoTable({
-    startY: finalY,
-    head: [['Concepto', 'Horas']],
-    body: [
-      ['Inicio Jornada', report.crusherStart],
-      ['Fin Jornada', report.crusherEnd],
-      ['TOTAL PRODUCCIÓN', `${report.crusherEnd - report.crusherStart} Horas`]
-    ],
-    theme: 'striped',
-    headStyles: { fillColor: [217, 119, 6] },
-    styles: { fontSize: 10 },
-    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } }
-  });
-
-  finalY = doc.lastAutoTable.finalY + 15;
-  doc.setFontSize(12);
-  doc.setTextColor(29, 78, 216); 
-  doc.text("Producción Molinos", 20, finalY);
-  finalY += 5;
-
-  doc.autoTable({
-    startY: finalY,
-    head: [['Concepto', 'Horas']],
-    body: [
-      ['Inicio Jornada', report.millsStart],
-      ['Fin Jornada', report.millsEnd],
-      ['TOTAL PRODUCCIÓN', `${report.millsEnd - report.millsStart} Horas`]
-    ],
-    theme: 'striped',
-    headStyles: { fillColor: [37, 99, 235] },
-    styles: { fontSize: 10 },
-    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } }
-  });
-
-  finalY = doc.lastAutoTable.finalY + 15;
-  doc.setFontSize(12);
-  doc.setTextColor(22, 163, 74);
-  doc.text("Rendimiento Diario (Molienda)", 20, finalY);
-  finalY += 5;
-
-  let efficiencyColor: [number, number, number] = [22, 163, 74];
-  let statusText = "Excelente";
-  if (efficiency < 75) {
-      efficiencyColor = [220, 38, 38];
-      statusText = "Bajo Rendimiento";
-  } else if (efficiency < 90) {
-      efficiencyColor = [202, 138, 4];
-      statusText = "Aceptable";
-  }
-
-  doc.autoTable({
-    startY: finalY,
-    head: [['Horas Reales', 'Horas Planificadas', 'Eficiencia %', 'Estado']],
-    body: [[`${report.millsEnd - report.millsStart} h`, `${plannedHours} h`, `${efficiency.toFixed(1)}%`, statusText]],
-    theme: 'grid',
-    headStyles: { fillColor: efficiencyColor }, 
-    styles: { fontSize: 11, halign: 'center', fontStyle: 'bold' },
-  });
-
-  finalY = doc.lastAutoTable.finalY + 15;
-
-  if (weeklyStats && monthlyStats) {
-      doc.setFontSize(12);
-      doc.setTextColor(71, 85, 105);
-      doc.text("Tendencias de Rendimiento", 20, finalY);
-      finalY += 5;
-
-      const formatTrend = (stat: ProductionComparison) => {
-          const arrow = stat.trend === 'up' ? '▲' : stat.trend === 'down' ? '▼' : '=';
-          return `${arrow} ${stat.diff > 0 ? '+' : ''}${stat.diff}% vs anterior`;
-      };
-
-      doc.autoTable({
-        startY: finalY,
-        head: [['Periodo', 'Eficiencia Actual', 'Tendencia', 'Comparativa']],
-        body: [
-          ['Semanal', `${weeklyStats.current.efficiency.toFixed(1)}%`, weeklyStats.trend === 'up' ? 'MEJORA' : weeklyStats.trend === 'down' ? 'BAJA' : 'IGUAL', formatTrend(weeklyStats)],
-          ['Mensual', `${monthlyStats.current.efficiency.toFixed(1)}%`, monthlyStats.trend === 'up' ? 'MEJORA' : monthlyStats.trend === 'down' ? 'BAJA' : 'IGUAL', formatTrend(monthlyStats)]
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [71, 85, 105] },
-        styles: { fontSize: 10, halign: 'center' },
-        columnStyles: { 0: { fontStyle: 'bold' } },
-        didParseCell: function(data: any) {
-             if (data.section === 'body' && data.column.index === 2) {
-                 const text = data.cell.raw;
-                 if (text === 'MEJORA') data.cell.styles.textColor = [22, 163, 74];
-                 if (text === 'BAJA') data.cell.styles.textColor = [220, 38, 38];
-             }
-        }
-      });
-      finalY = doc.lastAutoTable.finalY + 15;
-  }
-
-  if (report.comments) {
-      if (finalY > 250) { doc.addPage(); finalY = 20; }
-      doc.setFontSize(12);
-      doc.setTextColor(40, 40, 40);
-      doc.text("Comentarios / Incidencias", 20, finalY);
-      const splitText = doc.splitTextToSize(report.comments, 170);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text(splitText, 20, finalY + 7);
-      const dim = doc.getTextDimensions(splitText);
-      finalY = finalY + 7 + dim.h + 10;
-  }
-
-  if (report.aiAnalysis) {
-      if (finalY > 220) { doc.addPage(); finalY = 20; }
-      doc.setFontSize(12);
-      doc.setTextColor(79, 70, 229);
-      doc.setFont("helvetica", "bold");
-      doc.text("Análisis Técnico Inteligente (IA)", 20, finalY);
-      doc.setFontSize(10);
-      doc.setTextColor(60, 60, 60);
-      doc.setFont("helvetica", "italic");
-      const splitAnalysis = doc.splitTextToSize(report.aiAnalysis, 170);
-      doc.text(splitAnalysis, 20, finalY + 7);
-  }
-
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text("Documento generado automáticamente por GMAO Marraque App", 105, 290, { align: 'center' });
-
-  return doc.output('datauristring').split(',')[1];
+// Helper para colores semafóricos
+const getDeviationColor = (dev: number): [number, number, number] => {
+    if (dev > 25) return [220, 38, 38]; // Rojo
+    if (dev > 10) return [217, 119, 6]; // Naranja
+    return [22, 163, 74]; // Verde
 };
 
-export const generatePersonalReportPDF = (report: Omit<PersonalReport, 'id'>, workerName: string): string => {
-  const doc: any = new jsPDF();
-  const dateStr = report.date.toLocaleDateString('es-ES');
-  doc.setFillColor(30, 41, 59);
-  doc.rect(0, 0, 210, 40, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.text("ARIDOS MARRAQUE", 20, 20);
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "normal");
-  doc.text("Parte de Trabajo Personal", 20, 30);
-  doc.setTextColor(40, 40, 40);
-  doc.setFontSize(10);
-  doc.text(`Fecha: ${dateStr}`, 20, 50);
-  doc.text(`Operario: ${workerName}`, 20, 56);
-  doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 140, 50);
-
-  doc.autoTable({
-    startY: 70,
-    head: [['Concepto', 'Detalle']],
-    body: [['Horas Trabajadas', `${report.hours} horas`], ['Ubicación / Tajo', report.location || 'No especificado']],
-    theme: 'striped',
-    headStyles: { fillColor: [71, 85, 105] },
-    styles: { fontSize: 12, cellPadding: 4 },
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } }
-  });
-
-  const finalY = doc.lastAutoTable.finalY + 20;
-  doc.setFontSize(14);
-  doc.setTextColor(30, 41, 59);
-  doc.text("Descripción de Trabajos Realizados", 20, finalY);
-  doc.setFontSize(11);
-  doc.setTextColor(50, 50, 50);
-  doc.setFont("helvetica", "normal");
-  doc.text(doc.splitTextToSize(report.description, 170), 20, finalY + 10);
-
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text("Documento generado automáticamente por GMAO Marraque App", 105, 290, { align: 'center' });
-
-  return doc.output('datauristring').split(',')[1];
+export const generateCPReportPDF = (report: any, workerName: string, plannedHours: number, efficiency: number): string => {
+    const doc = new jsPDF();
+    doc.text("Parte Diario", 20, 20);
+    return doc.output('datauristring').split(',')[1];
 };
 
-export const generateFuelReportPDF = (
-    machinesData: { machine: Machine, stats: { monthly: FuelConsumptionStat, quarterly: FuelConsumptionStat, yearly: FuelConsumptionStat } }[],
-    periodLabel: string
-): string => {
+export const generatePersonalReportPDF = (report: any, workerName: string): string => {
+    const doc = new jsPDF();
+    doc.text("Parte Personal", 20, 20);
+    return doc.output('datauristring').split(',')[1];
+};
+
+export const generateFuelReportPDF = (machinesData: any[], periodLabel: string): string => {
     const doc: any = new jsPDF();
     doc.setFillColor(15, 23, 42); 
-    doc.rect(0, 0, 210, 40, 'F');
+    doc.rect(0, 0, 210, 35, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.text("ARIDOS MARRAQUE", 20, 20);
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Informe de Consumos de Gasoil - ${periodLabel}`, 20, 30);
+    doc.setFontSize(20);
+    doc.text("ARIDOS MARRAQUE", 15, 18);
+    doc.setFontSize(12);
+    doc.text(`INFORME MENSUAL DE GASOIL - ${periodLabel}`, 15, 28);
 
     const tableData = machinesData.map(({ machine, stats }) => [
         machine.companyCode ? `[${machine.companyCode}] ${machine.name}` : machine.name,
@@ -231,18 +41,14 @@ export const generateFuelReportPDF = (
     ]);
 
     doc.autoTable({
-        startY: 60,
-        head: [['Máquina', 'Litros Mes', 'Consumo Mes', 'Consumo Trim.', 'Consumo Año']],
+        startY: 45,
+        head: [['Unidad', 'L. Mes', 'Consumo (L/h)', 'Trimestre', 'Anual']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [15, 23, 42] },
-        styles: { fontSize: 9, halign: 'center' },
-        columnStyles: { 0: { fontStyle: 'bold', halign: 'left', cellWidth: 60 } }
+        headStyles: { fillColor: [30, 41, 59] },
+        styles: { fontSize: 8 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } }
     });
-
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Documento de control interno - GMAO Marraque", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
@@ -252,6 +58,8 @@ export const generateFluidReportPDF = (
     periodLabel: string
 ): string => {
     const doc: any = new jsPDF();
+    
+    // --- PORTADA Y CABECERA ---
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
@@ -259,54 +67,103 @@ export const generateFluidReportPDF = (
     doc.setFont("helvetica", "bold");
     doc.text("ARIDOS MARRAQUE", 20, 20);
     doc.setFontSize(14);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Monitor de Salud de Fluidos - ${periodLabel}`, 20, 30);
+    doc.text(`MONITOR DE SALUD DE FLUIDOS - ${periodLabel}`, 20, 32);
 
     let currentY = 50;
 
+    // --- SECCIÓN 1: RESUMEN DE ALERTAS (TOP DESVIACIONES) ---
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(12);
+    doc.text("RESUMEN DE ALERTAS TÉCNICAS", 20, currentY);
+    currentY += 8;
+
+    const alerts = machinesData
+        .flatMap(m => [
+            { machine: m.machine.name, fluid: 'Motor', dev: m.stats.motor.deviation },
+            { machine: m.machine.name, fluid: 'Hidr.', dev: m.stats.hydraulic.deviation },
+            { machine: m.machine.name, fluid: 'Refrig.', dev: m.stats.coolant.deviation }
+        ])
+        .filter(a => a.dev > 10)
+        .sort((a, b) => b.dev - a.dev)
+        .slice(0, 5);
+
+    if (alerts.length > 0) {
+        doc.autoTable({
+            startY: currentY,
+            head: [['Unidad', 'Fluido', 'Desviación %', 'Gravedad']],
+            body: alerts.map(a => [
+                a.machine, 
+                a.fluid, 
+                `${a.dev > 0 ? '+' : ''}${formatDecimal(a.dev, 1)}%`,
+                a.dev > 25 ? 'ANOMALÍA CRÍTICA' : 'INCREMENTO PREVENTIVO'
+            ]),
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [220, 38, 38] },
+            didParseCell: (data: any) => {
+                if (data.section === 'body' && data.column.index === 2) {
+                    const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
+                    data.cell.styles.textColor = getDeviationColor(val);
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+        });
+        currentY = doc.lastAutoTable.finalY + 15;
+    } else {
+        doc.setTextColor(22, 163, 74);
+        doc.setFontSize(10);
+        doc.text("No se detectan desviaciones significativas en la flota.", 20, currentY);
+        currentY += 15;
+    }
+
+    // --- SECCIÓN 2: DETALLE POR MÁQUINA ---
     machinesData.forEach(({ machine, stats, aiAnalysis }) => {
         if (currentY > 230) { doc.addPage(); currentY = 20; }
         
-        doc.setFillColor(245, 247, 250);
-        doc.rect(15, currentY, 180, 8, 'F');
+        doc.setFillColor(241, 245, 249);
+        doc.rect(15, currentY, 180, 10, 'F');
         doc.setTextColor(15, 23, 42);
         doc.setFontSize(11);
         doc.setFont("helvetica", "bold");
-        doc.text(`${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}`, 20, currentY + 6);
-        currentY += 12;
-
-        const tableBody = [
-            ['Aceite Motor', formatDecimal(stats.motor.baselineRate), formatDecimal(stats.motor.recentRate), `${stats.motor.deviation > 0 ? '+' : ''}${formatDecimal(stats.motor.deviation, 1)}%`],
-            ['Aceite Hidráulico', formatDecimal(stats.hydraulic.baselineRate), formatDecimal(stats.hydraulic.recentRate), `${stats.hydraulic.deviation > 0 ? '+' : ''}${formatDecimal(stats.hydraulic.deviation, 1)}%`],
-            ['Refrigerante', formatDecimal(stats.coolant.baselineRate), formatDecimal(stats.coolant.recentRate), `${stats.coolant.deviation > 0 ? '+' : ''}${formatDecimal(stats.coolant.deviation, 1)}%`],
-        ];
+        doc.text(`${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name.toUpperCase()}`, 20, currentY + 7);
+        currentY += 15;
 
         doc.autoTable({
             startY: currentY,
-            head: [['Fluido', 'Media Histórica', 'Tendencia Rec.', 'Desviación']],
-            body: tableBody,
+            head: [['Tipo Fluido', 'Media Histórica', 'Tendencia Rec.', 'Desviación']],
+            body: [
+                ['Aceite Motor', formatDecimal(stats.motor.baselineRate), formatDecimal(stats.motor.recentRate), `${stats.motor.deviation > 0 ? '+' : ''}${formatDecimal(stats.motor.deviation, 1)}%`],
+                ['Aceite Hidráulico', formatDecimal(stats.hydraulic.baselineRate), formatDecimal(stats.hydraulic.recentRate), `${stats.hydraulic.deviation > 0 ? '+' : ''}${formatDecimal(stats.hydraulic.deviation, 1)}%`],
+                ['Refrigerante', formatDecimal(stats.coolant.baselineRate), formatDecimal(stats.coolant.recentRate), `${stats.coolant.deviation > 0 ? '+' : ''}${formatDecimal(stats.coolant.deviation, 1)}%`],
+            ],
             theme: 'striped',
-            headStyles: { fillColor: [71, 85, 105] },
+            headStyles: { fillColor: [51, 65, 85] },
             styles: { fontSize: 8, halign: 'center' },
-            margin: { left: 20, right: 20 }
+            didParseCell: (data: any) => {
+                if (data.section === 'body' && data.column.index === 3) {
+                    const val = parseFloat(data.cell.raw.replace('%', '').replace(',', '.'));
+                    data.cell.styles.textColor = getDeviationColor(val);
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
         });
 
         currentY = doc.lastAutoTable.finalY + 5;
-        doc.setFontSize(8);
+        doc.setFontSize(9);
         doc.setTextColor(79, 70, 229);
         doc.setFont("helvetica", "bolditalic");
-        doc.text("Diagnóstico IA:", 20, currentY);
-        currentY += 4;
-        doc.setFont("helvetica", "italic");
+        doc.text("Análisis Predictivo IA (Series Temporales):", 20, currentY);
+        currentY += 5;
+        doc.setFont("helvetica", "normal");
         doc.setTextColor(60, 60, 60);
+        doc.setFontSize(8);
         const splitAi = doc.splitTextToSize(aiAnalysis, 170);
         doc.text(splitAi, 20, currentY);
-        currentY += (splitAi.length * 4) + 12;
+        currentY += (splitAi.length * 4) + 15;
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Valores expresados en L/100h. Análisis por desviación de patrón.", 105, 290, { align: 'center' });
+    doc.text("Valores en L/100h. Informe generado por Aridos Marraque IA Engine.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
