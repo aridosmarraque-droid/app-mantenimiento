@@ -14,6 +14,8 @@ export const sendWhatsAppMessage = async (to: string, message: string): Promise<
     }
 
     try {
+        console.log(`Intentando enviar WhatsApp a: ${cleanPhone}`);
+        
         const { data, error } = await supabase.functions.invoke('send-whatsapp', {
             body: {
                 to: cleanPhone,
@@ -21,21 +23,28 @@ export const sendWhatsAppMessage = async (to: string, message: string): Promise<
             }
         });
 
-        // Error de red o de la propia plataforma Supabase
+        // Log para depuración en consola del navegador
+        console.log("Respuesta completa de la Edge Function:", data);
+
         if (error) {
-            console.error("Functions Error:", error);
-            throw new Error(error.message || "Error al invocar la función del servidor");
+            console.error("Error en invocación de función:", error);
+            throw new Error(error.message || "Error al invocar el servidor de WhatsApp");
         }
         
-        // Si data es nulo o no tiene éxito según nuestra estructura de respuesta
+        // Comprobar si la API de UltraMsg reportó error
         if (!data || data.success === false) {
-            return { success: false, error: data?.error || 'La API de WhatsApp devolvió un error' };
+            // Intentar extraer el mensaje de error real de UltraMsg
+            const apiError = data?.raw?.error || data?.raw?.message || 'Error desconocido en UltraMsg';
+            return { 
+                success: false, 
+                error: `API WhatsApp: ${apiError}` 
+            };
         }
 
         return { success: true };
     } catch (e: any) {
-        console.error("Error crítico enviando WhatsApp:", e);
-        return { success: false, error: e.message || 'Error de conexión' };
+        console.error("Error crítico en servicio WhatsApp:", e);
+        return { success: false, error: e.message || 'Error de conexión con el servidor' };
     }
 };
 
