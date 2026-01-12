@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
-import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition } from '../../types';
-import { getServiceProviders } from '../../services/db';
-import { Save, AlertTriangle, CheckCircle, Clock, Calendar } from 'lucide-react';
+import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition, Worker } from '../../types';
+import { getServiceProviders, getWorkers } from '../../services/db';
+import { sendWhatsAppMessage, formatMaintenanceAlert } from '../../services/whatsapp';
+import { Save, AlertTriangle, CheckCircle, Clock, Calendar, MessageSquare, Send, Loader2 } from 'lucide-react';
 
 interface Props {
   machine: Machine;
@@ -12,14 +14,17 @@ interface Props {
 export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) => {
   const [pendingList, setPendingList] = useState<MaintenanceDefinition[]>([]);
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   
   // Selected for execution
   const [selectedDefId, setSelectedDefId] = useState<string | null>(null);
   const [hours, setHours] = useState<number>(machine.currentHours);
   const [providerId, setProviderId] = useState('');
+  const [sendingWhatsapp, setSendingWhatsapp] = useState<string | null>(null);
 
   useEffect(() => {
     getServiceProviders().then(setProviders);
+    getWorkers(false).then(setWorkers);
     
     // Filtrar por pendiente
     const pending = machine.maintenanceDefs.filter(def => def.pending);
@@ -31,6 +36,22 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
     setSelectedDefId(defId);
   };
 
+  const handleSendWhatsapp = async (def: MaintenanceDefinition) => {
+      const responsible = workers.find(w => w.id === machine.responsibleWorkerId);
+      if (!responsible || !responsible.phone) {
+          alert("La máquina no tiene un responsable con teléfono asignado.");
+          return;
+      }
+
+      setSendingWhatsapp(def.id!);
+      const message = formatMaintenanceAlert(responsible, machine, def);
+      const res = await sendWhatsAppMessage(responsible.phone, message);
+      
+      if (res.success) alert(`WhatsApp enviado a ${responsible.name}`);
+      else alert("Error al enviar WhatsApp.");
+      setSendingWhatsapp(null);
+  };
+
   const handleConfirm = (e: React.FormEvent) => {
       e.preventDefault();
       if (!selectedDefId) return;
@@ -40,8 +61,6 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
           hoursAtExecution: Number(hours),
           repairerId: providerId,
           maintenanceDefId: selectedDefId,
-          // La DB solo permite ['CLEANING', 'GREASING', 'OTHER'].
-          // Un mantenimiento programado general se mapea a 'OTHER'.
           maintenanceType: 'OTHER', 
           description: def?.name
       });
@@ -116,28 +135,38 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                    }
 
                    return (
-                   <div key={def.id} className={`border rounded-lg p-4 border-amber-300 bg-amber-50`}>
+                   <div key={def.id} className={`border rounded-xl p-4 border-amber-300 bg-amber-50 relative overflow-hidden`}>
                        <div className="flex justify-between items-start mb-2">
                            <div>
-                               <h4 className="font-bold text-lg text-slate-800">{def.name}</h4>
-                               <p className="text-sm text-slate-600">{def.tasks}</p>
+                               <h4 className="font-bold text-lg text-slate-800 leading-tight">{def.name}</h4>
+                               <p className="text-xs text-slate-600 mt-1">{def.tasks}</p>
                            </div>
-                           <span className="bg-amber-200 text-amber-800 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><AlertTriangle size={12}/> Pendiente</span>
+                           <span className="bg-amber-200 text-amber-800 text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 uppercase tracking-tighter"><AlertTriangle size={12}/> Pendiente</span>
                        </div>
                        
-                       <div className="flex justify-between items-center text-sm text-slate-500 mt-3 mb-3">
-                           <span>{def.maintenanceType === 'DATE' ? 'Por Calendario' : `Intervalo: ${def.intervalHours}h`}</span>
-                           <span className={isOverdue ? "text-red-600 font-bold" : "text-slate-700 font-bold"}>
+                       <div className="flex justify-between items-center text-sm text-slate-500 mt-4 mb-4">
+                           <span className="text-xs font-bold uppercase tracking-tight">{def.maintenanceType === 'DATE' ? 'Calendario' : `Intervalo: ${def.intervalHours}h`}</span>
+                           <span className={isOverdue ? "text-red-600 font-black" : "text-slate-700 font-black"}>
                                {statusText}
                            </span>
                        </div>
 
-                       <button 
-                         onClick={() => handleRegisterClick(def.id!)}
-                         className="w-full bg-slate-800 text-white py-2 rounded-lg font-medium hover:bg-slate-900 transition-colors"
-                       >
-                           Registrar Ahora
-                       </button>
+                       <div className="flex gap-2">
+                           <button 
+                             onClick={() => handleRegisterClick(def.id!)}
+                             className="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-colors shadow-sm"
+                           >
+                               Registrar Parte
+                           </button>
+                           <button 
+                             onClick={() => handleSendWhatsapp(def)}
+                             disabled={sendingWhatsapp === def.id}
+                             className="w-14 bg-green-500 text-white flex items-center justify-center rounded-xl hover:bg-green-600 transition-all shadow-sm disabled:opacity-50"
+                             title="Notificar por WhatsApp"
+                           >
+                               {sendingWhatsapp === def.id ? <Loader2 className="animate-spin" size={20}/> : <MessageSquare size={20}/>}
+                           </button>
+                       </div>
                    </div>
                    );
                 })}
@@ -145,8 +174,8 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
        )}
 
        <div className="mt-8 pt-4 border-t border-slate-100">
-           <h4 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-1"><Clock size={14}/> Próximos Eventos</h4>
-           <ul className="text-xs text-slate-400 space-y-1">
+           <h4 className="text-xs font-black text-slate-400 mb-2 flex items-center gap-1 uppercase tracking-widest"><Clock size={14}/> Calendario Próximos Eventos</h4>
+           <ul className="text-[10px] text-slate-400 space-y-1">
                {machine.maintenanceDefs.filter(d => !d.pending).map(d => {
                    let info = "";
                    if (d.maintenanceType === 'DATE') {
@@ -155,9 +184,9 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                        info = `Restan: ${d.remainingHours ?? '?'}h`;
                    }
                    return (
-                   <li key={d.id} className="flex justify-between">
-                       <span>{d.name}</span>
-                       <span>{info}</span>
+                   <li key={d.id} className="flex justify-between p-1 hover:bg-slate-50 rounded">
+                       <span className="font-bold">{d.name}</span>
+                       <span className="font-mono">{info}</span>
                    </li>
                    );
                })}
@@ -165,7 +194,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
        </div>
 
        <div className="mt-4">
-        <button type="button" onClick={onCancel} className="w-full py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Volver</button>
+        <button type="button" onClick={onCancel} className="w-full py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Volver al Menú</button>
        </div>
     </div>
   );
