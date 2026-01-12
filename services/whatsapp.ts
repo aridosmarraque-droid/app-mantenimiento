@@ -2,7 +2,7 @@
 import { Worker, Machine, MaintenanceDefinition } from '../types';
 import { supabase, isConfigured } from './client';
 
-export const sendWhatsAppMessage = async (to: string, message: string): Promise<{ success: boolean; error?: string }> => {
+export const sendWhatsAppMessage = async (to: string, message: string): Promise<{ success: boolean; error?: string; raw?: any }> => {
     if (!isConfigured) {
         console.warn("Modo Demo: WhatsApp no enviado (Supabase no configurado)");
         return { success: true };
@@ -23,9 +23,6 @@ export const sendWhatsAppMessage = async (to: string, message: string): Promise<
             }
         });
 
-        // Log para depuración en consola del navegador
-        console.log("Respuesta completa de la Edge Function:", data);
-
         if (error) {
             console.error("Error en invocación de función:", error);
             throw new Error(error.message || "Error al invocar el servidor de WhatsApp");
@@ -33,15 +30,25 @@ export const sendWhatsAppMessage = async (to: string, message: string): Promise<
         
         // Comprobar si la API de UltraMsg reportó error
         if (!data || data.success === false) {
-            // Intentar extraer el mensaje de error real de UltraMsg
-            const apiError = data?.raw?.error || data?.raw?.message || 'Error desconocido en UltraMsg';
+            const apiError = data?.raw?.error || data?.raw?.message || data?.error || 'Error desconocido';
+            
+            // Detección específica del error de parámetro GET
+            if (apiError.includes('GET parameter') || apiError.includes('Wrong token')) {
+                return {
+                    success: false,
+                    error: "Configuración Incorrecta: El Token debe enviarse en la URL de la Edge Function de Supabase.",
+                    raw: data?.raw
+                };
+            }
+
             return { 
                 success: false, 
-                error: `API WhatsApp: ${apiError}` 
+                error: `API WhatsApp: ${apiError}`,
+                raw: data?.raw
             };
         }
 
-        return { success: true };
+        return { success: true, raw: data?.raw };
     } catch (e: any) {
         console.error("Error crítico en servicio WhatsApp:", e);
         return { success: false, error: e.message || 'Error de conexión con el servidor' };
@@ -64,7 +71,7 @@ export const formatMaintenanceAlert = (worker: Worker, machine: Machine, def: Ma
            `_Por favor, registre la intervención en la APP una vez finalizada._`;
 };
 
-export const sendTestWhatsApp = async (phone: string): Promise<{ success: boolean; error?: string }> => {
+export const sendTestWhatsApp = async (phone: string): Promise<{ success: boolean; error?: string; raw?: any }> => {
     const testMsg = `*GMAO ARIDOS MARRAQUE*\n\n✅ Prueba de conectividad realizada con éxito.\nServidor: Supabase Edge Functions\nCanal: UltraMsg API`;
     return sendWhatsAppMessage(phone, testMsg);
 };
