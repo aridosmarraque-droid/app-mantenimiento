@@ -27,9 +27,10 @@ import { ProductionDashboard } from './components/admin/ProductionDashboard';
 import { DatabaseDiagnostics } from './components/admin/DatabaseDiagnostics';
 import { FuelReportViewer } from './components/admin/FuelReportViewer';
 import { FluidReportViewer } from './components/admin/FluidReportViewer';
+import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -55,10 +56,11 @@ enum ViewState {
   ADMIN_MANAGE_PROVIDERS,
   ADMIN_DIAGNOSTICS,
   ADMIN_FUEL_REPORT,
-  ADMIN_FLUID_REPORT
+  ADMIN_FLUID_REPORT,
+  ADMIN_WHATSAPP_CONFIG
 }
 
-type MenuCategory = 'datos' | 'produccion' | 'informes' | null;
+type MenuCategory = 'datos' | 'produccion' | 'informes' | 'config' | null;
 
 function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -308,6 +310,22 @@ function App() {
                         </div>
                     )}
                   </div>
+
+                  <div className="border-b border-slate-100">
+                    <button onClick={() => toggleCategory('config')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'config' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                        <div className="flex items-center gap-3">
+                            <Settings className={`w-5 h-5 ${openCategory === 'config' ? 'text-green-400' : 'text-green-600'}`} />
+                            <span className="text-xs font-black uppercase tracking-tight">Configuración</span>
+                        </div>
+                        {openCategory === 'config' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'config' && (
+                        <div className="bg-slate-50 divide-y divide-slate-100">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_WHATSAPP_CONFIG)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><MessageSquare size={14} className="text-green-500" /> Notificaciones WhatsApp</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DIAGNOSTICS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Database size={14} className="text-red-400" /> Diagnóstico DB</button>
+                        </div>
+                    )}
+                  </div>
                   
                   <div className="p-5 bg-slate-100">
                     <button onClick={handleLogout} className="text-red-600 text-xs font-black uppercase w-full py-3 bg-white rounded-xl border border-red-100 shadow-sm flex items-center justify-center gap-2 hover:bg-red-50 transition-all">
@@ -442,6 +460,7 @@ function App() {
             {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FUEL_REPORT && <FuelReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FLUID_REPORT && <FluidReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_WHATSAPP_CONFIG && <WhatsAppConfig onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
 
         </main>
       </div>
