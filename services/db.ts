@@ -1,6 +1,8 @@
+
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
 import * as offline from './offlineQueue';
+import { checkMaintenanceThresholds, resetNotificationFlags } from './notifications';
 import { 
     CostCenter, 
     SubCenter, 
@@ -85,6 +87,8 @@ const mapDef = (d: any): MaintenanceDefinition => ({
     lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
     tasks: d.tareas || '',
     pending: !!d.pendiente,
+    notifiedWarning: !!d.notificado_preaviso,
+    notifiedOverdue: !!d.notificado_vencido
 });
 
 const mapMachine = (m: any): Machine => {
@@ -334,7 +338,9 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentMachi
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
         tareas: def.tasks,
         ultimas_horas_realizadas: def.lastMaintenanceHours || 0,
-        pendiente: !!def.pending
+        pendiente: !!def.pending,
+        notificado_preaviso: false,
+        notificado_vencido: false
     };
     const { data, error } = await supabase.from('mant_mantenimientos_def').insert(payload).select().single();
     if (error) throw error;
@@ -352,7 +358,9 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
         proxima_fecha: def.nextDate ? toLocalDateString(def.nextDate) : null,
         tareas: def.tasks,
         ultimas_horas_realizadas: def.lastMaintenanceHours || 0,
-        pendiente: !!def.pending
+        pendiente: !!def.pending,
+        notificado_preaviso: def.notifiedWarning,
+        notificado_vencido: def.notifiedOverdue
     };
     const { error } = await supabase.from('mant_mantenimientos_def').update(payload).eq('id', def.id);
     if (error) throw error;
@@ -389,9 +397,28 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     };
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
     if (error) throw new Error(`Error de Base de Datos: ${error.message}`);
+    
     const h = cleanNum(log.hoursAtExecution);
     if (h !== null) {
+        // Actualizar horas actuales de la máquina
         await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
+        
+        // --- MOTOR DE NOTIFICACIONES ---
+        // Si el tipo es SCHEDULED (Mantenimiento completado), resetear flags
+        if (log.type === 'SCHEDULED' && log.maintenanceDefId) {
+            await resetNotificationFlags(log.maintenanceDefId);
+        } else {
+            // Auditar umbrales para el resto de registros si traen horas nuevas
+            try {
+                const { data: mData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', maquinaId).single();
+                if (mData) {
+                    const machineObj = mapMachine(mData);
+                    await checkMaintenanceThresholds(machineObj, h);
+                }
+            } catch (notifErr) {
+                console.error("Error silencioso en auditoría de notificaciones:", notifErr);
+            }
+        }
     }
     return mapLogFromDb(data);
 };
