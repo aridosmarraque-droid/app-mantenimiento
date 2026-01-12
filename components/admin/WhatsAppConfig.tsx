@@ -5,7 +5,7 @@ import { sendTestWhatsApp } from '../../services/whatsapp';
 import { Worker, Machine } from '../../types';
 import { 
     ArrowLeft, MessageSquare, Send, CheckCircle2, 
-    AlertCircle, Phone, User, Truck, Loader2, ShieldCheck
+    AlertCircle, Phone, User, Truck, Loader2, ShieldCheck, XCircle
 } from 'lucide-react';
 
 interface Props {
@@ -34,13 +34,18 @@ export const WhatsAppConfig: React.FC<Props> = ({ onBack }) => {
             return;
         }
         setSendingId(worker.id);
-        const res = await sendTestWhatsApp(worker.phone);
-        if (res.success) {
-            alert(`Mensaje de prueba enviado a ${worker.name}`);
-        } else {
-            alert(`Error: ${res.error || 'No se pudo conectar con UltraMsg'}`);
+        try {
+            const res = await sendTestWhatsApp(worker.phone);
+            if (res.success) {
+                alert(`✅ ¡Éxito! Mensaje enviado a ${worker.name}`);
+            } else {
+                alert(`❌ Error del servicio: ${res.error}`);
+            }
+        } catch (e: any) {
+            alert(`❌ Error crítico: ${e.message}`);
+        } finally {
+            setSendingId(null);
         }
-        setSendingId(null);
     };
 
     if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-green-600" /></div>;
@@ -66,7 +71,7 @@ export const WhatsAppConfig: React.FC<Props> = ({ onBack }) => {
                     </div>
                     <div>
                         <h4 className="font-bold text-sm">Estado del Sistema</h4>
-                        <p className="text-xs text-slate-400">Las alertas se envían automáticamente al responsable de cada máquina cuando los mantenimientos entran en periodo de preaviso.</p>
+                        <p className="text-xs text-slate-400">Las alertas utilizan Supabase Edge Functions como puente seguro para evitar bloqueos de navegador (CORS).</p>
                     </div>
                 </div>
             </div>
@@ -114,19 +119,6 @@ export const WhatsAppConfig: React.FC<Props> = ({ onBack }) => {
                         </div>
                     );
                 })}
-
-                {workers.filter(w => !w.phone).length > 0 && (
-                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 mt-6">
-                        <h5 className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-2 mb-2">
-                            <AlertCircle size={14}/> Trabajadores sin Teléfono
-                        </h5>
-                        <ul className="space-y-1">
-                            {workers.filter(w => !w.phone).map(w => (
-                                <li key={w.id} className="text-xs text-amber-700 font-medium">• {w.name}</li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
             </div>
         </div>
     );
