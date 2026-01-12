@@ -1,67 +1,88 @@
 
-import { sendEmail } from './api';
 import { Machine, MaintenanceDefinition, Worker } from '../types';
+import { sendWhatsAppMessage, formatMaintenanceAlert } from './whatsapp';
+import { sendEmail } from './api';
+import { supabase } from './client';
+import { getWorkers } from './db';
 
-/**
- * Servicio de Notificaciones Integrado
- * Gestiona alertas de mantenimiento vencido y preavisos
- */
+const COMPANY_EMAIL = 'aridos@marraque.es';
 
-// Cache para evitar spam de notificaciones en la misma carga de app
-const sentNotifications = new Set<string>();
+export const checkMaintenanceThresholds = async (machine: Machine, newHours: number) => {
+    const workers = await getWorkers(false);
+    const responsible = workers.find(w => w.id === machine.responsibleWorkerId);
 
-export const notifyMaintenanceAlert = async (
-    machine: Machine, 
-    def: MaintenanceDefinition, 
-    responsible?: Worker,
-    type: 'WARNING' | 'OVERDUE' = 'WARNING'
-) => {
-    const notificationKey = `${def.id}-${type}-${new Date().toDateString()}`;
-    if (sentNotifications.has(notificationKey)) return;
+    for (const def of machine.maintenanceDefs) {
+        if (def.maintenanceType !== 'HOURS' || !def.id) continue;
 
-    const machineName = `[${machine.companyCode || 'S/C'}] ${machine.name}`;
-    const responsibleName = responsible ? responsible.name : 'Responsable no asignado';
-    const responsiblePhone = responsible?.phone || '';
+        const interval = def.intervalHours || 0;
+        const warning = def.warningHours || 0;
+        const lastHours = def.lastMaintenanceHours || 0;
+        const limitWarning = lastHours + interval - warning;
+        const limitOverdue = lastHours + interval;
+
+        // 1. CHEQUEO DE VENCIMIENTO (CRÍTICO)
+        if (newHours >= limitOverdue && !def.notifiedOverdue) {
+            console.log(`[Notif] Disparando ALERTA VENCIDA para ${machine.name} - ${def.name}`);
+            await triggerNotification(machine, def, responsible, 'OVERDUE');
+            await markAsNotified(def.id, 'overdue');
+        } 
+        // 2. CHEQUEO DE PREAVISO
+        else if (newHours >= limitWarning && newHours < limitOverdue && !def.notifiedWarning) {
+            console.log(`[Notif] Disparando PREAVISO para ${machine.name} - ${def.name}`);
+            await triggerNotification(machine, def, responsible, 'WARNING');
+            await markAsNotified(def.id, 'warning');
+        }
+    }
+};
+
+const triggerNotification = async (machine: Machine, def: MaintenanceDefinition, responsible: Worker | undefined, type: 'WARNING' | 'OVERDUE') => {
+    const isOverdue = type === 'OVERDUE';
+    const title = isOverdue ? '🔴 MANTENIMIENTO VENCIDO' : '⚠️ PREAVISO DE MANTENIMIENTO';
     
-    const subject = type === 'WARNING' 
-        ? `⚠️ PREAVISO: Mantenimiento próximo en ${machineName}`
-        : `🚨 VENCIDO: Mantenimiento pendiente en ${machineName}`;
+    // Preparar Mensaje WhatsApp
+    if (responsible?.phone) {
+        const wsMsg = formatMaintenanceAlert(responsible, machine, def);
+        await sendWhatsAppMessage(responsible.phone, wsMsg);
+    }
 
-    const remaining = def.remainingHours ?? 0;
-    const hoursText = type === 'WARNING' 
-        ? `faltan ${remaining} horas` 
-        : `se ha pasado por ${Math.abs(remaining)} horas`;
-
-    const html = `
-        <div style="font-family: sans-serif; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
-            <h2 style="color: ${type === 'WARNING' ? '#d97706' : '#dc2626'};">${subject}</h2>
-            <p>Se ha detectado una alerta de mantenimiento programado:</p>
-            <ul>
-                <li><strong>Máquina:</strong> ${machineName}</li>
-                <li><strong>Mantenimiento:</strong> ${def.name}</li>
-                <li><strong>Estado:</strong> ${type === 'WARNING' ? 'PREAVISO' : 'VENCIDO'}</li>
-                <li><strong>Contador Actual:</strong> ${machine.currentHours} h</li>
-                <li><strong>Detalle:</strong> El mantenimiento ${hoursText}.</li>
-                <li><strong>Responsable:</strong> ${responsibleName}</li>
-            </ul>
-            <hr/>
-            <p style="font-size: 12px; color: #666;">Por favor, proceda a realizar las tareas: <i>${def.tasks}</i></p>
+    // Preparar Email
+    const emailHtml = `
+        <div style="font-family: sans-serif; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+            <h2 style="color: ${isOverdue ? '#dc2626' : '#d97706'}; border-bottom: 2px solid #eee; padding-bottom: 10px;">${title}</h2>
+            <p style="font-size: 16px;"><strong>Máquina:</strong> ${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}</p>
+            <p style="font-size: 16px;"><strong>Tarea:</strong> ${def.name}</p>
+            <p style="font-size: 16px;"><strong>Horas Actuales:</strong> <span style="font-family: monospace; font-weight: bold;">${machine.currentHours}h</span></p>
+            <p style="font-size: 14px; color: #666; background: #f9f9f9; padding: 10px; border-radius: 5px;">${def.tasks}</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 12px; color: #999; text-align: center;">Este es un aviso automático del sistema GMAO Aridos Marraque.</p>
         </div>
     `;
 
-    // 1. Enviar Email a Central
-    try {
-        await sendEmail(['aridos@marraque.es'], subject, html);
-    } catch (e) {
-        console.error("Error enviando email de alerta", e);
-    }
+    await sendEmail(
+        [COMPANY_EMAIL],
+        `${isOverdue ? '[VENCIDO]' : '[AVISO]'} Mantenimiento: ${machine.name}`,
+        emailHtml
+    );
+};
 
-    // 2. Simular/Enviar WhatsApp al responsable
-    if (responsiblePhone) {
-        const message = `${subject}\n\nMantenimiento: ${def.name}\nEstado: ${type}\nDetalle: ${hoursText}.\n\nPor favor, organice la parada de la unidad.`;
-        console.log(`[WhatsApp API] Enviando a ${responsiblePhone}: ${message}`);
-        // Aquí se integraría con un servicio como Twilio o una API de WhatsApp Business
-    }
+const markAsNotified = async (defId: string, type: 'warning' | 'overdue') => {
+    const column = type === 'warning' ? 'notificado_preaviso' : 'notificado_vencido';
+    const { error } = await supabase
+        .from('mant_mantenimientos_def')
+        .update({ [column]: true })
+        .eq('id', defId);
+    
+    if (error) console.error("Error al marcar notificación enviada:", error);
+};
 
-    sentNotifications.add(notificationKey);
+export const resetNotificationFlags = async (defId: string) => {
+    const { error } = await supabase
+        .from('mant_mantenimientos_def')
+        .update({ 
+            notificado_preaviso: false, 
+            notificado_vencido: false 
+        })
+        .eq('id', defId);
+    
+    if (error) console.error("Error al resetear flags de notificación:", error);
 };
