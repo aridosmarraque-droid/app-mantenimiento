@@ -243,13 +243,14 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.companyCode !== undefined) p.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) p.centro_id = updates.costCenterId;
     if (updates.subCenterId !== undefined) p.subcentro_id = updates.subCenterId;
-    if (updates.responsibleWorkerId !== undefined) p.responsable_id = updates.responsibleWorkerId;
+    if (updates.responsibleWorkerId !== undefined) p.responsible_id = updates.responsibleWorkerId;
     if (updates.currentHours !== undefined) p.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) p.requiere_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) p.gastos_transporte = updates.transportExpenses;
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
     if (updates.active !== undefined) p.activo = updates.active;
+    // Fix: correct property name from vinculada_produccion to vinculadaProduccion to match Partial<Machine> interface
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
     const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
     if (error) throw error;
@@ -297,7 +298,7 @@ export const createServiceProvider = async (name: string): Promise<void> => {
 };
 
 export const updateServiceProvider = async (id: string, name: string): Promise<void> => {
-    const { error } = await supabase.from('mant_proveedores').update({ nombre: name }).eq('id', id);
+    const { error } = await supabase.from('mant_centros').update({ nombre: name }).eq('id', id);
     if (error) throw error;
 };
 
@@ -441,8 +442,8 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
         washingStart: Number(data.lavado_inicio || 0),
         washingEnd: Number(data.lavado_fin || 0), 
-        triturationStart: Number(data.trituration_inicio || 0), 
-        triturationEnd: Number(data.trituration_fin || 0), 
+        triturationStart: Number(data.trituracion_inicio || 0), 
+        triturationEnd: Number(data.trituracion_fin || 0), 
         comments: data.comentarios
     };
 };
@@ -453,8 +454,8 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituration_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationStart: Number(r.trituracion_inicio || 0), 
+        triturationEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios
     }));
 };
@@ -465,8 +466,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituration_inicio: r.triturationStart, 
-        trituration_fin: r.triturationEnd, 
+        trituracion_inicio: r.triturationStart, 
+        trituracion_fin: r.triturationEnd, 
         comentarios: r.comments
     });
     if (error) throw error;
