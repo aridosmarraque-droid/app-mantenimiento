@@ -72,7 +72,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.descripcion, 
+        description: dbLog.description, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -297,7 +297,7 @@ export const createServiceProvider = async (name: string): Promise<void> => {
 };
 
 export const updateServiceProvider = async (id: string, name: string): Promise<void> => {
-    const { error } = await supabase.from('mant_centros').update({ nombre: name }).eq('id', id);
+    const { error } = await supabase.from('mant_proveedores').update({ nombre: name }).eq('id', id);
     if (error) throw error;
 };
 
@@ -404,8 +404,12 @@ export const getFuelLogs = async (machineId: string, startDate: Date, endDate: D
 export const getCPReportsByRange = async (s: Date, e: Date) => {
     const { data } = await supabase.from('cp_partes_diarios').select('*').gte('fecha', toLocalDateString(s)).lte('fecha', toLocalDateString(e));
     return (data || []).map(r => ({ 
-        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, crusherStart: r.machacadora_inicio, 
-        crusherEnd: r.machacadora_fin, millsStart: r.molinos_inicio, millsEnd: r.molinos_fin, comments: r.comentarios 
+        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+        crusherStart: Number(r.machacadora_inicio || 0), 
+        crusherEnd: Number(r.machacadora_fin || 0), 
+        millsStart: Number(r.molinos_inicio || 0), 
+        millsEnd: Number(r.molinos_fin || 0), 
+        comments: r.comentarios 
     }));
 };
 
@@ -413,8 +417,12 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     const { data, error } = await supabase.from('cp_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
     if (error || !data) return null;
     return {
-        id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, crusherStart: data.machacadora_inicio, 
-        crusherEnd: data.machacadora_fin, millsStart: data.molinos_inicio, millsEnd: data.molinos_fin, comments: data.comentarios
+        id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
+        crusherStart: Number(data.machacadora_inicio || 0), 
+        crusherEnd: Number(data.machacadora_fin || 0), 
+        millsStart: Number(data.molinos_inicio || 0), 
+        millsEnd: Number(data.molinos_fin || 0), 
+        comments: data.comentarios
     };
 };
 
@@ -430,27 +438,34 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     const { data, error } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
     if (error || !data) return null;
     return {
-        id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, washingStart: data.lavado_inicio,
-        washingEnd: data.lavado_fin, triturationStart: data.trituracion_inicio, triturationEnd: data.trituration_fin, comments: data.comentarios
+        id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
+        washingStart: Number(data.lavado_inicio || 0),
+        washingEnd: Number(data.lavado_fin || 0), 
+        triturationStart: Number(data.trituration_inicio || 0), 
+        triturationEnd: Number(data.trituration_fin || 0), 
+        comments: data.comentarios
     };
 };
 
 export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyReport[]> => {
     const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(s)).lte('fecha', toLocalDateString(e));
     return (data || []).map(r => ({
-        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, washingStart: r.lavado_inicio,
-        washingEnd: r.lavado_fin, triturationStart: r.trituracion_inicio, triturationEnd: r.trituration_fin, comments: r.comentarios
+        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+        washingStart: Number(r.lavado_inicio || 0),
+        washingEnd: Number(r.lavado_fin || 0), 
+        triturationStart: Number(r.trituration_inicio || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
+        comments: r.comentarios
     }));
 };
 
 export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
-    // Fix: Corrected property name from trituration_fin to triturationEnd and key to trituration_fin for consistency with getLastCRReport
     const { error } = await supabase.from('cr_partes_diarios').insert({
         fecha: toLocalDateString(r.date), 
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituracion_inicio: r.triturationStart, 
+        trituration_inicio: r.triturationStart, 
         trituration_fin: r.triturationEnd, 
         comentarios: r.comments
     });
@@ -530,7 +545,6 @@ export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
     return results;
 };
 
-// Fix: Implement getMachineDependencyCount to resolve import error in EditMachineForm.tsx
 export const getMachineDependencyCount = async (machineId: string): Promise<{ logs: number, reports: number }> => {
     if (!isConfigured) return { logs: 0, reports: 0 };
     
@@ -566,46 +580,49 @@ export const syncPendingData = async () => {
     return { synced, errors };
 };
 
-export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => m;
+// --- MÓDULO DOCUMENTAL ---
 
 /**
- * GESTIÓN DOCUMENTAL TRABAJADORES
+ * Obtiene los documentos registrados para un trabajador específico.
  */
 export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocument[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase
-        .from('mant_documentos')
-        .select('*')
-        .eq('trabajador_id', workerId)
-        .eq('categoria', 'TRABAJADOR');
-        
-    if (error) return [];
+    const { data, error } = await supabase.from('mant_documentos').select('*').eq('worker_id', workerId);
+    if (error) {
+        console.error("Error fetching worker documents:", error);
+        return [];
+    }
     return (data || []).map(d => ({
         id: d.id,
-        workerId: d.trabajador_id,
+        workerId: d.worker_id,
         title: d.titulo,
         category: d.categoria,
         issueDate: new Date(d.fecha_emision),
         expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
+        fileUrl: d.url_archivo,
         status: d.estado,
         docType: d.tipo_documento,
-        fileUrl: d.url_archivo,
         notes: d.notas
     }));
 };
 
+/**
+ * Guarda un nuevo documento para un trabajador.
+ */
 export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_documentos').insert({
-        trabajador_id: doc.workerId,
+        worker_id: doc.workerId,
         titulo: doc.title,
         categoria: doc.category,
         fecha_emision: toLocalDateString(doc.issueDate),
         fecha_vencimiento: doc.expiryDate ? toLocalDateString(doc.expiryDate) : null,
+        url_archivo: doc.fileUrl,
         estado: doc.status,
         tipo_documento: doc.docType,
-        url_archivo: doc.fileUrl,
         notas: doc.notes
     });
     if (error) throw error;
 };
+
+export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => m;
