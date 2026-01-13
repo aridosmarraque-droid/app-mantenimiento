@@ -297,7 +297,7 @@ export const createServiceProvider = async (name: string): Promise<void> => {
 };
 
 export const updateServiceProvider = async (id: string, name: string): Promise<void> => {
-    const { error } = await supabase.from('mant_proveedores').update({ nombre: name }).eq('id', id);
+    const { error } = await supabase.from('mant_centros').update({ nombre: name }).eq('id', id);
     if (error) throw error;
 };
 
@@ -439,14 +439,20 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
     const { data } = await supabase.from('cr_partes_diarios').select('*').gte('fecha', toLocalDateString(s)).lte('fecha', toLocalDateString(e));
     return (data || []).map(r => ({
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, washingStart: r.lavado_inicio,
-        washingEnd: r.lavado_fin, triturationStart: r.trituration_inicio, triturationEnd: r.trituration_fin, comments: r.comentarios
+        washingEnd: r.lavado_fin, triturationStart: r.trituracion_inicio, triturationEnd: r.trituration_fin, comments: r.comentarios
     }));
 };
 
 export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
+    // Fix: Corrected property name from trituration_fin to triturationEnd and key to trituration_fin for consistency with getLastCRReport
     const { error } = await supabase.from('cr_partes_diarios').insert({
-        fecha: toLocalDateString(r.date), trabajador_id: r.workerId, lavado_inicio: r.washingStart,
-        lavado_fin: r.washingEnd, trituracion_inicio: r.triturationStart, trituracion_end: r.triturationEnd, comentarios: r.comments
+        fecha: toLocalDateString(r.date), 
+        trabajador_id: r.workerId, 
+        lavado_inicio: r.washingStart,
+        lavado_fin: r.washingEnd, 
+        trituracion_inicio: r.triturationStart, 
+        trituration_fin: r.triturationEnd, 
+        comentarios: r.comments
     });
     if (error) throw error;
 };
@@ -515,28 +521,6 @@ export const getDailyAuditLogs = async (date: Date) => {
     };
 };
 
-// --- MÓDULO DOCUMENTACIÓN ---
-
-export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocument[]> => {
-    const { data, error } = await supabase.from('docs_trabajadores').select('*').eq('trabajador_id', workerId);
-    if (error) return [];
-    return (data || []).map(d => ({
-        id: d.id, title: d.titulo, category: 'TRABAJADOR', issueDate: new Date(d.fecha_emision),
-        expiryDate: d.fecha_caducidad ? new Date(d.fecha_caducidad) : undefined,
-        fileUrl: d.url_archivo, status: d.estado, workerId: d.trabajador_id, docType: d.tipo_doc
-    }));
-};
-
-export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>) => {
-    const { error } = await supabase.from('docs_trabajadores').insert({
-        trabajador_id: doc.workerId, titulo: doc.title, tipo_doc: doc.docType,
-        fecha_emision: toLocalDateString(doc.issueDate), 
-        fecha_caducidad: doc.expiryDate ? toLocalDateString(doc.expiryDate) : null,
-        url_archivo: doc.fileUrl, estado: doc.status
-    });
-    if (error) throw error;
-};
-
 export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
     const results = [];
     for (const table of tables) {
@@ -583,3 +567,45 @@ export const syncPendingData = async () => {
 };
 
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => m;
+
+/**
+ * GESTIÓN DOCUMENTAL TRABAJADORES
+ */
+export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocument[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase
+        .from('mant_documentos')
+        .select('*')
+        .eq('trabajador_id', workerId)
+        .eq('categoria', 'TRABAJADOR');
+        
+    if (error) return [];
+    return (data || []).map(d => ({
+        id: d.id,
+        workerId: d.trabajador_id,
+        title: d.titulo,
+        category: d.categoria,
+        issueDate: new Date(d.fecha_emision),
+        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
+        status: d.estado,
+        docType: d.tipo_documento,
+        fileUrl: d.url_archivo,
+        notes: d.notas
+    }));
+};
+
+export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('mant_documentos').insert({
+        trabajador_id: doc.workerId,
+        titulo: doc.title,
+        categoria: doc.category,
+        fecha_emision: toLocalDateString(doc.issueDate),
+        fecha_vencimiento: doc.expiryDate ? toLocalDateString(doc.expiryDate) : null,
+        estado: doc.status,
+        tipo_documento: doc.docType,
+        url_archivo: doc.fileUrl,
+        notas: doc.notes
+    });
+    if (error) throw error;
+};
