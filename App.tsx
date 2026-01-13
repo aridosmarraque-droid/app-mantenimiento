@@ -30,7 +30,7 @@ import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2 } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -77,6 +77,9 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [openCategory, setOpenCategory] = useState<MenuCategory>(null);
+
+  // Nuevo estado para evitar duplicados en repostaje
+  const [isSavingRefueling, setIsSavingRefueling] = useState(false);
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
   
@@ -175,6 +178,10 @@ function App() {
 
   const handleFormSubmit = async (data: Partial<OperationLog>) => {
     if (!currentUser || !selectedContext || !selectedAction) return;
+    
+    // Bloqueo específico para combustible para evitar doble click
+    if (selectedAction === 'REFUELING') setIsSavingRefueling(true);
+
     try {
       const logData: Omit<OperationLog, 'id'> = { 
         date: selectedDate, 
@@ -190,9 +197,11 @@ function App() {
         setSuccessMsg(''); 
         setViewState(ViewState.ACTION_MENU); 
         setSelectedAction(null); 
+        setIsSavingRefueling(false);
       }, 2000);
     } catch (e: any) { 
         console.error("Error capturado en App.tsx:", e);
+        setIsSavingRefueling(false);
         alert(e.message || "Error al registrar"); 
     }
   };
@@ -415,6 +424,7 @@ function App() {
                     <h3 className="text-xl font-black text-slate-800 mb-6 uppercase tracking-tighter">Suministro Combustible</h3>
                     <form onSubmit={(e) => { 
                         e.preventDefault(); 
+                        if (isSavingRefueling) return;
                         const formData = new FormData(e.currentTarget);
                         handleFormSubmit({ 
                           hoursAtExecution: Number(formData.get('hours')), 
@@ -429,8 +439,13 @@ function App() {
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Litros Repostados</label>
                         <input name="litres" type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-xl font-black text-lg focus:border-green-500 transition-colors" placeholder="0.0" required />
                       </div>
-                      <button className="bg-slate-900 text-white w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all">Guardar Registro</button>
-                      <button type="button" onClick={() => setViewState(ViewState.ACTION_MENU)} className="w-full text-slate-400 py-2 text-xs font-bold uppercase tracking-widest">Cancelar</button>
+                      <button 
+                        disabled={isSavingRefueling}
+                        className="bg-slate-900 text-white w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
+                      >
+                        {isSavingRefueling ? <Loader2 className="animate-spin" size={20}/> : 'Guardar Registro'}
+                      </button>
+                      <button type="button" disabled={isSavingRefueling} onClick={() => setViewState(ViewState.ACTION_MENU)} className="w-full text-slate-400 py-2 text-xs font-bold uppercase tracking-widest">Cancelar</button>
                     </form>
                   </div>
                 )}
