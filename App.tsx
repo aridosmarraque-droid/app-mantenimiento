@@ -16,7 +16,6 @@ import { DailyAuditViewer } from './components/admin/DailyAuditViewer';
 import { WorkerManager } from './components/admin/WorkerManager';
 import { ProviderManager } from './components/admin/ProviderManager';
 import { SubCenterManager } from './components/admin/SubCenterManager';
-import { DocumentManager } from './components/admin/DocumentManager';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { CRSelection } from './components/cr/CRSelection';
@@ -31,7 +30,7 @@ import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -58,11 +57,10 @@ enum ViewState {
   ADMIN_DIAGNOSTICS,
   ADMIN_FUEL_REPORT,
   ADMIN_FLUID_REPORT,
-  ADMIN_WHATSAPP_CONFIG,
-  ADMIN_DOCUMENTS
+  ADMIN_WHATSAPP_CONFIG
 }
 
-type MenuCategory = 'datos' | 'produccion' | 'informes' | 'documentos' | 'config' | null;
+type MenuCategory = 'datos' | 'produccion' | 'informes' | 'config' | null;
 
 function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -234,7 +232,7 @@ function App() {
               <h1 className="font-black text-lg flex items-center gap-2 text-white leading-none">
                 <LayoutDashboard className="w-5 h-5 text-red-500" /> ARIDOS MARRAQUE
               </h1>
-              <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">GMAO & Documentos</span>
+              <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">GMAO & Mantenimiento</span>
             </div>
             
             <div className="flex items-center gap-2">
@@ -275,23 +273,7 @@ function App() {
                     )}
                   </div>
 
-                  {/* CATEGORÍA: DOCUMENTACIÓN (NUEVA) */}
-                  <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('documentos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'documentos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
-                        <div className="flex items-center gap-3">
-                            <ShieldCheck className={`w-5 h-5 ${openCategory === 'documentos' ? 'text-green-400' : 'text-green-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">GESTIÓN DOCUMENTAL</span>
-                        </div>
-                        {openCategory === 'documentos' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
-                    {openCategory === 'documentos' && (
-                        <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DOCUMENTS)} className="w-full text-left pl-14 py-3 text-xs font-black text-green-700 hover:bg-white flex items-center gap-2"><FileText size={14} /> Documentos y PRL</button>
-                        </div>
-                    )}
-                  </div>
-
-                  {/* RESTO DE CATEGORÍAS */}
+                  {/* CATEGORÍA: INFORMES */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                         <div className="flex items-center gap-3">
@@ -360,7 +342,6 @@ function App() {
               </div>
             )}
 
-            {viewState === ViewState.ADMIN_DOCUMENTS && <DocumentManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada')}/>}
             {viewState === ViewState.ADMIN_MANAGE_SUBCENTERS && <SubCenterManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_CREATE_MACHINE && <CreateMachineForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Máquina dada de alta')}/>}
