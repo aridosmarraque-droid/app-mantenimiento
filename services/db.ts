@@ -79,38 +79,60 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
     };
 };
 
-const mapMachine = (m: any): Machine => ({
-    id: m.id,
-    costCenterId: m.centro_id, 
-    subCenterId: m.subcentro_id,
-    name: m.nombre,
-    companyCode: m.codigo_empresa,
-    currentHours: Number(m.horas_actuales || 0),
-    requiresHours: !!m.requiere_horas, 
-    adminExpenses: !!m.gastos_admin,
-    transportExpenses: !!m.gastos_transporte,
-    maintenanceDefs: (m.mant_mantenimientos_def || []).map((d: any) => ({
-        id: d.id,
-        machineId: d.maquina_id,
-        name: d.nombre,
-        maintenanceType: d.tipo_programacion || 'HOURS',
-        intervalHours: Number(d.intervalo_horas || 0),
-        warningHours: Number(d.horas_preaviso || 0), 
-        lastMaintenanceHours: Number(d.ultimas_horas_realizadas || 0),
-        remainingHours: Number(d.horas_restantes || 0),
-        intervalMonths: Number(d.intervalo_meses || 0),
-        nextDate: d.proxima_fecha ? new Date(d.proxima_fecha) : undefined,
-        lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
-        tasks: d.tareas || '',
-        pending: !!d.pendiente,
-        notifiedWarning: !!d.notificado_preaviso,
-        notifiedOverdue: !!d.notificado_vencido
-    })),
-    selectableForReports: !!m.es_parte_trabajo,
-    responsibleWorkerId: m.responsable_id,
-    active: m.activo !== undefined ? m.activo : true,
-    vinculadaProduccion: !!m.vinculada_produccion
-});
+const mapMachine = (m: any): Machine => {
+    const currentHours = Number(m.horas_actuales || 0);
+    
+    return {
+        id: m.id,
+        costCenterId: m.centro_id, 
+        subCenterId: m.subcentro_id,
+        name: m.nombre,
+        companyCode: m.codigo_empresa,
+        currentHours,
+        requiresHours: !!m.requiere_horas, 
+        adminExpenses: !!m.gastos_admin,
+        transportExpenses: !!m.gastos_transporte,
+        maintenanceDefs: (m.mant_mantenimientos_def || []).map((d: any) => {
+            const interval = Number(d.intervalo_horas || 0);
+            const lastHours = Number(d.ultimas_horas_realizadas || 0);
+            const warning = Number(d.horas_preaviso || 0);
+            
+            // CÁLCULO DINÁMICO DE ESTADO
+            // El mantenimiento vence en: lastHours + interval
+            const nextDueHours = lastHours + interval;
+            const remaining = nextDueHours - currentHours;
+            
+            // Solo es "pendiente" (disponible para el usuario) si estamos en ventana de preaviso o vencido
+            // Ej: 500h de intervalo, 50h preaviso, hecho a las 0. Vence a las 500.
+            // Pendiente si Horas Actuales >= 450.
+            const isActuallyPending = d.tipo_programacion === 'HOURS' 
+                ? (remaining <= warning)
+                : !!d.pendiente; // Para fechas seguimos usando el flag o lógica de fecha
+
+            return {
+                id: d.id,
+                machineId: d.maquina_id,
+                name: d.nombre,
+                maintenanceType: d.tipo_programacion || 'HOURS',
+                intervalHours: interval,
+                warningHours: warning, 
+                lastMaintenanceHours: lastHours,
+                remainingHours: remaining,
+                intervalMonths: Number(d.intervalo_meses || 0),
+                nextDate: d.proxima_fecha ? new Date(d.proxima_fecha) : undefined,
+                lastMaintenanceDate: d.ultima_fecha ? new Date(d.ultima_fecha) : undefined,
+                tasks: d.tareas || '',
+                pending: isActuallyPending,
+                notifiedWarning: !!d.notificado_preaviso,
+                notifiedOverdue: !!d.notificado_vencido
+            };
+        }),
+        selectableForReports: !!m.es_parte_trabajo,
+        responsibleWorkerId: m.responsable_id,
+        active: m.activo !== undefined ? m.activo : true,
+        vinculadaProduccion: !!m.vinculada_produccion
+    };
+};
 
 // --- FUNCIONES CORE ---
 
@@ -243,14 +265,13 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.companyCode !== undefined) p.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) p.centro_id = updates.costCenterId;
     if (updates.subCenterId !== undefined) p.subcentro_id = updates.subCenterId;
-    if (updates.responsibleWorkerId !== undefined) p.responsible_id = updates.responsibleWorkerId;
+    if (updates.responsibleWorkerId !== undefined) p.responsable_id = updates.responsibleWorkerId;
     if (updates.currentHours !== undefined) p.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) p.requiere_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) p.gastos_transporte = updates.transportExpenses;
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
     if (updates.active !== undefined) p.activo = updates.active;
-    // Fix: correct property name from vinculada_produccion to vinculadaProduccion to match Partial<Machine> interface
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
     const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
     if (error) throw error;
@@ -367,6 +388,12 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
     }
     
+    // Disparar chequeo de mantenimientos tras guardar log
+    const { data: machineData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', maquinaId).single();
+    if (machineData) {
+        await checkMaintenanceThresholds(mapMachine(machineData), h);
+    }
+    
     return mapLogFromDb(data);
 };
 
@@ -442,8 +469,8 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
         washingStart: Number(data.lavado_inicio || 0),
         washingEnd: Number(data.lavado_fin || 0), 
-        triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituracion_fin || 0), 
+        triturationStart: Number(data.trituration_inicio || 0), 
+        triturationEnd: Number(data.trituration_fin || 0), 
         comments: data.comentarios
     };
 };
@@ -454,8 +481,8 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationStart: Number(r.trituration_inicio || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios
     }));
 };
@@ -466,8 +493,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituracion_inicio: r.triturationStart, 
-        trituracion_fin: r.triturationEnd, 
+        trituration_inicio: r.triturationStart, 
+        trituration_fin: r.triturationEnd, 
         comentarios: r.comments
     });
     if (error) throw error;
@@ -626,4 +653,9 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
     if (error) throw error;
 };
 
-export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => m;
+export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => {
+    // Forzamos un refresco de datos desde el mapeador dinámico
+    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
+    if (error || !data) return m;
+    return mapMachine(data);
+};
