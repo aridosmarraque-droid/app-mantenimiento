@@ -86,17 +86,15 @@ const mapMachine = (m: any): Machine => {
         maintenanceDefs: defs.map(mapDef),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo !== undefined ? m.activo : true,
+        active: m.active !== undefined ? m.active : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
 
 const mapLogFromDb = (dbLog: any): OperationLog => {
-    // Protección contra fechas null que causan el error 01/01/1970
-    let parsedDate = new Date(dbLog.fecha);
-    if (!dbLog.fecha || isNaN(parsedDate.getTime())) {
-        parsedDate = new Date(); // Fallback a hoy si la fecha es corrupta
-    }
+    // Si la fecha es null, se mantiene null para que new Date(null) muestre 1970 
+    // y así el usuario sepa que el dato está corrupto en la DB en lugar de ver "Hoy".
+    const parsedDate = new Date(dbLog.fecha);
     
     return {
         id: dbLog.id,
@@ -379,7 +377,6 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 
 /**
  * GUARDA UN REGISTRO TÉCNICO
- * Implementa protección contra duplicados por clicks rápidos o errores de red.
  */
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
@@ -388,8 +385,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     const maquinaId = cleanUuid(log.machineId);
     if (!trabajadorId || !maquinaId) throw new Error("IDs inválidos.");
 
-    // --- PROTECCIÓN DE DUPLICIDAD ---
-    // Buscamos si ya se ha insertado un registro idéntico en los últimos 5 minutos
+    // PROTECCIÓN DE DUPLICIDAD
     const dateStr = toLocalDateString(log.date);
     const h = cleanNum(log.hoursAtExecution) || 0;
     
@@ -404,7 +400,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     if (existing && existing.length > 0) {
         console.warn("[DB] Intento de duplicado detectado. Saltando inserción.", log);
-        // Retornamos el existente para no romper el flujo de la UI
         const { data: fullRecord } = await supabase.from('mant_registros').select('*').eq('id', existing[0].id).single();
         return mapLogFromDb(fullRecord);
     }
@@ -473,7 +468,7 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
     if (endDate) query = query.lte('fecha', toLocalDateString(endDate));
     if (types && types.length > 0) query = query.in('tipo_operacion', types);
     
-    const { data, error } = await query.order('fecha', { ascending: false }).order('id', { ascending: false });
+    const { data, error } = await query.order('fecha', { ascending: false }).order('created_at', { ascending: false });
     if (error) return [];
     return (data || []).map(mapLogFromDb);
 };
@@ -616,7 +611,7 @@ export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>) => {
     const { error } = await supabase.from('partes_trabajo').insert({
         fecha: toLocalDateString(r.date),
         trabajador_id: r.workerId,
-        horas: r.hours,
+        hours: r.hours,
         maquina_id: r.machineId,
         centro_id: r.costCenterId,
         comentarios: r.description
