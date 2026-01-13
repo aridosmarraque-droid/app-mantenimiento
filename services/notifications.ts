@@ -17,16 +17,21 @@ export const checkMaintenanceThresholds = async (machine: Machine, newHours: num
         const interval = def.intervalHours || 0;
         const warning = def.warningHours || 0;
         const lastHours = def.lastMaintenanceHours || 0;
-        const limitWarning = lastHours + interval - warning;
+        
+        // El punto de vencimiento es exacto (Ej: 39000)
         const limitOverdue = lastHours + interval;
+        // El punto de preaviso es X horas antes (Ej: 38950)
+        const limitWarning = limitOverdue - warning;
 
         // 1. CHEQUEO DE VENCIMIENTO (CRÍTICO)
+        // Se dispara si ya hemos pasado las horas de vencimiento
         if (newHours >= limitOverdue && !def.notifiedOverdue) {
             console.log(`[Notif] Disparando ALERTA VENCIDA para ${machine.name} - ${def.name}`);
             await triggerNotification(machine, def, responsible, 'OVERDUE');
             await markAsNotified(def.id, 'overdue');
         } 
         // 2. CHEQUEO DE PREAVISO
+        // Solo se dispara si estamos DENTRO de la ventana de aviso y NO hemos llegado al vencimiento
         else if (newHours >= limitWarning && newHours < limitOverdue && !def.notifiedWarning) {
             console.log(`[Notif] Disparando PREAVISO para ${machine.name} - ${def.name}`);
             await triggerNotification(machine, def, responsible, 'WARNING');
