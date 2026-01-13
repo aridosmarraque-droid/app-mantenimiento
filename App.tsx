@@ -268,7 +268,7 @@ function App() {
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Factory size={14} className="text-blue-400" /> Centros de Coste</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_SUBCENTERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><LayoutGrid size={14} className="text-blue-400" /> Subcentros / Plantas</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Truck size={14} className="text-blue-400" /> Alta de Maquinaria</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Settings size={14} className="text-blue-400" /> Inventario Técnico</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Settings size={14} className="text-blue-400" /> Editar Maquinaria</button>
                         </div>
                     )}
                   </div>
@@ -345,6 +345,25 @@ function App() {
             {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada')}/>}
             {viewState === ViewState.ADMIN_MANAGE_SUBCENTERS && <SubCenterManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_CREATE_MACHINE && <CreateMachineForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Máquina dada de alta')}/>}
+            
+            {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && (
+              <div className="animate-in fade-in duration-500 space-y-4">
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Settings size={20}/></div>
+                  <div>
+                    <h4 className="font-black text-slate-800 uppercase text-xs tracking-tight">Selección para Edición</h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Elija una unidad para modificar su ficha técnica</p>
+                  </div>
+                </div>
+                <MachineSelector 
+                  selectedDate={selectedDate} 
+                  onChangeDate={setSelectedDate} 
+                  onSelect={handleEditSelection} 
+                  showInactive={true} 
+                />
+              </div>
+            )}
+            
             {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => handleAdminSuccess('Ficha actualizada')}/>}
             {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
