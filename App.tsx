@@ -16,6 +16,7 @@ import { DailyAuditViewer } from './components/admin/DailyAuditViewer';
 import { WorkerManager } from './components/admin/WorkerManager';
 import { ProviderManager } from './components/admin/ProviderManager';
 import { SubCenterManager } from './components/admin/SubCenterManager';
+import { DocumentManager } from './components/admin/DocumentManager';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { CRSelection } from './components/cr/CRSelection';
@@ -30,7 +31,7 @@ import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2 } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, ShieldCheck } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -57,28 +58,25 @@ enum ViewState {
   ADMIN_DIAGNOSTICS,
   ADMIN_FUEL_REPORT,
   ADMIN_FLUID_REPORT,
-  ADMIN_WHATSAPP_CONFIG
+  ADMIN_WHATSAPP_CONFIG,
+  ADMIN_DOCUMENTS
 }
 
-type MenuCategory = 'datos' | 'produccion' | 'informes' | 'config' | null;
+type MenuCategory = 'datos' | 'produccion' | 'informes' | 'documentos' | 'config' | null;
 
 function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
   const [currentUser, setCurrentUser] = useState<Worker | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  
   const [selectedContext, setSelectedContext] = useState<{ machine: Machine, center: CostCenter } | null>(null);
   const [machineToEdit, setMachineToEdit] = useState<Machine | null>(null);
   const [selectedAction, setSelectedAction] = useState<OperationType | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
-
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingItems, setPendingItems] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [openCategory, setOpenCategory] = useState<MenuCategory>(null);
-
-  // Nuevo estado para evitar duplicados en repostaje
   const [isSavingRefueling, setIsSavingRefueling] = useState(false);
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
@@ -98,15 +96,15 @@ function App() {
   }, []);
 
   const handleForceSync = async () => {
-      if (!isOnline) { alert("No hay conexión a internet."); return; }
+      if (!isOnline) { alert("No hay conexión."); return; }
       setIsSyncing(true);
       const res = await syncPendingData();
       setIsSyncing(false);
       setPendingItems(getQueue().length);
       if (res.synced > 0) {
-          setSuccessMsg(`${res.synced} datos sincronizados.`);
+          setSuccessMsg(`${res.synced} sincronizados.`);
           setTimeout(() => setSuccessMsg(''), 2000);
-      } else if (res.errors > 0) alert(`Hubo errores en ${res.errors} elementos.`);
+      }
   };
 
   const handleLogin = (worker: Worker) => {
@@ -152,36 +150,30 @@ function App() {
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
       try {
           await savePersonalReport(data);
-          setSuccessMsg('Reporte de Trabajo Guardado ✅');
-          setTimeout(() => { 
-            setSuccessMsg(''); 
-            navigateBack();
-          }, 1500);
-      } catch (e: any) { alert(e.message || "Error al guardar"); }
+          setSuccessMsg('Reporte Guardado ✅');
+          setTimeout(() => { setSuccessMsg(''); navigateBack(); }, 1500);
+      } catch (e: any) { alert(e.message); }
   };
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
       try {
           await saveCPReport(data);
-          setSuccessMsg('Parte Cantera Pura Guardado ✅');
+          setSuccessMsg('Parte Cantera Guardado ✅');
           setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CP_SELECTION); }, 2000);
-      } catch (e: any) { alert(e.message || "Error al guardar"); }
+      } catch (e: any) { alert(e.message); }
   };
 
   const handleCRReportSubmit = async (data: Omit<CRDailyReport, 'id'>) => {
       try {
           await saveCRReport(data);
-          setSuccessMsg('Parte Canto Rodado Guardado ✅');
+          setSuccessMsg('Parte Rodado Guardado ✅');
           setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CR_SELECTION); }, 2000);
-      } catch (e: any) { alert(e.message || "Error al guardar"); }
+      } catch (e: any) { alert(e.message); }
   };
 
   const handleFormSubmit = async (data: Partial<OperationLog>) => {
     if (!currentUser || !selectedContext || !selectedAction) return;
-    
-    // Bloqueo específico para combustible para evitar doble click
     if (selectedAction === 'REFUELING') setIsSavingRefueling(true);
-
     try {
       const logData: Omit<OperationLog, 'id'> = { 
         date: selectedDate, 
@@ -192,7 +184,7 @@ function App() {
         ...data 
       };
       await saveOperationLog(logData);
-      setSuccessMsg(navigator.onLine ? 'Operación registrada' : 'Guardado offline');
+      setSuccessMsg('Registro Correcto');
       setTimeout(() => { 
         setSuccessMsg(''); 
         setViewState(ViewState.ACTION_MENU); 
@@ -200,9 +192,8 @@ function App() {
         setIsSavingRefueling(false);
       }, 2000);
     } catch (e: any) { 
-        console.error("Error capturado en App.tsx:", e);
         setIsSavingRefueling(false);
-        alert(e.message || "Error al registrar"); 
+        alert(e.message); 
     }
   };
 
@@ -219,9 +210,7 @@ function App() {
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
-  if (viewState === ViewState.LOGIN) {
-      return <Login onLogin={handleLogin} />;
-  }
+  if (viewState === ViewState.LOGIN) return <Login onLogin={handleLogin} />;
 
   return (
       <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl relative overflow-x-hidden">
@@ -230,7 +219,7 @@ function App() {
               <div className={`text-white text-[10px] text-center p-2 font-black uppercase flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
                   <div className="flex items-center gap-2">
                     {!isOnline ? <WifiOff size={12} /> : <DatabaseZap size={12} />} 
-                    <span>{!isOnline ? 'Modo Offline' : 'Sincronización Pendiente'}: {pendingItems} items</span>
+                    <span>{!isOnline ? 'Offline' : 'Pendiente'}: {pendingItems}</span>
                   </div>
                   {isOnline && pendingItems > 0 && (
                     <button onClick={handleForceSync} disabled={isSyncing} className="bg-white/20 px-2 py-0.5 rounded border border-white/30 flex items-center gap-1">
@@ -245,7 +234,7 @@ function App() {
               <h1 className="font-black text-lg flex items-center gap-2 text-white leading-none">
                 <LayoutDashboard className="w-5 h-5 text-red-500" /> ARIDOS MARRAQUE
               </h1>
-              <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">GMAO & Documentación</span>
+              <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">GMAO & Documentos</span>
             </div>
             
             <div className="flex items-center gap-2">
@@ -254,91 +243,76 @@ function App() {
                       {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
                     </button>
                 ) : (
-                    <button onClick={handleLogout} className="p-2 bg-slate-700 text-slate-300 rounded-lg hover:text-white transition-colors" title="Cerrar Sesión">
+                    <button onClick={handleLogout} className="p-2 bg-slate-700 text-slate-300 rounded-lg hover:text-white transition-colors">
                       <LogOut size={20} />
                     </button>
                 )}
                 {viewState !== ViewState.WORKER_SELECTION && viewState !== ViewState.CP_SELECTION && viewState !== ViewState.CR_SELECTION && viewState !== ViewState.CONTEXT_SELECTION && (
-                   <button onClick={navigateBack} className="text-[10px] font-black uppercase bg-slate-600 px-3 py-2 rounded-lg hover:bg-slate-500 transition-all border border-slate-500">Volver</button>
+                   <button onClick={navigateBack} className="text-[10px] font-black uppercase bg-slate-600 px-3 py-2 rounded-lg border border-slate-500">Volver</button>
                 )}
             </div>
           </div>
           
           {isMenuOpen && isUserAdmin && (
-              <div className="absolute top-full right-0 w-80 bg-white shadow-2xl rounded-bl-3xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30 animate-in slide-in-from-right-5 duration-300">
+              <div className="absolute top-full right-0 w-80 bg-white shadow-2xl rounded-bl-3xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30">
+                  {/* CATEGORÍA: DATOS MAESTROS */}
                   <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('datos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'datos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    <button onClick={() => toggleCategory('datos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'datos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                         <div className="flex items-center gap-3">
                             <DatabaseZap className={`w-5 h-5 ${openCategory === 'datos' ? 'text-blue-400' : 'text-blue-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">INTRODUCIR/MODIFICAR DATOS</span>
+                            <span className="text-xs font-black uppercase tracking-tight">Estructura y Equipos</span>
                         </div>
                         {openCategory === 'datos' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                     {openCategory === 'datos' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Centros de Coste</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_SUBCENTERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Plantas / Subcentros</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Nueva Máquina</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>Editar Máquina</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Users size={14} className="text-blue-400" /> Gestión de Plantilla</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_PROVIDERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Wrench size={14} className="text-blue-400" /> Talleres y Proveedores</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_WORKERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Users size={14} className="text-blue-400" /> Plantilla Personal</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_CENTER)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Factory size={14} className="text-blue-400" /> Centros de Coste</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MANAGE_SUBCENTERS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><LayoutGrid size={14} className="text-blue-400" /> Subcentros / Plantas</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CREATE_MACHINE)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Truck size={14} className="text-blue-400" /> Alta de Maquinaria</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Settings size={14} className="text-blue-400" /> Inventario Técnico</button>
                         </div>
                     )}
                   </div>
 
+                  {/* CATEGORÍA: DOCUMENTACIÓN (NUEVA) */}
                   <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('produccion')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'produccion' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    <button onClick={() => toggleCategory('documentos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'documentos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                         <div className="flex items-center gap-3">
-                            <TrendingUp className={`w-5 h-5 ${openCategory === 'produccion' ? 'text-amber-400' : 'text-amber-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">Producción</span>
+                            <ShieldCheck className={`w-5 h-5 ${openCategory === 'documentos' ? 'text-green-400' : 'text-green-600'}`} />
+                            <span className="text-xs font-black uppercase tracking-tight">GESTIÓN DOCUMENTAL</span>
                         </div>
-                        {openCategory === 'produccion' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        {openCategory === 'documentos' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
-                    {openCategory === 'produccion' && (
+                    {openCategory === 'documentos' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full"></span>Planificación Semanal</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full"></span>Panel Eficiencia IA</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DOCUMENTS)} className="w-full text-left pl-14 py-3 text-xs font-black text-green-700 hover:bg-white flex items-center gap-2"><FileText size={14} /> Documentos y PRL</button>
                         </div>
                     )}
                   </div>
 
+                  {/* RESTO DE CATEGORÍAS */}
                   <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
+                    <button onClick={() => toggleCategory('informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                         <div className="flex items-center gap-3">
                             <SearchCheck className={`w-5 h-5 ${openCategory === 'informes' ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">INFORMES</span>
+                            <span className="text-xs font-black uppercase tracking-tight">INFORMES Y AUDITORÍA</span>
                         </div>
                         {openCategory === 'informes' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                     {openCategory === 'informes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></span>Auditoría Diaria Integral</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><span className="w-1.5 h-1.5 bg-indigo-400 rounded-full"></span>Registros Técnicos</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_FUEL_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Fuel size={14} className="text-indigo-400" /> Informe de Gasoil</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_FLUID_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Droplet size={14} className="text-indigo-400" /> Monitor de Fluidos</button>
-                        </div>
-                    )}
-                  </div>
-
-                  <div className="border-b border-slate-100">
-                    <button onClick={() => toggleCategory('config')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'config' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}>
-                        <div className="flex items-center gap-3">
-                            <Settings className={`w-5 h-5 ${openCategory === 'config' ? 'text-green-400' : 'text-green-600'}`} />
-                            <span className="text-xs font-black uppercase tracking-tight">Configuración</span>
-                        </div>
-                        {openCategory === 'config' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
-                    {openCategory === 'config' && (
-                        <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_WHATSAPP_CONFIG)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><MessageSquare size={14} className="text-green-500" /> Notificaciones WhatsApp</button>
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DIAGNOSTICS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Database size={14} className="text-red-400" /> Diagnóstico DB</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría Diaria</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2">Histórico Maquinaria</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_FUEL_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Fuel size={14} /> Auditoría Gasoil</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_FLUID_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Droplet size={14} /> Monitor de Fluidos</button>
                         </div>
                     )}
                   </div>
                   
                   <div className="p-5 bg-slate-100">
-                    <button onClick={handleLogout} className="text-red-600 text-xs font-black uppercase w-full py-3 bg-white rounded-xl border border-red-100 shadow-sm flex items-center justify-center gap-2 hover:bg-red-50 transition-all">
-                        <LogOut size={16} /> Cerrar Sesión Segura
+                    <button onClick={handleLogout} className="text-red-600 text-xs font-black uppercase w-full py-3 bg-white rounded-xl border border-red-100 shadow-sm flex items-center justify-center gap-2">
+                        <LogOut size={16} /> Salir
                     </button>
                   </div>
               </div>
@@ -350,65 +324,21 @@ function App() {
         <main className="flex-1 p-4 overflow-y-auto">
           {successMsg && (
             <div className="flex flex-col items-center justify-center h-full text-green-600 animate-in zoom-in-95 duration-300 absolute inset-0 bg-white/95 z-50">
-              <div className="bg-green-100 p-6 rounded-full mb-6 shadow-inner">
-                <CheckCircle2 className="w-20 h-20" />
-              </div>
-              <h2 className="text-2xl font-black text-center px-10 tracking-tight leading-tight">{successMsg}</h2>
+              <CheckCircle2 className="w-20 h-20 mb-6" />
+              <h2 className="text-2xl font-black text-center px-10">{successMsg}</h2>
             </div>
           )}
 
-            {viewState === ViewState.WORKER_SELECTION && currentUser && (
-              <WorkerSelection 
-                workerName={currentUser.name} 
-                onSelectMachines={() => setViewState(ViewState.CONTEXT_SELECTION)} 
-                onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} 
-                onLogout={handleLogout} 
-              />
-            )}
-            {viewState === ViewState.CP_SELECTION && currentUser && (
-              <CPSelection 
-                workerName={currentUser.name} 
-                onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)} 
-                onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)} 
-                onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} 
-                onLogout={handleLogout} 
-              />
-            )}
-            {viewState === ViewState.CR_SELECTION && currentUser && (
-              <CRSelection 
-                workerName={currentUser.name} 
-                onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)} 
-                onSelectProduction={() => setViewState(ViewState.CR_DAILY_REPORT)} 
-                onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} 
-                onLogout={handleLogout} 
-              />
-            )}
+            {viewState === ViewState.WORKER_SELECTION && currentUser && <WorkerSelection workerName={currentUser.name} onSelectMachines={() => setViewState(ViewState.CONTEXT_SELECTION)} onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} onLogout={handleLogout} />}
+            {viewState === ViewState.CP_SELECTION && currentUser && <CPSelection workerName={currentUser.name} onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)} onSelectProduction={() => setViewState(ViewState.CP_DAILY_REPORT)} onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} onLogout={handleLogout} />}
+            {viewState === ViewState.CR_SELECTION && currentUser && <CRSelection workerName={currentUser.name} onSelectMaintenance={() => setViewState(ViewState.CONTEXT_SELECTION)} onSelectProduction={() => setViewState(ViewState.CR_DAILY_REPORT)} onSelectPersonalReport={() => setViewState(ViewState.PERSONAL_REPORT)} onLogout={handleLogout} />}
             
-            {viewState === ViewState.PERSONAL_REPORT && currentUser && (
-              <PersonalReportForm workerId={currentUser.id} onBack={navigateBack} onSubmit={handlePersonalReportSubmit} />
-            )}
-            {viewState === ViewState.CP_DAILY_REPORT && currentUser && (
-              <DailyReportForm workerId={currentUser.id} onBack={() => setViewState(ViewState.CP_SELECTION)} onSubmit={handleCPReportSubmit} />
-            )}
-            {viewState === ViewState.CR_DAILY_REPORT && currentUser && (
-              <DailyReportFormCR workerId={currentUser.id} onBack={() => setViewState(ViewState.CR_SELECTION)} onSubmit={handleCRReportSubmit} />
-            )}
+            {viewState === ViewState.PERSONAL_REPORT && currentUser && <PersonalReportForm workerId={currentUser.id} onBack={navigateBack} onSubmit={handlePersonalReportSubmit} />}
+            {viewState === ViewState.CP_DAILY_REPORT && currentUser && <DailyReportForm workerId={currentUser.id} onBack={() => setViewState(ViewState.CP_SELECTION)} onSubmit={handleCPReportSubmit} />}
+            {viewState === ViewState.CR_DAILY_REPORT && currentUser && <DailyReportFormCR workerId={currentUser.id} onBack={() => setViewState(ViewState.CR_SELECTION)} onSubmit={handleCRReportSubmit} />}
 
-            {viewState === ViewState.CONTEXT_SELECTION && (
-              <MachineSelector 
-                selectedDate={selectedDate} 
-                onChangeDate={setSelectedDate} 
-                onSelect={handleContextSelect} 
-              />
-            )}
-            
-            {viewState === ViewState.ACTION_MENU && selectedContext && (
-              <MainMenu 
-                machineName={selectedContext.machine.name} 
-                onSelect={handleActionSelect} 
-                onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} 
-              />
-            )}
+            {viewState === ViewState.CONTEXT_SELECTION && <MachineSelector selectedDate={selectedDate} onChangeDate={setSelectedDate} onSelect={handleContextSelect} />}
+            {viewState === ViewState.ACTION_MENU && selectedContext && <MainMenu machineName={selectedContext.machine.name} onSelect={handleActionSelect} onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
 
             {viewState === ViewState.FORM && selectedContext && selectedAction && (
               <div className="animate-in slide-in-from-right duration-500">
@@ -418,65 +348,29 @@ function App() {
                 {selectedAction === 'SCHEDULED' && <ScheduledMaintenanceForm machine={selectedContext.machine} onSubmit={handleFormSubmit} onCancel={() => setViewState(ViewState.ACTION_MENU)}/>}
                 {selectedAction === 'REFUELING' && (
                   <div className="bg-white p-8 rounded-3xl shadow-xl text-center border border-slate-100">
-                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                      <Fuel size={32} />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-800 mb-6 uppercase tracking-tighter">Suministro Combustible</h3>
-                    <form onSubmit={(e) => { 
-                        e.preventDefault(); 
-                        if (isSavingRefueling) return;
-                        const formData = new FormData(e.currentTarget);
-                        handleFormSubmit({ 
-                          hoursAtExecution: Number(formData.get('hours')), 
-                          fuelLitres: Number(formData.get('litres')) 
-                        }); 
-                    }} className="space-y-5 text-left">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Horas / Kms Marcador</label>
-                        <input name="hours" type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-xl font-black text-lg focus:border-green-500 transition-colors" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Litros Repostados</label>
-                        <input name="litres" type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-xl font-black text-lg focus:border-green-500 transition-colors" placeholder="0.0" required />
-                      </div>
-                      <button 
-                        disabled={isSavingRefueling}
-                        className="bg-slate-900 text-white w-full py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
-                      >
-                        {isSavingRefueling ? <Loader2 className="animate-spin" size={20}/> : 'Guardar Registro'}
-                      </button>
-                      <button type="button" disabled={isSavingRefueling} onClick={() => setViewState(ViewState.ACTION_MENU)} className="w-full text-slate-400 py-2 text-xs font-bold uppercase tracking-widest">Cancelar</button>
+                    <Fuel size={32} className="text-green-600 mx-auto mb-4" />
+                    <h3 className="text-xl font-black text-slate-800 mb-6 uppercase">Repostaje</h3>
+                    <form onSubmit={(e) => { e.preventDefault(); const formData = new FormData(e.currentTarget); handleFormSubmit({ hoursAtExecution: Number(formData.get('hours')), fuelLitres: Number(formData.get('litres')) }); }} className="space-y-5 text-left">
+                      <input name="hours" type="number" step="0.01" className="w-full border-2 p-4 rounded-xl font-black" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
+                      <input name="litres" type="number" step="0.1" className="w-full border-2 p-4 rounded-xl font-black" placeholder="Litros" required />
+                      <button disabled={isSavingRefueling} className="bg-slate-900 text-white w-full py-4 rounded-2xl font-black uppercase">{isSavingRefueling ? <Loader2 className="animate-spin inline" /> : 'Guardar'}</button>
                     </form>
                   </div>
                 )}
               </div>
             )}
 
-            {viewState === ViewState.ADMIN_SELECT_MACHINE_TO_EDIT && (
-              <div className="space-y-4">
-                <div className="bg-blue-600 p-4 rounded-2xl text-white shadow-lg flex items-center gap-3">
-                  <div className="bg-white/20 p-2 rounded-lg"><Truck size={20}/></div>
-                  <p className="font-black text-sm uppercase tracking-tight">Gestión de Inventario: Seleccione Unidad</p>
-                </div>
-                <MachineSelector selectedDate={new Date()} onChangeDate={() => {}} onSelect={handleEditSelection} showInactive={true} />
-              </div>
-            )}
-            
-            {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada correctamente')}/>}
+            {viewState === ViewState.ADMIN_DOCUMENTS && <DocumentManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Cantera creada')}/>}
             {viewState === ViewState.ADMIN_MANAGE_SUBCENTERS && <SubCenterManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_CREATE_MACHINE && <CreateMachineForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => handleAdminSuccess('Máquina dada de alta')}/>}
             {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => handleAdminSuccess('Ficha actualizada')}/>}
-            {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
-            {viewState === ViewState.ADMIN_PRODUCTION_DASHBOARD && <ProductionDashboard onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
-            {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FUEL_REPORT && <FuelReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FLUID_REPORT && <FluidReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
-            {viewState === ViewState.ADMIN_WHATSAPP_CONFIG && <WhatsAppConfig onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
-
         </main>
       </div>
     );
