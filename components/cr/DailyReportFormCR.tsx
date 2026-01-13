@@ -33,8 +33,8 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
         try {
             const lastReport = await getLastCRReport();
             if (lastReport) {
-                setWashingStart(lastReport.washingEnd);
-                setTriturationStart(lastReport.triturationEnd);
+                setWashingStart(Number(lastReport.washingEnd || 0));
+                setTriturationStart(Number(lastReport.triturationEnd || 0));
             }
         } catch (e) {
             console.error(e);
@@ -108,7 +108,7 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Inicio (Anterior)</label>
                             <div className="p-3 bg-slate-100 rounded-lg text-slate-600 font-mono font-semibold border border-slate-200">
-                                {washingStart.toFixed(2)}
+                                {(washingStart || 0).toFixed(2)}
                             </div>
                         </div>
                         <div>
@@ -136,7 +136,7 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Inicio (Anterior)</label>
                             <div className="p-3 bg-slate-100 rounded-lg text-slate-600 font-mono font-semibold border border-slate-200">
-                                {triturationStart.toFixed(2)}
+                                {(triturationStart || 0).toFixed(2)}
                             </div>
                         </div>
                         <div>
