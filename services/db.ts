@@ -124,7 +124,7 @@ const mapMachine = (m: any): Machine => {
         }),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.active !== undefined ? m.active : true,
+        active: m.activo !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -267,8 +267,11 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.name !== undefined) p.nombre = updates.name;
     if (updates.companyCode !== undefined) p.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) p.centro_id = updates.costCenterId;
-    if (updates.subCenterId !== undefined) p.subcentro_id = updates.subCenterId;
-    if (updates.responsibleWorkerId !== undefined) p.responsible_id = updates.responsibleWorkerId;
+    
+    // Para IDs que pueden ser nulos, usamos el helper cleanUuid para asegurar envío de null si están vacíos
+    if (updates.subCenterId !== undefined) p.subcentro_id = cleanUuid(updates.subCenterId);
+    if (updates.responsibleWorkerId !== undefined) p.responsable_id = cleanUuid(updates.responsibleWorkerId);
+    
     if (updates.currentHours !== undefined) p.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) p.requiere_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
@@ -276,6 +279,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
     if (updates.active !== undefined) p.activo = updates.active;
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
+    
     const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
     if (error) throw error;
 };
