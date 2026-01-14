@@ -31,6 +31,12 @@ export interface FuelConsumptionStat {
     logsCount: number;
 }
 
+// Helper local para formatear fecha sin desfase UTC
+const toSafeDateString = (date: Date): string => {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export const formatDecimal = (num: number, decimals: number = 3): string => {
     if (num === null || num === undefined) return '0,000';
     return num.toFixed(decimals).replace('.', ',');
@@ -140,19 +146,18 @@ export const getMachineFluidStats = async (machineId: string) => {
     };
 };
 
-const getMondayISOString = (dateInput: Date | string): string => {
+const getMondaySafeString = (dateInput: Date): string => {
     const d = new Date(dateInput);
-    d.setHours(12, 0, 0, 0);
+    d.setHours(12, 0, 0, 0); // Normalizar a mediodía local
     const day = d.getDay(); 
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
-    return monday.toISOString().split('T')[0];
+    return toSafeDateString(monday);
 };
 
-const getPlannedHoursForDay = (dateInput: Date | string, plan: CPWeeklyPlan | null): number => {
-    if (!plan) return 9; 
-    const d = new Date(dateInput);
-    const dayOfWeek = d.getDay(); 
+const getPlannedHoursForDay = (dateInput: Date, plan: CPWeeklyPlan | null): number => {
+    if (!plan) return 9; // Fallback si no hay planificación cargada
+    const dayOfWeek = dateInput.getDay(); 
     switch (dayOfWeek) {
         case 1: return plan.hoursMon;
         case 2: return plan.hoursTue;
@@ -163,45 +168,51 @@ const getPlannedHoursForDay = (dateInput: Date | string, plan: CPWeeklyPlan | nu
     }
 };
 
-// Helper para obtener el mismo día relativo en el pasado
 const getPastDateProportional = (original: Date, monthsOffset: number = 0, yearsOffset: number = 0): Date => {
     const d = new Date(original);
     if (monthsOffset !== 0) d.setMonth(d.getMonth() + monthsOffset);
     if (yearsOffset !== 0) d.setFullYear(d.getFullYear() + yearsOffset);
-    // Si al mover el mes caemos en un día inexistente (31 de marzo -> 31 de feb), 
-    // JS lo mueve a marzo. Lo limitamos al último día del mes deseado.
     if (d.getDate() !== original.getDate() && monthsOffset !== 0) {
         d.setDate(0); 
     }
+    d.setHours(12, 0, 0, 0);
     return d;
 };
 
 export const getPerformanceDashboardStats = async (baseDate: Date = new Date()): Promise<PerformanceDashboardData> => {
+    // Normalizamos la fecha base a mediodía local
     const today = new Date(baseDate);
     today.setHours(12, 0, 0, 0);
 
     // --- CÁLCULOS DE RANGOS PROPORCIONALES (TO-DATE) ---
     
-    // 1. Diario (Ayer es un periodo completo de 1 día, no proporcional)
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    // 1. Diario
+    const yesterday = new Date(today); 
+    yesterday.setDate(today.getDate() - 1);
+    yesterday.setHours(12, 0, 0, 0);
 
-    // 2. Semanal Proporcional (Lunes a hoy vs Lunes anterior a mismo día anterior)
+    // 2. Semanal (Lunes a Hoy vs Lunes anterior a Hace 7 días)
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
-    const startOfPrevWeek = new Date(startOfWeek); startOfPrevWeek.setDate(startOfWeek.getDate() - 7);
-    const prevWeekSameDay = new Date(today); prevWeekSameDay.setDate(today.getDate() - 7);
+    startOfWeek.setHours(12, 0, 0, 0);
 
-    // 3. Mensual Proporcional (Día 1 a hoy vs Día 1 anterior a mismo día anterior)
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const startOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const startOfPrevWeek = new Date(startOfWeek); 
+    startOfPrevWeek.setDate(startOfWeek.getDate() - 7);
+    
+    const prevWeekSameDay = new Date(today); 
+    prevWeekSameDay.setDate(today.getDate() - 7);
+
+    // 3. Mensual (Día 1 a Hoy vs Día 1 anterior a mismo día relativo)
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0);
+    const startOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1, 12, 0, 0);
     const prevMonthSameDay = getPastDateProportional(today, -1);
 
-    // 4. Anual Proporcional (Ene 1 a hoy vs Ene 1 anterior a mismo día anterior)
-    const startOfYear = new Date(today.getFullYear(), 0, 1);
-    const startOfPrevYear = new Date(today.getFullYear() - 1, 0, 1);
+    // 4. Anual (Ene 1 a Hoy vs Ene 1 anterior a mismo día relativo)
+    const startOfYear = new Date(today.getFullYear(), 0, 1, 12, 0, 0);
+    const startOfPrevYear = new Date(today.getFullYear() - 1, 0, 1, 12, 0, 0);
     const prevYearSameDay = getPastDateProportional(today, 0, -1);
 
-    // --- OBTENCIÓN DE DATOS EN PARALELO ---
+    // --- OBTENCIÓN DE DATOS ---
     const [
         dCurr, dPrev, 
         wCurr, wPrev, 
@@ -210,12 +221,12 @@ export const getPerformanceDashboardStats = async (baseDate: Date = new Date()):
     ] = await Promise.all([
         calculatePeriodStats(today, today, "Hoy"),
         calculatePeriodStats(yesterday, yesterday, "Ayer"),
-        calculatePeriodStats(startOfWeek, today, "Esta Semana"),
-        calculatePeriodStats(startOfPrevWeek, prevWeekSameDay, "Sem. Anterior"),
+        calculatePeriodStats(startOfWeek, today, "Esta Sem."),
+        calculatePeriodStats(startOfPrevWeek, prevWeekSameDay, "Sem. Ant."),
         calculatePeriodStats(startOfMonth, today, "Este Mes"),
-        calculatePeriodStats(startOfPrevMonth, prevMonthSameDay, "Mes Anterior"),
+        calculatePeriodStats(startOfPrevMonth, prevMonthSameDay, "Mes Ant."),
         calculatePeriodStats(startOfYear, today, "Este Año"),
-        calculatePeriodStats(startOfPrevYear, prevYearSameDay, "Año Anterior")
+        calculatePeriodStats(startOfPrevYear, prevYearSameDay, "Año Ant.")
     ]);
 
     return {
@@ -227,22 +238,31 @@ export const getPerformanceDashboardStats = async (baseDate: Date = new Date()):
 };
 
 const calculatePeriodStats = async (start: Date, end: Date, label: string): Promise<ProductionStat> => {
+    // IMPORTANTE: Los reportes se buscan por el rango exacto de fechas (YYYY-MM-DD)
     const reports = await getCPReportsByRange(start, end);
     let totalActual = 0;
     let totalPlanned = 0;
     const planCache = new Map<string, CPWeeklyPlan | null>();
 
-    const current = new Date(start);
-    while (current <= end) {
-        const mondayStr = getMondayISOString(current);
+    // Bucle día a día para sumar planificación proporcional
+    const currentLoop = new Date(start);
+    currentLoop.setHours(12, 0, 0, 0);
+    
+    const endLoop = new Date(end);
+    endLoop.setHours(12, 0, 0, 0);
+
+    while (currentLoop <= endLoop) {
+        const mondayStr = getMondaySafeString(currentLoop);
         if (!planCache.has(mondayStr)) {
             const plan = await getCPWeeklyPlan(mondayStr);
             planCache.set(mondayStr, plan);
         }
-        totalPlanned += getPlannedHoursForDay(current, planCache.get(mondayStr) || null);
-        current.setDate(current.getDate() + 1);
+        
+        totalPlanned += getPlannedHoursForDay(currentLoop, planCache.get(mondayStr) || null);
+        currentLoop.setDate(currentLoop.getDate() + 1);
     }
 
+    // Sumamos producción real (Molinos) de los partes en el rango
     reports.forEach(r => {
         totalActual += (r.millsEnd - r.millsStart);
     });
