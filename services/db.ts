@@ -256,7 +256,7 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         centro_id: m.costCenterId, subcentro_id: m.subCenterId, nombre: m.name, codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours, requiere_horas: m.requiresHours, gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses, es_parte_trabajo: m.selectableForReports, responsable_id: m.responsibleWorkerId,
-        activo: m.active, vinculada_produccion: m.vinculadaProduccion
+        activo: m.active, vinculada_produccion: m.vinculada_produccion
     }).select().single();
     if (error) throw error;
     return mapMachine(data);
@@ -473,8 +473,8 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
         washingStart: Number(data.lavado_inicio || 0),
         washingEnd: Number(data.lavado_fin || 0), 
-        triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituracion_fin || 0), 
+        triturationStart: Number(data.trituration_inicio || 0), 
+        triturationEnd: Number(data.trituration_fin || 0), 
         comments: data.comentarios
     };
 };
@@ -485,8 +485,9 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        // Fix typo: triturationStart instead of trituracionStart
+        triturationStart: Number(r.trituration_inicio || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios
     }));
 };
@@ -497,8 +498,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituracion_inicio: r.triturationStart, 
-        trituracion_fin: r.triturationEnd, 
+        trituration_inicio: r.triturationStart, 
+        trituration_fin: r.triturationEnd, 
         comentarios: r.comments
     });
     if (error) throw error;
@@ -554,6 +555,12 @@ export const updatePersonalReport = async (id: string, r: Partial<PersonalReport
     if (r.costCenterId) p.centro_id = r.costCenterId;
     if (r.description !== undefined) p.comentarios = r.description;
     const { error } = await supabase.from('partes_trabajo').update(p).eq('id', id);
+    if (error) throw error;
+};
+
+export const deletePersonalReport = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('partes_trabajo').delete().eq('id', id);
     if (error) throw error;
 };
 
