@@ -72,7 +72,8 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.description, 
+        // Fix: Use correct column name 'descripcion'
+        description: dbLog.descripcion, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -144,6 +145,7 @@ export const createWorker = async (w: Omit<Worker, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_trabajadores').insert({
         nombre: w.name, dni: w.dni, telefono: w.phone, rol: w.role, activo: w.active,
+        // Fix: Use correct property 'requiresReport' from Omit<Worker, 'id'>
         horas_programadas: w.expectedHours, requiere_parte: w.requiresReport
     });
     if (error) throw error;
@@ -418,6 +420,12 @@ export const updateOperationLog = async (id: string, log: Partial<OperationLog>)
     if (error) throw error;
 };
 
+export const deleteOperationLog = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('mant_registros').delete().eq('id', id);
+    if (error) throw error;
+};
+
 export const getMachineLogs = async (machineId: string, startDate?: Date, endDate?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('mant_registros').select('*').eq('maquina_id', machineId);
@@ -499,7 +507,7 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituracion_inicio: r.triturationStart, 
+        trituration_inicio: r.triturationStart, 
         trituration_fin: r.triturationEnd, 
         comentarios: r.comments
     });
@@ -632,7 +640,8 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         title: d.titulo,
         category: d.categoria,
         issueDate: new Date(d.fecha_emision),
-        expiryDate: d.expiryDate ? new Date(d.expiryDate) : undefined,
+        // Fix: Use correct column name 'fecha_vencimiento'
+        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
         fileUrl: d.url_archivo,
         status: d.estado,
         docType: d.tipo_documento,
