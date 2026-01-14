@@ -9,14 +9,15 @@ import {
     getCPReportsByRange, 
     getCRReportsByRange,
     updateOperationLog,
-    updatePersonalReport
+    updatePersonalReport,
+    deletePersonalReport
 } from '../../services/db';
 import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvider, CPDailyReport, CRDailyReport } from '../../types';
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, 
     Mountain, Waves, Droplets, Factory, Edit2, Save, X, UserX, Clock,
-    CheckCircle2
+    CheckCircle2, Trash2
 } from 'lucide-react';
 
 interface Props {
@@ -65,12 +66,10 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     }, []);
 
     // Función de carga de datos de auditoría
-    // NOTA: Eliminamos 'loading' de las dependencias para evitar el bucle infinito
     const fetchAudit = useCallback(async () => {
         setLoading(true);
         try {
             const selectedDate = new Date(date);
-            // Validamos que la fecha sea correcta antes de disparar promesas
             if (isNaN(selectedDate.getTime())) return;
 
             const [data, cpData, crData] = await Promise.all([
@@ -88,10 +87,9 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         } catch (e) {
             console.error("Error en fetchAudit:", e);
         } finally {
-            // Aseguramos que el loading se apague SIEMPRE
             setLoading(false);
         }
-    }, [date]); // Solo depende de la fecha
+    }, [date]); 
 
     // Disparar carga cuando cambie la fecha o al montar el componente
     useEffect(() => {
@@ -145,6 +143,20 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             fetchAudit();
         } catch (e) { alert("Error al guardar"); }
         finally { setSavingEdit(false); }
+    };
+
+    const handleDeletePersonal = async (id: string) => {
+        if (!confirm("¿Está seguro de eliminar este parte de trabajo personal de forma permanente?")) return;
+        setSavingEdit(true);
+        try {
+            await deletePersonalReport(id);
+            setEditingPersonal(null);
+            fetchAudit();
+        } catch (e) {
+            alert("Error al eliminar el registro.");
+        } finally {
+            setSavingEdit(false);
+        }
     };
 
     const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
@@ -410,13 +422,19 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                                     <Truck size={10} className="text-green-500"/> {p.machineName || 'General'}
                                                                 </p>
                                                             </div>
-                                                            <div className="flex items-center gap-3">
+                                                            <div className="flex items-center gap-1">
                                                                 <span className="font-mono font-bold text-xs bg-slate-100 px-2 py-0.5 rounded border">{p.hours}h</span>
                                                                 <button 
                                                                     onClick={() => setEditingPersonal(p)}
                                                                     className="p-1 text-slate-300 hover:text-blue-600 transition-colors"
                                                                 >
-                                                                    <Edit2 size={12} />
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleDeletePersonal(p.id)}
+                                                                    className="p-1 text-slate-200 hover:text-red-500 transition-colors"
+                                                                >
+                                                                    <Trash2 size={14} />
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -577,6 +595,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 />
                             </div>
                             <div className="flex gap-2 pt-4">
+                                <button 
+                                    type="button" 
+                                    onClick={() => handleDeletePersonal(editingPersonal.id)}
+                                    className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all border border-red-100"
+                                    title="Eliminar Registro"
+                                >
+                                    <Trash2 size={20}/>
+                                </button>
                                 <button type="button" onClick={() => setEditingPersonal(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
                                 <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
                                     {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
