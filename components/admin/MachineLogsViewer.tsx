@@ -157,6 +157,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                     <div className="text-sm">
                          <div className="font-bold text-purple-700 uppercase text-[10px] mb-1">Mantenimiento Programado Realizado</div>
                          <div className="text-slate-800 font-bold">{log.description || 'Definición de sistema'}</div>
+                         {log.materials && <div className="text-xs text-slate-500 mt-2 bg-slate-50 p-2 rounded italic">Materiales: {log.materials}</div>}
                     </div>
                 );
             case 'REFUELING':
@@ -357,7 +358,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* MODAL DE EDICIÓN (Reusado de Auditoría para consistencia) */}
+            {/* MODAL DE EDICIÓN */}
             {editingLog && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100">
@@ -423,10 +424,16 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                             )}
 
                             {(editingLog.type === 'MAINTENANCE' || editingLog.type === 'SCHEDULED') && (
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Notas</label>
-                                    <textarea rows={3} value={editingLog.description || ''} onChange={e => setEditingLog({...editingLog, description: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
-                                </div>
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Notas</label>
+                                        <textarea rows={3} value={editingLog.description || ''} onChange={e => setEditingLog({...editingLog, description: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-amber-600 uppercase mb-1 tracking-widest">Materiales y Repuestos</label>
+                                        <textarea rows={3} value={editingLog.materials || ''} onChange={e => setEditingLog({...editingLog, materials: e.target.value})} className="w-full p-3 border border-amber-100 rounded-xl text-sm bg-amber-50/30" placeholder="Filtros, aceites, correas..." />
+                                    </div>
+                                </>
                             )}
 
                             <div className="flex gap-2 pt-4">
