@@ -485,8 +485,8 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0), 
-        triturationStart: Number(r.trituration_inicio || 0), 
-        triturationEnd: Number(r.trituration_fin || 0), 
+        triturationStart: Number(r.trituracion_inicio || 0), 
+        triturationEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios
     }));
 };
@@ -497,8 +497,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituration_inicio: r.triturationStart, 
-        trituration_fin: r.triturationEnd, 
+        trituracion_inicio: r.triturationStart, 
+        trituracion_fin: r.triturationEnd, 
         comentarios: r.comments
     });
     if (error) throw error;
@@ -636,7 +636,7 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         fileUrl: d.url_archivo,
         status: d.estado,
         docType: d.tipo_documento,
-        notes: d.notas
+        notes: d.notes
     }));
 };
 
