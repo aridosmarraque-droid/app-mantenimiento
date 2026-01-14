@@ -423,6 +423,7 @@ export const updateOperationLog = async (id: string, log: Partial<OperationLog>)
     if (log.breakdownSolution !== undefined) p.solucion_averia = log.breakdownSolution;
     if (log.fuelLitres !== undefined) p.litros_combustible = log.fuelLitres;
     if (log.description !== undefined) p.descripcion = log.description;
+    if (log.materials !== undefined) p.materiales = log.materials;
     const { error } = await supabase.from('mant_registros').update(p).eq('id', id);
     if (error) throw error;
 };
