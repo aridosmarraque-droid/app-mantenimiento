@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getAllMachines, getMachineLogs, getWorkers, getServiceProviders, getCostCenters, getSubCentersByCenter } from '../../services/db';
+import { getAllMachines, getMachineLogs, getWorkers, getServiceProviders, getCostCenters, getSubCentersByCenter, updateOperationLog, deleteOperationLog } from '../../services/db';
 import { Machine, OperationLog, OperationType, Worker, ServiceProvider, CostCenter, SubCenter } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info, LayoutGrid, Edit2, Trash2, X, Save, AlertCircle } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -29,10 +29,14 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
     const [hasSearched, setHasSearched] = useState(false);
     const searchIdRef = useRef(0);
 
+    // Edit Modal State
+    const [editingLog, setEditingLog] = useState<OperationLog | null>(null);
+    const [savingEdit, setSavingEdit] = useState(false);
+
     useEffect(() => {
         getCostCenters().then(setCenters);
         getAllMachines().then(setMachines);
-        getWorkers().then(setWorkers);
+        getWorkers(false).then(setWorkers);
         getServiceProviders().then(setProviders);
     }, []);
 
@@ -61,7 +65,6 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
         const currentSearchId = ++searchIdRef.current;
         setLoading(true);
         setHasSearched(true);
-        setLogs([]); // Limpieza inmediata de UI
         
         try {
             const start = startDate ? new Date(startDate) : undefined;
@@ -70,7 +73,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
             
             if (currentSearchId !== searchIdRef.current) return; 
 
-            // Se elimina el filtrado por ID para mostrar exactamente lo que devuelve la DB
+            // Fidelidad total: se muestra exactamente lo devuelto por DB
             setLogs(data || []);
         } catch (error) {
             console.error("Error al buscar logs:", error);
@@ -78,6 +81,34 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
             if (currentSearchId === searchIdRef.current) {
                 setLoading(false);
             }
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("¿Está seguro de eliminar este registro de la base de datos de forma permanente?")) return;
+        try {
+            setLoading(true);
+            await deleteOperationLog(id);
+            await handleSearch(); // Recargar tras borrar
+        } catch (e) {
+            alert("Error al borrar registro.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSaveEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingLog) return;
+        setSavingEdit(true);
+        try {
+            await updateOperationLog(editingLog.id, editingLog);
+            setEditingLog(null);
+            await handleSearch(); // Recargar tras editar
+        } catch (e) {
+            alert("Error al actualizar registro.");
+        } finally {
+            setSavingEdit(false);
         }
     };
 
@@ -147,7 +178,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
     };
 
     return (
-        <div className="space-y-4 pb-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="space-y-4 pb-10 animate-in fade-in slide-in-from-bottom-2 duration-500 relative">
              <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                     <ArrowLeft className="w-6 h-6" />
@@ -287,7 +318,15 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                                 const conf = typeConfig[log.type] || { label: 'Otro', icon: FileText, color: 'text-slate-500 bg-slate-50 border-slate-100' };
                                 const Icon = conf.icon;
                                 return (
-                                    <div key={log.id} className="flex gap-4 p-5 border-2 border-slate-50 rounded-2xl hover:border-blue-100 transition-all shadow-sm">
+                                    <div key={log.id} className="flex gap-4 p-5 border-2 border-slate-50 rounded-2xl hover:border-blue-100 transition-all shadow-sm group relative">
+                                        <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => setEditingLog(log)} className="p-2 bg-white text-blue-600 rounded-lg shadow border border-blue-50 hover:bg-blue-50" title="Editar">
+                                                <Edit2 size={16} />
+                                            </button>
+                                            <button onClick={() => handleDelete(log.id)} className="p-2 bg-white text-red-600 rounded-lg shadow border border-red-50 hover:bg-red-50" title="Borrar">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-sm ${conf.color}`}>
                                             <Icon size={28} />
                                         </div>
@@ -315,6 +354,89 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                             })}
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* MODAL DE EDICIÓN (Reusado de Auditoría para consistencia) */}
+            {editingLog && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100">
+                        <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+                            <h4 className="font-bold flex items-center gap-2"><Wrench size={18}/> Editar Registro Técnico</h4>
+                            <button onClick={() => setEditingLog(null)}><X size={20}/></button>
+                        </div>
+                        <form onSubmit={handleSaveEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha Registro</label>
+                                <input 
+                                    type="date" 
+                                    value={new Date(editingLog.date).toISOString().split('T')[0]}
+                                    onChange={e => setEditingLog({...editingLog, date: new Date(e.target.value)})}
+                                    className="w-full p-3 border rounded-xl font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Registro</label>
+                                <input 
+                                    type="number" step="0.01" 
+                                    value={editingLog.hoursAtExecution}
+                                    onChange={e => setEditingLog({...editingLog, hoursAtExecution: Number(e.target.value)})}
+                                    className="w-full p-3 border rounded-xl font-bold"
+                                />
+                            </div>
+
+                            {editingLog.type === 'LEVELS' && (
+                                <div className="grid grid-cols-1 gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Aceite Motor (L)</label>
+                                        <input type="number" step="0.1" value={editingLog.motorOil ?? ''} onChange={e => setEditingLog({...editingLog, motorOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Aceite Hidráulico (L)</label>
+                                        <input type="number" step="0.1" value={editingLog.hydraulicOil ?? ''} onChange={e => setEditingLog({...editingLog, hydraulicOil: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-blue-400 uppercase mb-1">Refrigerante (L)</label>
+                                        <input type="number" step="0.1" value={editingLog.coolant ?? ''} onChange={e => setEditingLog({...editingLog, coolant: Number(e.target.value)})} className="w-full p-2 border rounded-lg bg-white" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {editingLog.type === 'REFUELING' && (
+                                <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+                                    <label className="block text-[10px] font-black text-green-600 uppercase mb-1">Litros Repostados</label>
+                                    <input type="number" step="0.1" value={editingLog.fuelLitres ?? ''} onChange={e => setEditingLog({...editingLog, fuelLitres: Number(e.target.value)})} className="w-full p-3 border rounded-lg bg-white font-bold text-lg" />
+                                </div>
+                            )}
+
+                            {editingLog.type === 'BREAKDOWN' && (
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Causa de la Avería</label>
+                                        <textarea rows={2} value={editingLog.breakdownCause || ''} onChange={e => setEditingLog({...editingLog, breakdownCause: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Solución Adoptada</label>
+                                        <textarea rows={2} value={editingLog.breakdownSolution || ''} onChange={e => setEditingLog({...editingLog, breakdownSolution: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                </>
+                            )}
+
+                            {(editingLog.type === 'MAINTENANCE' || editingLog.type === 'SCHEDULED') && (
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Notas</label>
+                                    <textarea rows={3} value={editingLog.description || ''} onChange={e => setEditingLog({...editingLog, description: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 pt-4">
+                                <button type="button" onClick={() => setEditingLog(null)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl">Cancelar</button>
+                                <button type="submit" disabled={savingEdit} className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl flex items-center justify-center gap-2">
+                                    {savingEdit ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
         </div>
