@@ -21,17 +21,21 @@ import {
 
 // --- HELPERS ---
 
-const toLocalDateString = (date: Date): string => {
-    if (!date || isNaN(date.getTime())) {
+const toLocalDateString = (date: Date | string): string => {
+    if (!date) {
+        throw new Error("Fecha no proporcionada.");
+    }
+    const d = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(d.getTime())) {
         throw new Error("Fecha inválida proporcionada al sistema.");
     }
-    const d = new Date(date);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const cleanUuid = (id: any): string | null => {
     if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
-    return id.trim().length > 0 ? id.trim() : null;
+    const cleaned = id.trim();
+    return cleaned.length > 0 ? cleaned : null;
 };
 
 const cleanNum = (val: any): number | null => {
@@ -340,27 +344,14 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     
     if (!log.date) throw new Error("Faltan datos críticos: Fecha obligatoria.");
     const dateStr = toLocalDateString(log.date);
-    if (!dateStr || dateStr === '1970-01-01') throw new Error("Fecha del registro inválida.");
-
     const trabajadorId = cleanUuid(log.workerId);
     const maquinaId = cleanUuid(log.machineId);
+    
     if (!trabajadorId || !maquinaId) throw new Error("IDs de trabajador o máquina inválidos.");
 
     const h = cleanNum(log.hoursAtExecution) || 0;
-    const { data: existing } = await supabase
-        .from('mant_registros')
-        .select('id')
-        .eq('maquina_id', maquinaId)
-        .eq('fecha', dateStr)
-        .eq('horas_registro', h)
-        .eq('tipo_operacion', log.type)
-        .limit(1);
 
-    if (existing && existing.length > 0) {
-        const { data: fullRecord } = await supabase.from('mant_registros').select('*').eq('id', existing[0].id).single();
-        return mapLogFromDb(fullRecord);
-    }
-
+    // Payload de inserción
     const payload = {
         fecha: dateStr,
         trabajador_id: trabajadorId,
@@ -380,13 +371,39 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         mantenimiento_def_id: cleanUuid(log.maintenanceDefId)
     };
 
+    console.log("[DB] Intentando insertar registro:", payload);
+
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
-    if (error) throw error;
     
-    if (h > 0) {
-        await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
+    if (error) {
+        console.error("[DB] Error de inserción en mant_registros:", error);
+        // Si el error es de duplicado (23505), intentamos recuperar el existente en lugar de fallar
+        if (error.code === '23505') {
+             const { data: existing } = await supabase
+                .from('mant_registros')
+                .select('*')
+                .eq('maquina_id', maquinaId)
+                .eq('fecha', dateStr)
+                .eq('horas_registro', h)
+                .eq('tipo_operacion', log.type)
+                .maybeSingle();
+             if (existing) return mapLogFromDb(existing);
+        }
+        throw new Error(`Error en base de datos: ${error.message}`);
     }
     
+    // Actualizar horas de la máquina si las nuevas son superiores
+    if (h > 0) {
+        const { error: hError } = await supabase
+            .from('mant_maquinas')
+            .update({ horas_actuales: h })
+            .eq('id', maquinaId)
+            .lt('horas_actuales', h);
+            
+        if (hError) console.warn("[DB] Error actualizando horas máquina:", hError);
+    }
+    
+    // Comprobar notificaciones de mantenimiento
     const { data: machineData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', maquinaId).single();
     if (machineData) {
         await checkMaintenanceThresholds(mapMachine(machineData), h);
@@ -485,7 +502,6 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0), 
-        // Fix typo: triturationStart instead of trituracionStart
         triturationStart: Number(r.trituration_inicio || 0), 
         triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios
@@ -652,7 +668,7 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
     const { error } = await supabase.from('mant_documentos').insert({
         worker_id: doc.workerId,
         titulo: doc.title,
-        categoria: doc.category,
+        category: doc.category,
         fecha_emision: toLocalDateString(doc.issueDate),
         fecha_vencimiento: doc.expiryDate ? toLocalDateString(doc.expiryDate) : null,
         url_archivo: doc.fileUrl,
