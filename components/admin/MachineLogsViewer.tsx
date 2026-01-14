@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getAllMachines, getMachineLogs, getWorkers, getServiceProviders, getCostCenters } from '../../services/db';
-import { Machine, OperationLog, OperationType, Worker, ServiceProvider, CostCenter } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info } from 'lucide-react';
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { getAllMachines, getMachineLogs, getWorkers, getServiceProviders, getCostCenters, getSubCentersByCenter } from '../../services/db';
+import { Machine, OperationLog, OperationType, Worker, ServiceProvider, CostCenter, SubCenter } from '../../types';
+import { ArrowLeft, Search, Filter, Calendar, FileText, Download, Droplet, Wrench, Hammer, Fuel, CalendarClock, Factory, Truck, Loader2, Info, LayoutGrid } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -9,12 +10,14 @@ interface Props {
 
 export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [subCenters, setSubCenters] = useState<SubCenter[]>([]);
     const [machines, setMachines] = useState<Machine[]>([]);
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [providers, setProviders] = useState<ServiceProvider[]>([]);
     
     // Filters
     const [selectedCenterId, setSelectedCenterId] = useState('');
+    const [selectedSubId, setSelectedSubId] = useState('');
     const [selectedMachineId, setSelectedMachineId] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -33,10 +36,24 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
         getServiceProviders().then(setProviders);
     }, []);
 
-    // Filtered machines list based on selected center
-    const filteredMachines = selectedCenterId 
-        ? machines.filter(m => m.costCenterId === selectedCenterId)
-        : [];
+    // Cargar subcentros cuando cambia el centro
+    useEffect(() => {
+        if (selectedCenterId) {
+            getSubCentersByCenter(selectedCenterId).then(setSubCenters);
+        } else {
+            setSubCenters([]);
+        }
+    }, [selectedCenterId]);
+
+    // Máquinas filtradas basadas en centro y subcentro
+    const filteredMachines = useMemo(() => {
+        if (!selectedCenterId) return [];
+        let filtered = machines.filter(m => m.costCenterId === selectedCenterId);
+        if (selectedSubId) {
+            filtered = filtered.filter(m => m.subCenterId === selectedSubId);
+        }
+        return filtered;
+    }, [selectedCenterId, selectedSubId, machines]);
 
     const handleSearch = async () => {
         if (!selectedMachineId || loading) return;
@@ -53,8 +70,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
             
             if (currentSearchId !== searchIdRef.current) return; 
 
-            // De-duplicación solo por ID único de base de datos para permitir registros idénticos legítimos
-            const uniqueLogs = Array.from(new Map(data.map(item => [item.id, item])).values());
+            const uniqueLogs = Array.from(new Map(data.map(item => [item.id, item])).values()) as OperationLog[];
             
             setLogs(uniqueLogs);
         } catch (error) {
@@ -150,6 +166,7 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                         value={selectedCenterId}
                         onChange={e => {
                             setSelectedCenterId(e.target.value);
+                            setSelectedSubId('');
                             setSelectedMachineId('');
                             setHasSearched(false);
                             setLogs([]);
@@ -165,7 +182,29 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
 
                 <div>
                     <label className="block text-xs font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-2">
-                        <Truck size={14} className="text-blue-500" /> 2. Selección de Máquina
+                        <LayoutGrid size={14} className="text-blue-500" /> 2. Subcentro / Planta
+                    </label>
+                    <select 
+                        disabled={!selectedCenterId}
+                        value={selectedSubId}
+                        onChange={e => {
+                            setSelectedSubId(e.target.value);
+                            setSelectedMachineId('');
+                            setHasSearched(false);
+                            setLogs([]);
+                        }}
+                        className={`w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 font-bold text-slate-700 appearance-none shadow-sm transition-all ${!selectedCenterId ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                        <option value="">-- Todos los Subcentros --</option>
+                        {subCenters.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-2">
+                        <Truck size={14} className="text-blue-500" /> 3. Selección de Máquina
                     </label>
                     <select 
                         disabled={!selectedCenterId}
