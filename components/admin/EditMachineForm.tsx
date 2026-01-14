@@ -229,7 +229,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
-                        <input type="number" className="w-full p-2 border rounded font-mono font-bold" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value)} />
+                        <input type="number" className="w-full p-2 border rounded font-mono font-bold" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} />
                     </div>
                 </div>
 
