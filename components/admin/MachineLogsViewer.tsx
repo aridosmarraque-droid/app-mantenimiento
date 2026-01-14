@@ -70,9 +70,8 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
             
             if (currentSearchId !== searchIdRef.current) return; 
 
-            const uniqueLogs = Array.from(new Map(data.map(item => [item.id, item])).values()) as OperationLog[];
-            
-            setLogs(uniqueLogs);
+            // Se elimina el filtrado por ID para mostrar exactamente lo que devuelve la DB
+            setLogs(data || []);
         } catch (error) {
             console.error("Error al buscar logs:", error);
         } finally {
