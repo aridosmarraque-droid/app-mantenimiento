@@ -43,33 +43,42 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     const [editingPersonal, setEditingPersonal] = useState<PersonalReport | null>(null);
     const [savingEdit, setSavingEdit] = useState(false);
 
+    // Carga inicial de datos maestros (Solo una vez)
     useEffect(() => {
-        Promise.all([
-            getWorkers(false),
-            getAllMachines(),
-            getCostCenters(),
-            getServiceProviders()
-        ]).then(([w, m, c, p]) => {
-            setWorkers(w);
-            setMachines(m);
-            setCenters(c);
-            setProviders(p);
-        });
+        const loadMasters = async () => {
+            try {
+                const [w, m, c, p] = await Promise.all([
+                    getWorkers(false),
+                    getAllMachines(),
+                    getCostCenters(),
+                    getServiceProviders()
+                ]);
+                setWorkers(w);
+                setMachines(m);
+                setCenters(c);
+                setProviders(p);
+            } catch (err) {
+                console.error("Error cargando maestros:", err);
+            }
+        };
+        loadMasters();
     }, []);
 
+    // Función de carga de datos de auditoría
+    // NOTA: Eliminamos 'loading' de las dependencias para evitar el bucle infinito
     const fetchAudit = useCallback(async () => {
-        if (loading) return;
         setLoading(true);
-        
         try {
             const selectedDate = new Date(date);
+            // Validamos que la fecha sea correcta antes de disparar promesas
+            if (isNaN(selectedDate.getTime())) return;
+
             const [data, cpData, crData] = await Promise.all([
                 getDailyAuditLogs(selectedDate),
                 getCPReportsByRange(selectedDate, selectedDate),
                 getCRReportsByRange(selectedDate, selectedDate)
             ]);
             
-            // Fidelidad absoluta: Se eliminan filtros de ID único para mostrar todo el contenido de la DB
             setAuditData({ 
                 ops: data.ops || [], 
                 personal: data.personal || [],
@@ -77,12 +86,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 cr: crData || []
             });
         } catch (e) {
-            console.error(e);
+            console.error("Error en fetchAudit:", e);
         } finally {
+            // Aseguramos que el loading se apague SIEMPRE
             setLoading(false);
         }
-    }, [date, loading]);
+    }, [date]); // Solo depende de la fecha
 
+    // Disparar carga cuando cambie la fecha o al montar el componente
     useEffect(() => {
         fetchAudit();
     }, [fetchAudit]);
@@ -185,9 +196,9 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             </div>
 
             {loading ? (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-                    <Loader2 className="animate-spin mb-4 text-blue-500" size={40} />
-                    <p className="font-bold animate-pulse">Sincronizando documentación...</p>
+                <div className="py-20 flex flex-col items-center justify-center text-slate-400 min-h-[400px]">
+                    <Loader2 className="animate-spin mb-4 text-blue-500" size={48} />
+                    <p className="font-bold animate-pulse text-sm uppercase tracking-widest">Sincronizando documentación...</p>
                 </div>
             ) : (
                 <div className="space-y-8 px-1">
