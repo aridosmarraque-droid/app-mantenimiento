@@ -30,7 +30,7 @@ import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3 } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -273,6 +273,22 @@ function App() {
                     )}
                   </div>
 
+                  {/* CATEGORÍA: PRODUCCIÓN */}
+                  <div className="border-b border-slate-100">
+                    <button onClick={() => toggleCategory('produccion')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'produccion' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
+                        <div className="flex items-center gap-3">
+                            <BarChart3 className={`w-5 h-5 ${openCategory === 'produccion' ? 'text-amber-400' : 'text-amber-600'}`} />
+                            <span className="text-xs font-black uppercase tracking-tight">PLANIFICACIÓN</span>
+                        </div>
+                        {openCategory === 'produccion' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'produccion' && (
+                        <div className="bg-slate-50 divide-y divide-slate-100">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_CP_PLANNING)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2">Plan Semanal Cantera</button>
+                        </div>
+                    )}
+                  </div>
+
                   {/* CATEGORÍA: INFORMES */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
@@ -284,6 +300,7 @@ function App() {
                     </button>
                     {openCategory === 'informes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Rendimiento de Plantas</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría Diaria</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2">Histórico Maquinaria</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_FUEL_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Fuel size={14} /> Auditoría Gasoil</button>
@@ -367,6 +384,8 @@ function App() {
             {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => handleAdminSuccess('Ficha actualizada')}/>}
             {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_PRODUCTION_DASHBOARD && <ProductionDashboard onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FUEL_REPORT && <FuelReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
