@@ -72,7 +72,6 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        // Fix: Use correct column name 'descripcion'
         description: dbLog.descripcion, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
@@ -98,7 +97,6 @@ const mapMachine = (m: any): Machine => {
             const lastHours = Number(d.ultimas_horas_realizadas || 0);
             const warning = Number(d.horas_preaviso || 0);
             
-            // CÁLCULO DINÁMICO DE ESTADO
             const nextDueHours = lastHours + interval;
             const remaining = nextDueHours - currentHours;
             
@@ -126,7 +124,7 @@ const mapMachine = (m: any): Machine => {
         }),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo !== undefined ? m.activo : true,
+        active: m.active !== undefined ? m.active : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -145,7 +143,6 @@ export const createWorker = async (w: Omit<Worker, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_trabajadores').insert({
         nombre: w.name, dni: w.dni, telefono: w.phone, rol: w.role, activo: w.active,
-        // Fix: Use correct property 'requiresReport' from Omit<Worker, 'id'>
         horas_programadas: w.expectedHours, requiere_parte: w.requiresReport
     });
     if (error) throw error;
@@ -192,7 +189,6 @@ export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_subcentros').select('*').eq('centro_id', centerId);
     if (error) return [];
-    // Se determina tracksProduction basándose en si existe un campo de producción vinculado
     return (data || []).map(s => ({
         id: s.id, 
         centerId: s.centro_id, 
@@ -221,7 +217,6 @@ export const createSubCenter = async (s: Omit<SubCenter, 'id'>): Promise<SubCent
 export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): Promise<void> => {
     const p: any = {};
     if (updates.name !== undefined) p.nombre = updates.name;
-    // El flag tracksProduction es de UI, la DB solo usa campo_produccion
     if (updates.productionField !== undefined) p.campo_produccion = updates.productionField;
     const { error } = await supabase.from('mant_subcentros').update(p).eq('id', id);
     if (error) throw error;
@@ -336,14 +331,9 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
     if (error) throw error;
 };
 
-/**
- * GUARDA UN REGISTRO TÉCNICO
- * VALIDACIÓN ESTRICTA: Fecha no puede ser NULL para evitar el error de 1970.
- */
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
     
-    // Validación de seguridad
     if (!log.date) throw new Error("Faltan datos críticos: Fecha obligatoria.");
     const dateStr = toLocalDateString(log.date);
     if (!dateStr || dateStr === '1970-01-01') throw new Error("Fecha del registro inválida.");
@@ -352,7 +342,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     const maquinaId = cleanUuid(log.machineId);
     if (!trabajadorId || !maquinaId) throw new Error("IDs de trabajador o máquina inválidos.");
 
-    // PROTECCIÓN DE DUPLICIDAD
     const h = cleanNum(log.hoursAtExecution) || 0;
     const { data: existing } = await supabase
         .from('mant_registros')
@@ -364,7 +353,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         .limit(1);
 
     if (existing && existing.length > 0) {
-        console.warn("[DB] Duplicado detectado.");
         const { data: fullRecord } = await supabase.from('mant_registros').select('*').eq('id', existing[0].id).single();
         return mapLogFromDb(fullRecord);
     }
@@ -391,12 +379,10 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
     if (error) throw error;
     
-    // Sincronizar horas máquina
     if (h > 0) {
         await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
     }
     
-    // Disparar chequeo de mantenimientos tras guardar log
     const { data: machineData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', maquinaId).single();
     if (machineData) {
         await checkMaintenanceThresholds(mapMachine(machineData), h);
@@ -515,20 +501,25 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
-    const { data, error } = await supabase.from('cp_planificacion_semanal').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
+    const { data, error } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
     if (error || !data) return null;
     return {
-        id: data.id, mondayDate: data.fecha_lunes, hoursMon: data.h_lunes, hoursTue: data.h_martes,
-        hoursWed: data.h_miercoles, hoursThu: data.h_jueves, hoursFri: data.h_viernes
+        id: data.id, mondayDate: data.fecha_lunes, 
+        hoursMon: data.horas_lunes, hoursTue: data.horas_martes,
+        hoursWed: data.horas_miercoles, hoursThu: data.horas_jueves, hoursFri: data.horas_viernes
     };
 };
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     const p = {
-        fecha_lunes: plan.mondayDate, h_lunes: plan.hoursMon, h_martes: plan.hoursTue,
-        h_miercoles: plan.hoursWed, h_jueves: plan.hoursThu, h_viernes: plan.hoursFri
+        fecha_lunes: plan.mondayDate, 
+        horas_lunes: plan.hoursMon, 
+        horas_martes: plan.hoursTue,
+        horas_miercoles: plan.hoursWed, 
+        horas_jueves: plan.hoursThu, 
+        horas_viernes: plan.hoursFri
     };
-    const { error } = await supabase.from('cp_planificacion_semanal').upsert(p, { onConflict: 'fecha_lunes' });
+    const { error } = await supabase.from('cp_planificacion').upsert(p, { onConflict: 'fecha_lunes' });
     if (error) throw error;
 };
 
@@ -624,9 +615,6 @@ export const syncPendingData = async () => {
 
 // --- MÓDULO DOCUMENTAL ---
 
-/**
- * Obtiene los documentos registrados para un trabajador específico.
- */
 export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocument[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_documentos').select('*').eq('worker_id', workerId);
@@ -640,7 +628,6 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         title: d.titulo,
         category: d.categoria,
         issueDate: new Date(d.fecha_emision),
-        // Fix: Use correct column name 'fecha_vencimiento'
         expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
         fileUrl: d.url_archivo,
         status: d.estado,
@@ -649,9 +636,6 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
     }));
 };
 
-/**
- * Guarda un nuevo documento para un trabajador.
- */
 export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_documentos').insert({
@@ -669,7 +653,6 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
 };
 
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => {
-    // Forzamos un refresco de datos desde el mapeador dinámico
     const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
     if (error || !data) return m;
     return mapMachine(data);
