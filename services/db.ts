@@ -256,7 +256,7 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         centro_id: m.costCenterId, subcentro_id: m.subCenterId, nombre: m.name, codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours, requiere_horas: m.requiresHours, gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses, es_parte_trabajo: m.selectableForReports, responsable_id: m.responsibleWorkerId,
-        activo: m.active, vinculada_produccion: m.vinculada_produccion
+        activo: m.active, vinculada_produccion: m.vinculadaProduccion
     }).select().single();
     if (error) throw error;
     return mapMachine(data);
@@ -541,7 +541,7 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>) => {
     const { error } = await supabase.from('partes_trabajo').insert({
-        fecha: toLocalDateString(r.date), trabajador_id: r.workerId, horas: r.hours,
+        fecha: toLocalDateString(r.date), trabajador_id: r.workerId, hours: r.hours,
         maquina_id: r.machineId, centro_id: r.costCenterId, comentarios: r.description
     });
     if (error) throw error;
