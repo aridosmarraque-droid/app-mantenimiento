@@ -51,7 +51,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 name,
                 companyCode,
                 costCenterId: centerId,
-                subCenterId: subId || '', // updateMachineAttributes se encarga de convertir '' a null
+                subCenterId: subId || '', 
                 responsibleWorkerId: responsibleId || '', 
                 currentHours,
                 requiresHours,
@@ -87,7 +87,17 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
         } catch (e) { alert("Error"); } finally { setLoading(false); setDeleting(false); }
     };
 
-    const resetDefForm = () => { setEditingDefId(null); setDefName(''); setDefType('HOURS'); setDefInterval(''); setDefWarning(''); setDefIntervalMonths(''); setDefNextDate(''); setDefTasks(''); };
+    const resetDefForm = () => { 
+        setEditingDefId(null); 
+        setDefName(''); 
+        setDefType('HOURS'); 
+        setDefInterval(''); 
+        setDefWarning(''); 
+        setDefIntervalMonths(''); 
+        setDefNextDate(''); 
+        setDefTasks(''); 
+    };
+    
     const [editingDefId, setEditingDefId] = useState<string | null>(null);
     const [defName, setDefName] = useState('');
     const [defType, setDefType] = useState<'HOURS' | 'DATE'>('HOURS');
@@ -98,15 +108,24 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     const [defTasks, setDefTasks] = useState('');
 
     const handleEditClick = (def: MaintenanceDefinition) => {
-        setEditingDefId(def.id!); setDefName(def.name); setDefType(def.maintenanceType || 'HOURS');
-        setDefInterval(def.intervalHours || ''); setDefWarning(def.warningHours || ''); setDefIntervalMonths(def.intervalMonths || '');
-        setDefNextDate(def.nextDate ? new Date(def.nextDate).toISOString().split('T')[0] : ''); setDefTasks(def.tasks);
+        setEditingDefId(def.id!); 
+        setDefName(def.name); 
+        setDefType(def.maintenanceType || 'HOURS');
+        setDefInterval(def.intervalHours || ''); 
+        setDefWarning(def.warningHours || ''); 
+        setDefIntervalMonths(def.intervalMonths || '');
+        setDefNextDate(def.nextDate ? new Date(def.nextDate).toISOString().split('T')[0] : ''); 
+        setDefTasks(def.tasks);
     };
 
     const handleSaveDef = async () => {
         setLoading(true);
+        
+        // CORRECCIÓN: Diferenciar si es nuevo o edición
+        const isNew = editingDefId === 'new';
+        
         const defPayload: MaintenanceDefinition = { 
-            id: editingDefId || undefined, 
+            id: isNew ? undefined : editingDefId!, 
             machineId: machine.id, 
             name: defName, 
             maintenanceType: defType, 
@@ -115,21 +134,39 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             intervalMonths: Number(defIntervalMonths) || 0, 
             nextDate: defNextDate ? new Date(defNextDate) : undefined, 
             tasks: defTasks,
-            // Mantener los flags si estamos editando
-            notifiedWarning: editingDefId ? machine.maintenanceDefs.find(d => d.id === editingDefId)?.notifiedWarning : false,
-            notifiedOverdue: editingDefId ? machine.maintenanceDefs.find(d => d.id === editingDefId)?.notifiedOverdue : false,
+            notifiedWarning: isNew ? false : (machine.maintenanceDefs.find(d => d.id === editingDefId)?.notifiedWarning || false),
+            notifiedOverdue: isNew ? false : (machine.maintenanceDefs.find(d => d.id === editingDefId)?.notifiedOverdue || false),
         };
+
         try {
-            if (editingDefId) await updateMaintenanceDef(defPayload);
-            else await addMaintenanceDef(defPayload, machine.currentHours);
-            const updated = await calculateAndSyncMachineStatus(machine); setMachine(updated); resetDefForm();
-        } catch (e) { alert("Error"); } finally { setLoading(false); }
+            if (isNew) {
+                await addMaintenanceDef(defPayload, machine.currentHours);
+            } else {
+                await updateMaintenanceDef(defPayload);
+            }
+            const updated = await calculateAndSyncMachineStatus(machine); 
+            setMachine(updated); 
+            resetDefForm();
+        } catch (e: any) { 
+            console.error("Error al guardar mantenimiento:", e);
+            alert("Error al guardar tarea: " + (e.message || "Consulte la consola")); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const handleDeleteDef = async (defId: string) => {
         if (!confirm("¿Borrar?")) return;
         setLoading(true);
-        try { await deleteMaintenanceDef(defId); const updated = await calculateAndSyncMachineStatus(machine); setMachine(updated); } catch (e) { alert("Error"); } finally { setLoading(false); }
+        try { 
+            await deleteMaintenanceDef(defId); 
+            const updated = await calculateAndSyncMachineStatus(machine); 
+            setMachine(updated); 
+        } catch (e) { 
+            alert("Error"); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     return (
@@ -192,7 +229,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
-                        <input type="number" className="w-full p-2 border rounded font-mono font-bold" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} />
+                        <input type="number" className="w-full p-2 border rounded font-mono font-bold" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value)} />
                     </div>
                 </div>
 
@@ -277,7 +314,9 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                             </div>
                         </div>
                         <textarea className="w-full p-2 border rounded text-xs" placeholder="Tareas a realizar..." rows={2} value={defTasks} onChange={e => setDefTasks(e.target.value)} />
-                        <button onClick={handleSaveDef} disabled={loading} className="w-full py-2 bg-slate-800 text-white rounded font-bold">{loading ? '...' : 'Guardar Tarea'}</button>
+                        <button onClick={handleSaveDef} disabled={loading} className="w-full py-2 bg-slate-800 text-white rounded font-bold">
+                            {loading ? <Loader2 className="animate-spin inline size={14} /> : 'Guardar Tarea'}
+                        </button>
                     </div>
                 )}
 
