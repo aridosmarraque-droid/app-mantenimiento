@@ -98,16 +98,12 @@ const mapMachine = (m: any): Machine => {
             const warning = Number(d.horas_preaviso || 0);
             
             // CÁLCULO DINÁMICO DE ESTADO
-            // El mantenimiento vence en: lastHours + interval
             const nextDueHours = lastHours + interval;
             const remaining = nextDueHours - currentHours;
             
-            // Solo es "pendiente" (disponible para el usuario) si estamos en ventana de preaviso o vencido
-            // Ej: 500h de intervalo, 50h preaviso, hecho a las 0. Vence a las 500.
-            // Pendiente si Horas Actuales >= 450.
             const isActuallyPending = d.tipo_programacion === 'HOURS' 
                 ? (remaining <= warning)
-                : !!d.pendiente; // Para fechas seguimos usando el flag o lógica de fecha
+                : !!d.pendiente;
 
             return {
                 id: d.id,
@@ -194,26 +190,36 @@ export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_subcentros').select('*').eq('centro_id', centerId);
     if (error) return [];
+    // Se determina tracksProduction basándose en si existe un campo de producción vinculado
     return (data || []).map(s => ({
-        id: s.id, centerId: s.centro_id, name: s.nombre, tracksProduction: !!s.registra_produccion,
+        id: s.id, 
+        centerId: s.centro_id, 
+        name: s.nombre, 
+        tracksProduction: s.campo_produccion !== null && s.campo_produccion !== undefined,
         productionField: s.campo_produccion
     }));
 };
 
 export const createSubCenter = async (s: Omit<SubCenter, 'id'>): Promise<SubCenter> => {
     const { data, error } = await supabase.from('mant_subcentros').insert({
-        centro_id: s.centerId, nombre: s.name, registra_produccion: s.tracksProduction, campo_produccion: s.productionField
+        centro_id: s.centerId, 
+        nombre: s.name, 
+        campo_produccion: s.productionField
     }).select().single();
     if (error) throw error;
     return {
-        id: data.id, centerId: data.centro_id, name: data.nombre, tracksProduction: data.registra_produccion, productionField: data.campo_produccion
+        id: data.id, 
+        centerId: data.centro_id, 
+        name: data.nombre, 
+        tracksProduction: data.campo_produccion !== null, 
+        productionField: data.campo_produccion
     };
 };
 
 export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): Promise<void> => {
     const p: any = {};
     if (updates.name !== undefined) p.nombre = updates.name;
-    if (updates.tracksProduction !== undefined) p.registra_produccion = updates.tracksProduction;
+    // El flag tracksProduction es de UI, la DB solo usa campo_produccion
     if (updates.productionField !== undefined) p.campo_produccion = updates.productionField;
     const { error } = await supabase.from('mant_subcentros').update(p).eq('id', id);
     if (error) throw error;
@@ -265,7 +271,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.companyCode !== undefined) p.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) p.centro_id = updates.costCenterId;
     if (updates.subCenterId !== undefined) p.subcentro_id = updates.subCenterId;
-    if (updates.responsibleWorkerId !== undefined) p.responsable_id = updates.responsibleWorkerId;
+    if (updates.responsibleWorkerId !== undefined) p.responsible_id = updates.responsibleWorkerId;
     if (updates.currentHours !== undefined) p.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) p.requiere_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
@@ -469,8 +475,8 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
         washingStart: Number(data.lavado_inicio || 0),
         washingEnd: Number(data.lavado_fin || 0), 
-        triturationStart: Number(data.trituration_inicio || 0), 
-        triturationEnd: Number(data.trituration_fin || 0), 
+        triturationStart: Number(data.trituracion_inicio || 0), 
+        triturationEnd: Number(data.trituracion_fin || 0), 
         comments: data.comentarios
     };
 };
@@ -493,7 +499,7 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         trabajador_id: r.workerId, 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
-        trituration_inicio: r.triturationStart, 
+        trituracion_inicio: r.triturationStart, 
         trituration_fin: r.triturationEnd, 
         comentarios: r.comments
     });
@@ -626,7 +632,7 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         title: d.titulo,
         category: d.categoria,
         issueDate: new Date(d.fecha_emision),
-        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
+        expiryDate: d.expiryDate ? new Date(d.expiryDate) : undefined,
         fileUrl: d.url_archivo,
         status: d.estado,
         docType: d.tipo_documento,
