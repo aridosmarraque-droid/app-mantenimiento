@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, getSubCentersByCenter, calculateAndSyncMachineStatus, getWorkers, deleteMachine, getMachineDependencyCount } from '../../services/db';
 import { CostCenter, SubCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
@@ -64,7 +63,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             alert("Datos generales actualizados.");
         } catch (e) {
             console.error("Error updating machine basic info:", e);
-            alert("Error al actualizar datos. Verifique la consola para más detalles.");
+            alert("Error al actualizar datos.");
         } finally {
             setLoading(false);
         }
@@ -84,8 +83,23 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             setDeleting(true);
             await deleteMachine(machine.id);
             onSuccess(); 
-        } catch (e) { alert("Error"); } finally { setLoading(false); setDeleting(false); }
+        } catch (e) { 
+            console.error(e);
+            alert("Error al eliminar la máquina"); 
+        } finally { 
+            setLoading(false); 
+            setDeleting(false); 
+        }
     };
+
+    const [editingDefId, setEditingDefId] = useState<string | null>(null);
+    const [defName, setDefName] = useState('');
+    const [defType, setDefType] = useState<'HOURS' | 'DATE'>('HOURS');
+    const [defInterval, setDefInterval] = useState<number | ''>('');
+    const [defWarning, setDefWarning] = useState<number | ''>('');
+    const [defIntervalMonths, setDefIntervalMonths] = useState<number | ''>('');
+    const [defNextDate, setDefNextDate] = useState('');
+    const [defTasks, setDefTasks] = useState('');
 
     const resetDefForm = () => { 
         setEditingDefId(null); 
@@ -97,18 +111,9 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
         setDefNextDate(''); 
         setDefTasks(''); 
     };
-    
-    const [editingDefId, setEditingDefId] = useState<string | null>(null);
-    const [defName, setDefName] = useState('');
-    const [defType, setDefType] = useState<'HOURS' | 'DATE'>('HOURS');
-    const [defInterval, setDefInterval] = useState<number | ''>('');
-    const [defWarning, setDefWarning] = useState<number | ''>('');
-    const [defIntervalMonths, setDefIntervalMonths] = useState<number | ''>('');
-    const [defNextDate, setDefNextDate] = useState('');
-    const [defTasks, setDefTasks] = useState('');
 
     const handleEditClick = (def: MaintenanceDefinition) => {
-        setEditingDefId(def.id!); 
+        setEditingDefId(def.id || null); 
         setDefName(def.name); 
         setDefType(def.maintenanceType || 'HOURS');
         setDefInterval(def.intervalHours || ''); 
@@ -119,13 +124,16 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     };
 
     const handleSaveDef = async () => {
-        setLoading(true);
+        if (!defName) {
+            alert("El nombre de la tarea es obligatorio");
+            return;
+        }
         
-        // CORRECCIÓN: Diferenciar si es nuevo o edición
+        setLoading(true);
         const isNew = editingDefId === 'new';
         
         const defPayload: MaintenanceDefinition = { 
-            id: isNew ? undefined : editingDefId!, 
+            id: isNew ? undefined : (editingDefId || undefined), 
             machineId: machine.id, 
             name: defName, 
             maintenanceType: defType, 
@@ -141,7 +149,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
         try {
             if (isNew) {
                 await addMaintenanceDef(defPayload, machine.currentHours);
-            } else {
+            } else if (editingDefId) {
                 await updateMaintenanceDef(defPayload);
             }
             const updated = await calculateAndSyncMachineStatus(machine); 
@@ -156,14 +164,14 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     };
 
     const handleDeleteDef = async (defId: string) => {
-        if (!confirm("¿Borrar?")) return;
+        if (!confirm("¿Borrar esta tarea programada?")) return;
         setLoading(true);
         try { 
             await deleteMaintenanceDef(defId); 
             const updated = await calculateAndSyncMachineStatus(machine); 
             setMachine(updated); 
         } catch (e) { 
-            alert("Error"); 
+            alert("Error al eliminar mantenimiento"); 
         } finally { 
             setLoading(false); 
         }
@@ -172,7 +180,9 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
-                <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700"><ArrowLeft className="w-6 h-6" /></button>
+                <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
                 <div>
                     <h3 className="text-xl font-bold text-slate-800">Modificar: {machine.name}</h3>
                     {!active && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-black uppercase">BAJA</span>}
@@ -189,7 +199,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-1 md:col-span-2 flex items-center gap-4 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                        <div className="p-2 bg-indigo-600 text-white rounded-lg"><Zap size={20}/></div>
+                        <div className="p-2 bg-indigo-600 text-white rounded-lg"><Zap size={20} /></div>
                         <div className="flex-1">
                             <label className="flex items-center gap-2 cursor-pointer font-bold text-indigo-900 text-sm">
                                 <input type="checkbox" checked={vinculadaProduccion} onChange={e => setVinculadaProduccion(e.target.checked)} className="w-5 h-5 rounded" />
@@ -210,21 +220,27 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Centro de Coste</label>
                         <select className="w-full p-2 border rounded" value={centerId} onChange={e => { setCenterId(e.target.value); setSubId(''); }}>
-                            {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {centers.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><LayoutGrid size={14}/> Subcentro / Planta</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><LayoutGrid size={14} /> Subcentro / Planta</label>
                         <select className="w-full p-2 border rounded font-bold" value={subId} onChange={e => setSubId(e.target.value)}>
                             <option value="">-- Sin Subcentro --</option>
-                            {subCenters.map(s => <option key={s.id} value={s.id}>{s.name} {s.tracksProduction ? '📊' : ''}</option>)}
+                            {subCenters.map(s => (
+                                <option key={s.id} value={s.id}>{s.name} {s.tracksProduction ? '📊' : ''}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Responsable</label>
                         <select className="w-full p-2 border rounded" value={responsibleId} onChange={e => setResponsibleId(e.target.value)}>
                              <option value="">-- Sin Responsable --</option>
-                            {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                            {workers.map(w => (
+                                <option key={w.id} value={w.id}>{w.name}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
@@ -289,18 +305,19 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 </button>
             </div>
 
-            {/* Gestión de Mantenimientos Programados */}
             <div className="bg-white p-6 rounded-xl shadow-md space-y-4">
                 <div className="flex justify-between items-center border-b pb-2">
                     <h4 className="font-bold text-slate-700">Mantenimientos Programados</h4>
-                    <button onClick={() => setEditingDefId('new')} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"><Plus size={20}/></button>
+                    <button type="button" onClick={() => setEditingDefId('new')} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                        <Plus size={20} />
+                    </button>
                 </div>
 
                 {editingDefId && (
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 animate-in slide-in-from-top duration-300">
                         <div className="flex justify-between items-center">
                             <p className="text-xs font-black uppercase text-slate-400">{editingDefId === 'new' ? 'Nueva Tarea' : 'Editar Tarea'}</p>
-                            <button onClick={resetDefForm}><X size={16}/></button>
+                            <button type="button" onClick={resetDefForm}><X size={16} /></button>
                         </div>
                         <input className="w-full p-2 border rounded" placeholder="Nombre (Ej. Aceite 500h)" value={defName} onChange={e => setDefName(e.target.value)} />
                         <div className="grid grid-cols-2 gap-2">
@@ -314,28 +331,28 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                             </div>
                         </div>
                         <textarea className="w-full p-2 border rounded text-xs" placeholder="Tareas a realizar..." rows={2} value={defTasks} onChange={e => setDefTasks(e.target.value)} />
-                        <button onClick={handleSaveDef} disabled={loading} className="w-full py-2 bg-slate-800 text-white rounded font-bold">
-                            {loading ? <Loader2 className="animate-spin inline size={14} /> : 'Guardar Tarea'}
+                        <button type="button" onClick={handleSaveDef} disabled={loading} className="w-full py-2 bg-slate-800 text-white rounded font-bold">
+                            {loading ? <Loader2 className="animate-spin inline" size={14} /> : 'Guardar Tarea'}
                         </button>
                     </div>
                 )}
 
                 <div className="space-y-2">
-                    {machine.maintenanceDefs.map(def => (
-                        <div key={def.id} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-200 hover:border-blue-300 transition-colors">
+                    {machine.maintenanceDefs.map((def) => (
+                        <div key={def.id || Math.random().toString()} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-200 hover:border-blue-300 transition-colors">
                             <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                     <p className="font-bold text-slate-800">{def.name}</p>
                                     <div className="flex gap-1">
-                                        {def.notifiedWarning && <span title="Aviso Enviado" className="text-amber-500"><MessageSquare size={12}/></span>}
-                                        {def.notifiedOverdue && <span title="Vencimiento Enviado" className="text-red-500"><Mail size={12}/></span>}
+                                        {def.notifiedWarning && <span title="Aviso Enviado" className="text-amber-500"><MessageSquare size={12} /></span>}
+                                        {def.notifiedOverdue && <span title="Vencimiento Enviado" className="text-red-500"><Mail size={12} /></span>}
                                     </div>
                                 </div>
                                 <p className="text-[10px] text-slate-500 uppercase font-bold">Cada {def.intervalHours}h (Aviso a las {def.warningHours}h)</p>
                             </div>
                             <div className="flex gap-1">
-                                <button onClick={() => handleEditClick(def)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                                <button onClick={() => handleDeleteDef(def.id!)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                <button type="button" onClick={() => handleEditClick(def)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"><Edit2 size={16} /></button>
+                                <button type="button" onClick={() => { if(def.id) handleDeleteDef(def.id); }} className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16} /></button>
                             </div>
                         </div>
                     ))}
