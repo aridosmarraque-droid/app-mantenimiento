@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
     getDailyAuditLogs, 
@@ -68,23 +69,19 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 getCRReportsByRange(selectedDate, selectedDate)
             ]);
             
-            // Se eliminan los filtros de huella digital (fingerprint) para permitir registros duplicados legítimos
-            // Solo de-duplicamos si el ID de base de datos es EXACTAMENTE el mismo (error de query)
-            const uniqueOps = Array.from(new Map(data.ops.map(item => [item.id, item])).values());
-            const uniquePersonal = Array.from(new Map(data.personal.map(item => [item.id, item])).values());
-
+            // Fidelidad absoluta: Se eliminan filtros de ID único para mostrar todo el contenido de la DB
             setAuditData({ 
-                ops: uniqueOps, 
-                personal: uniquePersonal,
-                cp: cpData,
-                cr: crData
+                ops: data.ops || [], 
+                personal: data.personal || [],
+                cp: cpData || [],
+                cr: crData || []
             });
         } catch (e) {
             console.error(e);
         } finally {
             setLoading(false);
         }
-    }, [date]);
+    }, [date, loading]);
 
     useEffect(() => {
         fetchAudit();
@@ -92,20 +89,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
 
     // --- LÓGICA DE AGRUPACIÓN POR TRABAJADOR ---
     const workerReports = useMemo(() => {
-        // Agrupar los reportes personales por trabajador
         const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
         
-        // Solo auditar trabajadores que:
-        // 1. Están activos
-        // 2. No son admins
-        // 3. TIENEN MARCADO "REQUIERE PARTE"
         workers
             .filter(w => w.active && w.role !== 'admin' && w.requiresReport !== false)
             .forEach(w => {
                 grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
             });
 
-        // Llenar con los reportes encontrados para estos trabajadores
         auditData.personal.forEach(p => {
             if (grouped.has(p.workerId)) {
                 const entry = grouped.get(p.workerId)!;
@@ -368,14 +359,12 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 return (
                                     <div key={`worker-${worker.id}`} className={`bg-white rounded-2xl shadow-md border overflow-hidden relative transition-all ${!hasReports ? 'border-red-100 opacity-70 bg-red-50/20' : 'border-slate-100'}`}>
                                         
-                                        {/* Marca Verde Superior si coincide jornada */}
                                         {hasReports && matches && (
                                             <div className="absolute top-0 right-0 w-12 h-12 flex items-center justify-center bg-green-500 text-white rounded-bl-3xl shadow-sm z-10">
                                                 <CheckCircle2 size={24} />
                                             </div>
                                         )}
 
-                                        {/* Cabecera del trabajador */}
                                         <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${worker.role === 'cp' ? 'bg-amber-100 text-amber-600' : worker.role === 'cr' ? 'bg-teal-100 text-teal-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -394,7 +383,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             </div>
                                         </div>
 
-                                        {/* Desglose de reportes */}
                                         <div className="p-4 space-y-3">
                                             {!hasReports ? (
                                                 <div className="flex items-center gap-2 text-red-500 font-bold text-xs uppercase animate-pulse">
@@ -426,7 +414,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             )}
                                         </div>
 
-                                        {/* Comparativa con jornada esperada */}
                                         <div className="px-4 py-2 bg-slate-50 border-t flex justify-between items-center">
                                             <div className="text-[10px] font-bold text-slate-400 uppercase">Jornada Esperada: {expected}h</div>
                                             {hasReports && expected > 0 && totalHours !== expected && (
