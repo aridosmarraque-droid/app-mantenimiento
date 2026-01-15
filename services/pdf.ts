@@ -232,7 +232,10 @@ export const generateFluidReportPDF = (
 
 export const generateMaintenanceReportPDF = (machines: Machine[], summary: any): string => {
     const doc: any = new jsPDF();
-    
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    const todayStr = now.toLocaleDateString();
+
     // Header
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
@@ -241,30 +244,34 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
     doc.setFont("helvetica", "bold");
     doc.text("ARIDOS MARRAQUE", 20, 18);
     doc.setFontSize(12);
-    doc.text(`AUDITORÍA DE MANTENIMIENTO PREVENTIVO`, 20, 30);
+    doc.text(`AUDITORÍA INTEGRAL DE MANTENIMIENTO PREVENTIVO`, 20, 30);
     
     // Resumen Superior
     doc.setTextColor(15, 23, 42);
     doc.setFontSize(14);
-    doc.text("RESUMEN DE ESTADO DE LA FLOTA", 20, 50);
+    doc.text("ESTADO GENERAL DE LA FLOTA", 20, 50);
     
     doc.autoTable({
         startY: 55,
-        head: [['Total Tareas', 'Vencidos', 'En Preaviso']],
-        body: [[summary.total, summary.overdue, summary.warning]],
+        head: [['Vencidos', 'En Preaviso', 'Total Tareas']],
+        body: [[summary.overdue, summary.warning, summary.total]],
         theme: 'grid',
-        headStyles: { fillColor: [51, 65, 85] },
+        headStyles: { fillColor: [185, 28, 28] },
         styles: { halign: 'center', fontSize: 12, fontStyle: 'bold' }
     });
 
-    const tableData: any[] = [];
-    machines.filter(m => m.maintenanceDefs.length > 0).forEach(m => {
-        m.maintenanceDefs.forEach(d => {
+    // --- TABLA 1: PREVENTIVOS POR HORAS ---
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(12);
+    doc.text("1. MANTENIMIENTOS POR CONTADOR (HORAS)", 20, doc.lastAutoTable.finalY + 15);
+
+    const hoursData: any[] = [];
+    machines.forEach(m => {
+        m.maintenanceDefs.filter(d => d.maintenanceType !== 'DATE').forEach(d => {
             const remaining = d.remainingHours ?? 0;
             const dueHours = (d.lastMaintenanceHours || 0) + (d.intervalHours || 0);
             const status = remaining <= 0 ? 'VENCIDO' : remaining <= (d.warningHours || 0) ? 'PREAVISO' : 'AL DÍA';
-            
-            tableData.push([
+            hoursData.push([
                 m.companyCode ? `[${m.companyCode}] ${m.name}` : m.name,
                 d.name,
                 `${m.currentHours}h`,
@@ -276,36 +283,73 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
     });
 
     doc.autoTable({
-        startY: doc.lastAutoTable.finalY + 15,
+        startY: doc.lastAutoTable.finalY + 20,
         head: [['Máquina', 'Tarea', 'H. Actual', 'H. Vencim.', 'Restantes', 'Estado']],
-        body: tableData,
+        body: hoursData,
         theme: 'grid',
-        headStyles: { fillColor: [30, 41, 59] },
-        styles: { fontSize: 8, cellPadding: 2 },
-        columnStyles: { 
-            0: { fontStyle: 'bold', cellWidth: 45 },
-            5: { fontStyle: 'bold', halign: 'center' } 
-        },
+        headStyles: { fillColor: [51, 65, 85] },
+        styles: { fontSize: 8 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 45 }, 5: { fontStyle: 'bold', halign: 'center' } },
         didParseCell: (data: any) => {
             if (data.section === 'body' && data.column.index === 5) {
-                const status = data.cell.raw;
-                if (status === 'VENCIDO') {
-                    data.cell.styles.textColor = [185, 28, 28];
-                    data.cell.styles.fillColor = [254, 226, 226];
-                } else if (status === 'PREAVISO') {
-                    data.cell.styles.textColor = [194, 65, 12];
-                    data.cell.styles.fillColor = [255, 247, 237];
-                } else {
-                    data.cell.styles.textColor = [22, 163, 74];
-                }
+                const s = data.cell.raw;
+                if (s === 'VENCIDO') data.cell.styles.textColor = [185, 28, 28];
+                else if (s === 'PREAVISO') data.cell.styles.textColor = [194, 65, 12];
+                else data.cell.styles.textColor = [22, 163, 74];
+            }
+        }
+    });
+
+    // --- TABLA 2: PREVENTIVOS POR CALENDARIO (FECHAS) ---
+    if (doc.lastAutoTable.finalY > 200) doc.addPage();
+    
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(12);
+    doc.text("2. MANTENIMIENTOS POR CALENDARIO (DÍAS)", 20, doc.lastAutoTable.finalY + 15);
+
+    const datesData: any[] = [];
+    machines.forEach(m => {
+        m.maintenanceDefs.filter(d => d.maintenanceType === 'DATE').forEach(d => {
+            const nextDate = d.nextDate ? new Date(d.nextDate) : null;
+            let diffDays = 0;
+            if (nextDate) {
+                nextDate.setHours(0,0,0,0);
+                diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            }
+            const status = diffDays <= 0 ? 'VENCIDO' : diffDays <= 15 ? 'PREAVISO' : 'AL DÍA';
+            
+            datesData.push([
+                m.companyCode ? `[${m.companyCode}] ${m.name}` : m.name,
+                d.name,
+                todayStr, // Ahora se muestra la FECHA ACTUAL como referencia de horas
+                nextDate ? nextDate.toLocaleDateString() : 'N/A',
+                diffDays <= 0 ? 'PLAZO CUMPLIDO' : `${diffDays} días`,
+                status
+            ]);
+        });
+    });
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['Máquina', 'Tarea', 'Fecha Hoy', 'Vencimiento', 'Días Rest.', 'Estado']],
+        body: datesData,
+        theme: 'grid',
+        headStyles: { fillColor: [107, 70, 193] }, 
+        styles: { fontSize: 8 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 45 }, 5: { fontStyle: 'bold', halign: 'center' } },
+        didParseCell: (data: any) => {
+            if (data.section === 'body' && data.column.index === 5) {
+                const s = data.cell.raw;
+                if (s === 'VENCIDO') data.cell.styles.textColor = [185, 28, 28];
+                else if (s === 'PREAVISO') data.cell.styles.textColor = [194, 65, 12];
+                else data.cell.styles.textColor = [22, 163, 74];
             }
         }
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    const dateStr = new Date().toLocaleString();
-    doc.text(`Informe generado el ${dateStr} - Aridos Marraque SL.`, 105, 290, { align: 'center' });
+    doc.text(`Informe generado automáticamente el ${new Date().toLocaleString()} - Aridos Marraque SL.`, 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
