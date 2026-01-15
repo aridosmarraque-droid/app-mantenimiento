@@ -78,6 +78,7 @@ function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [openCategory, setOpenCategory] = useState<MenuCategory>(null);
   const [isSavingRefueling, setIsSavingRefueling] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
   
@@ -173,7 +174,11 @@ function App() {
 
   const handleFormSubmit = async (data: Partial<OperationLog>) => {
     if (!currentUser || !selectedContext || !selectedAction) return;
+    
+    // Bloqueo inmediato de doble clic
+    setIsSubmitting(true);
     if (selectedAction === 'REFUELING') setIsSavingRefueling(true);
+    
     try {
       const logData: Omit<OperationLog, 'id'> = { 
         date: selectedDate, 
@@ -190,9 +195,11 @@ function App() {
         setViewState(ViewState.ACTION_MENU); 
         setSelectedAction(null); 
         setIsSavingRefueling(false);
+        setIsSubmitting(false);
       }, 2000);
     } catch (e: any) { 
         setIsSavingRefueling(false);
+        setIsSubmitting(false);
         alert(e.message); 
     }
   };
@@ -352,10 +359,20 @@ function App() {
                   <div className="bg-white p-8 rounded-3xl shadow-xl text-center border border-slate-100">
                     <Fuel size={32} className="text-green-600 mx-auto mb-4" />
                     <h3 className="text-xl font-black text-slate-800 mb-6 uppercase">Repostaje</h3>
-                    <form onSubmit={(e) => { e.preventDefault(); const formData = new FormData(e.currentTarget); handleFormSubmit({ hoursAtExecution: Number(formData.get('hours')), fuelLitres: Number(formData.get('litres')) }); }} className="space-y-5 text-left">
+                    <form onSubmit={(e) => { 
+                        e.preventDefault(); 
+                        setIsSavingRefueling(true); // Bloqueo inmediato
+                        const formData = new FormData(e.currentTarget); 
+                        handleFormSubmit({ 
+                            hoursAtExecution: Number(formData.get('hours')), 
+                            fuelLitres: Number(formData.get('litres')) 
+                        }); 
+                    }} className="space-y-5 text-left">
                       <input name="hours" type="number" step="0.01" className="w-full border-2 p-4 rounded-xl font-black" required min={selectedContext.machine.currentHours} defaultValue={selectedContext.machine.currentHours}/>
                       <input name="litres" type="number" step="0.1" className="w-full border-2 p-4 rounded-xl font-black" placeholder="Litros" required />
-                      <button disabled={isSavingRefueling} className="bg-slate-900 text-white w-full py-4 rounded-2xl font-black uppercase">{isSavingRefueling ? <Loader2 className="animate-spin inline" /> : 'Guardar'}</button>
+                      <button disabled={isSavingRefueling} className="bg-slate-900 text-white w-full py-4 rounded-2xl font-black uppercase">
+                        {isSavingRefueling ? <Loader2 className="animate-spin inline" /> : 'Guardar'}
+                      </button>
                     </form>
                   </div>
                 )}
