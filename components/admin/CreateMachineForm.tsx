@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { createMachine, getCostCenters, getWorkers } from '../../services/db';
-import { CostCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, ToggleRight } from 'lucide-react';
+import { createMachine, getCostCenters, getSubCentersByCenter, getWorkers } from '../../services/db';
+import { CostCenter, SubCenter, MaintenanceDefinition, Worker } from '../../types';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight, LayoutGrid } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -11,6 +11,7 @@ interface Props {
 
 export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [subCenters, setSubCenters] = useState<SubCenter[]>([]);
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(false);
     
@@ -18,13 +19,14 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [name, setName] = useState('');
     const [companyCode, setCompanyCode] = useState('');
     const [centerId, setCenterId] = useState('');
+    const [subId, setSubId] = useState('');
     const [responsibleId, setResponsibleId] = useState('');
     const [currentHours, setCurrentHours] = useState(0);
     const [requiresHours, setRequiresHours] = useState(true);
     const [adminExpenses, setAdminExpenses] = useState(false);
     const [transportExpenses, setTransportExpenses] = useState(false);
     const [selectableForReports, setSelectableForReports] = useState(true); 
-    const [active, setActive] = useState(true); // Nuevo estado
+    const [active, setActive] = useState(true);
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
@@ -41,6 +43,16 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         getCostCenters().then(setCenters);
         getWorkers().then(setWorkers);
     }, []);
+
+    // Cargar subcentros cuando cambia el centro
+    useEffect(() => {
+        if (centerId) {
+            getSubCentersByCenter(centerId).then(setSubCenters);
+            setSubId(''); // Reset subcenter when center changes
+        } else {
+            setSubCenters([]);
+        }
+    }, [centerId]);
 
     const handleExpenseChange = (type: 'admin' | 'transport') => {
         if (type === 'admin') {
@@ -93,6 +105,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 name,
                 companyCode,
                 costCenterId: centerId,
+                subCenterId: subId || undefined, // Incluimos el subcentro
                 responsibleWorkerId: responsibleId || undefined,
                 currentHours,
                 requiresHours,
@@ -100,7 +113,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 transportExpenses,
                 selectableForReports,
                 maintenanceDefs: defs,
-                active // Pasamos el estado activo
+                active
             });
             onSuccess();
         } catch (error) {
@@ -147,9 +160,45 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Cantera / Grupo *</label>
-                    <select required value={centerId} onChange={e => setCenterId(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <select 
+                        required 
+                        value={centerId} 
+                        onChange={e => setCenterId(e.target.value)} 
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
                         <option value="">-- Seleccionar --</option>
                         {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                </div>
+
+                {/* NUEVO: Selección de Subcentro */}
+                <div className="animate-in fade-in duration-300">
+                    <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                        <LayoutGrid size={14} className="text-blue-500"/> Subcentro / Planta
+                    </label>
+                    <select 
+                        disabled={!centerId}
+                        value={subId} 
+                        onChange={e => setSubId(e.target.value)} 
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+                    >
+                        <option value="">-- Sin Subcentro / General --</option>
+                        {subCenters.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                    </select>
+                    {!centerId && <p className="text-[10px] text-slate-400 mt-1 italic">Seleccione primero una cantera para ver sus plantas.</p>}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Operario Responsable</label>
+                    <select 
+                        value={responsibleId} 
+                        onChange={e => setResponsibleId(e.target.value)} 
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">-- Sin Responsable --</option>
+                        {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>
                 </div>
             </div>
@@ -166,7 +215,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400 shadow-lg">
+            <button type="submit" disabled={loading} className="w-full py-4 bg-blue-600 rounded-xl text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:bg-slate-400 shadow-lg transition-all">
                 <Save className="w-5 h-5" /> {loading ? 'Guardando...' : 'Crear Máquina Completa'}
             </button>
         </form>
