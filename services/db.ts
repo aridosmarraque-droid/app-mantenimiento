@@ -128,7 +128,7 @@ const mapMachine = (m: any): Machine => {
         }),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.activo !== undefined ? m.activo : true,
+        active: m.active !== undefined ? m.active : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -377,7 +377,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     
     if (error) {
         console.error("[DB] Error de inserción en mant_registros:", error);
-        // Si el error es de duplicado (23505), intentamos recuperar el existente en lugar de fallar
         if (error.code === '23505') {
              const { data: existing } = await supabase
                 .from('mant_registros')
@@ -391,6 +390,43 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         }
         throw new Error(`Error en base de datos: ${error.message}`);
     }
+
+    // --- LÓGICA DE ACTUALIZACIÓN DE MANTENIMIENTO PROGRAMADO ---
+    const defId = cleanUuid(log.maintenanceDefId);
+    if (defId) {
+        console.log(`[DB] Cerrando ciclo de mantenimiento para Def ID: ${defId}`);
+        
+        // Obtenemos la definición para saber si es por fecha y calcular el siguiente ciclo
+        const { data: defData } = await supabase
+            .from('mant_mantenimientos_def')
+            .select('*')
+            .eq('id', defId)
+            .single();
+
+        if (defData) {
+            const updates: any = {
+                ultimas_horas_realizadas: h,
+                ultima_fecha: dateStr,
+                notificado_preaviso: false,
+                notificado_vencido: false,
+                pendiente: false
+            };
+
+            // Si es por fechas, calculamos la próxima basándonos en el intervalo de meses
+            if (defData.tipo_programacion === 'DATE' && defData.intervalo_meses > 0) {
+                const nextDate = new Date(log.date);
+                nextDate.setMonth(nextDate.getMonth() + Number(defData.intervalo_meses));
+                updates.proxima_fecha = toLocalDateString(nextDate);
+            }
+
+            const { error: defUpdateError } = await supabase
+                .from('mant_mantenimientos_def')
+                .update(updates)
+                .eq('id', defId);
+                
+            if (defUpdateError) console.error("[DB] Error actualizando definición de mantenimiento:", defUpdateError);
+        }
+    }
     
     // Actualizar horas de la máquina si las nuevas son superiores
     if (h > 0) {
@@ -403,7 +439,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         if (hError) console.warn("[DB] Error actualizando horas máquina:", hError);
     }
     
-    // Comprobar notificaciones de mantenimiento
+    // Comprobar notificaciones de mantenimiento para el PRÓXIMO ciclo
     const { data: machineData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', maquinaId).single();
     if (machineData) {
         await checkMaintenanceThresholds(mapMachine(machineData), h);
