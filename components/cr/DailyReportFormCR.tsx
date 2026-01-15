@@ -33,11 +33,17 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
         try {
             const lastReport = await getLastCRReport();
             if (lastReport) {
-                setWashingStart(Number(lastReport.washingEnd || 0));
-                setTriturationStart(Number(lastReport.triturationEnd || 0));
+                // Se cargan las horas finales del último registro como horas iniciales del actual
+                const wStart = Number(lastReport.washingEnd || 0);
+                const tStart = Number(lastReport.triturationEnd || 0);
+                
+                console.log(`[CR] Cargando contadores anteriores: Lavado ${wStart}, Trituración ${tStart}`);
+                
+                setWashingStart(wStart);
+                setTriturationStart(tStart);
             }
         } catch (e) {
-            console.error(e);
+            console.error("Error al cargar último parte de CR:", e);
         } finally {
             setLoading(false);
         }
