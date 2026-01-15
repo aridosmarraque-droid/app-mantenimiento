@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { getAllMachines } from '../../services/db';
+import { generateMaintenanceReportPDF } from '../../services/pdf';
+import { sendEmail } from '../../services/api';
 import { Machine, MaintenanceDefinition } from '../../types';
-import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Clock, BellRing, Mail, Truck, LayoutGrid, CalendarClock, Info } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Clock, BellRing, Mail, Truck, LayoutGrid, CalendarClock, Info, Send } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -11,6 +13,7 @@ interface Props {
 export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
     const [machines, setMachines] = useState<Machine[]>([]);
     const [loading, setLoading] = useState(true);
+    const [sending, setSending] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -48,6 +51,34 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
         return { total, overdue, warning };
     }, [machines]);
 
+    const handleSendReport = async () => {
+        if (sending) return;
+        if (!confirm("¿Desea enviar la auditoría integral de preventivos a aridos@marraque.es?")) return;
+
+        setSending(true);
+        try {
+            const pdfBase64 = generateMaintenanceReportPDF(machines, summary);
+            const res = await sendEmail(
+                ['aridos@marraque.es'],
+                `Auditoría Preventivos - ${new Date().toLocaleDateString()}`,
+                `<p>Se adjunta el informe detallado de mantenimientos programados de la flota.</p><p><b>Resumen actual:</b> ${summary.overdue} vencidos, ${summary.warning} en preaviso de un total de ${summary.total} tareas activas.</p>`,
+                pdfBase64,
+                `Auditoria_Preventivos_${new Date().toISOString().split('T')[0]}.pdf`
+            );
+
+            if (res.success) {
+                alert("Informe enviado con éxito a aridos@marraque.es");
+            } else {
+                alert("Error al enviar el email: " + res.error);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error crítico al generar o enviar el informe.");
+        } finally {
+            setSending(false);
+        }
+    };
+
     if (loading) return <div className="p-10 flex flex-col items-center justify-center min-h-[400px] text-slate-400">
         <Loader2 className="animate-spin mb-4 text-blue-600" size={48} />
         <p className="font-black uppercase text-xs tracking-widest">Auditando preventivos...</p>
@@ -55,16 +86,26 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
-            <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
-                <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700 transition-colors">
-                    <ArrowLeft size={24} />
-                </button>
-                <div>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Control Preventivo</h3>
-                    <p className="text-[10px] font-bold text-red-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                        <CalendarClock size={10}/> Mantenimientos Programados
-                    </p>
+            <div className="flex items-center justify-between border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
+                <div className="flex items-center gap-2">
+                    <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700 transition-colors">
+                        <ArrowLeft size={24} />
+                    </button>
+                    <div>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Control Preventivo</h3>
+                        <p className="text-[10px] font-bold text-red-600 uppercase mt-1 tracking-widest flex items-center gap-1">
+                            <CalendarClock size={10}/> Mantenimientos Programados
+                        </p>
+                    </div>
                 </div>
+                <button 
+                    onClick={handleSendReport}
+                    disabled={sending}
+                    className="p-3 bg-slate-900 text-white rounded-xl shadow-lg hover:bg-black transition-all disabled:opacity-50"
+                    title="Enviar Informe por Email"
+                >
+                    {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                </button>
             </div>
 
             {/* Panel de Resumen Semafórico */}
