@@ -149,31 +149,58 @@ function App() {
   };
 
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
       try {
           await savePersonalReport(data);
           setSuccessMsg('Reporte Guardado ✅');
-          setTimeout(() => { setSuccessMsg(''); navigateBack(); }, 1500);
-      } catch (e: any) { alert(e.message); }
+          setTimeout(() => { 
+              setSuccessMsg(''); 
+              navigateBack(); 
+              setIsSubmitting(false);
+          }, 1500);
+      } catch (e: any) { 
+          setIsSubmitting(false);
+          alert(e.message); 
+      }
   };
 
   const handleCPReportSubmit = async (data: Omit<CPDailyReport, 'id'>) => {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
       try {
           await saveCPReport(data);
           setSuccessMsg('Parte Cantera Guardado ✅');
-          setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CP_SELECTION); }, 2000);
-      } catch (e: any) { alert(e.message); }
+          setTimeout(() => { 
+              setSuccessMsg(''); 
+              setViewState(ViewState.CP_SELECTION); 
+              setIsSubmitting(false);
+          }, 2000);
+      } catch (e: any) { 
+          setIsSubmitting(false);
+          alert(e.message); 
+      }
   };
 
   const handleCRReportSubmit = async (data: Omit<CRDailyReport, 'id'>) => {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
       try {
           await saveCRReport(data);
           setSuccessMsg('Parte Rodado Guardado ✅');
-          setTimeout(() => { setSuccessMsg(''); setViewState(ViewState.CR_SELECTION); }, 2000);
-      } catch (e: any) { alert(e.message); }
+          setTimeout(() => { 
+              setSuccessMsg(''); 
+              setViewState(ViewState.CR_SELECTION); 
+              setIsSubmitting(false);
+          }, 2000);
+      } catch (e: any) { 
+          setIsSubmitting(false);
+          alert(e.message); 
+      }
   };
 
   const handleFormSubmit = async (data: Partial<OperationLog>) => {
-    if (!currentUser || !selectedContext || !selectedAction) return;
+    if (!currentUser || !selectedContext || !selectedAction || isSubmitting) return;
     
     // Bloqueo inmediato de doble clic
     setIsSubmitting(true);
@@ -361,6 +388,7 @@ function App() {
                     <h3 className="text-xl font-black text-slate-800 mb-6 uppercase">Repostaje</h3>
                     <form onSubmit={(e) => { 
                         e.preventDefault(); 
+                        if (isSubmitting) return;
                         setIsSavingRefueling(true); // Bloqueo inmediato
                         const formData = new FormData(e.currentTarget); 
                         handleFormSubmit({ 
