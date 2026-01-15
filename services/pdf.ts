@@ -1,7 +1,7 @@
 
 import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
-import { Machine } from '../types';
+import { Machine, MaintenanceDefinition } from '../types';
 import { FuelConsumptionStat, formatDecimal } from './stats';
 
 const getDeviationColor = (dev: number): [number, number, number] => {
@@ -226,6 +226,86 @@ export const generateFluidReportPDF = (
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
     doc.text("Auditoría basada en los últimos 6 meses de registros. Aridos Marraque SL.", 105, 290, { align: 'center' });
+
+    return doc.output('datauristring').split(',')[1];
+};
+
+export const generateMaintenanceReportPDF = (machines: Machine[], summary: any): string => {
+    const doc: any = new jsPDF();
+    
+    // Header
+    doc.setFillColor(15, 23, 42); 
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("ARIDOS MARRAQUE", 20, 18);
+    doc.setFontSize(12);
+    doc.text(`AUDITORÍA DE MANTENIMIENTO PREVENTIVO`, 20, 30);
+    
+    // Resumen Superior
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(14);
+    doc.text("RESUMEN DE ESTADO DE LA FLOTA", 20, 50);
+    
+    doc.autoTable({
+        startY: 55,
+        head: [['Total Tareas', 'Vencidos', 'En Preaviso']],
+        body: [[summary.total, summary.overdue, summary.warning]],
+        theme: 'grid',
+        headStyles: { fillColor: [51, 65, 85] },
+        styles: { halign: 'center', fontSize: 12, fontStyle: 'bold' }
+    });
+
+    const tableData: any[] = [];
+    machines.filter(m => m.maintenanceDefs.length > 0).forEach(m => {
+        m.maintenanceDefs.forEach(d => {
+            const remaining = d.remainingHours ?? 0;
+            const dueHours = (d.lastMaintenanceHours || 0) + (d.intervalHours || 0);
+            const status = remaining <= 0 ? 'VENCIDO' : remaining <= (d.warningHours || 0) ? 'PREAVISO' : 'AL DÍA';
+            
+            tableData.push([
+                m.companyCode ? `[${m.companyCode}] ${m.name}` : m.name,
+                d.name,
+                `${m.currentHours}h`,
+                `${dueHours}h`,
+                `${remaining}h`,
+                status
+            ]);
+        });
+    });
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 15,
+        head: [['Máquina', 'Tarea', 'H. Actual', 'H. Vencim.', 'Restantes', 'Estado']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 41, 59] },
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: { 
+            0: { fontStyle: 'bold', cellWidth: 45 },
+            5: { fontStyle: 'bold', halign: 'center' } 
+        },
+        didParseCell: (data: any) => {
+            if (data.section === 'body' && data.column.index === 5) {
+                const status = data.cell.raw;
+                if (status === 'VENCIDO') {
+                    data.cell.styles.textColor = [185, 28, 28];
+                    data.cell.styles.fillColor = [254, 226, 226];
+                } else if (status === 'PREAVISO') {
+                    data.cell.styles.textColor = [194, 65, 12];
+                    data.cell.styles.fillColor = [255, 247, 237];
+                } else {
+                    data.cell.styles.textColor = [22, 163, 74];
+                }
+            }
+        }
+    });
+
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    const dateStr = new Date().toLocaleString();
+    doc.text(`Informe generado el ${dateStr} - Aridos Marraque SL.`, 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
