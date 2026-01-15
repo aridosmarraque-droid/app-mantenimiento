@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider } from '../../types';
 import { getServiceProviders } from '../../services/db';
-import { Save } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 
 interface Props {
   machine: Machine;
@@ -13,6 +14,7 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
   const [hours, setHours] = useState<number | ''>(machine.currentHours || '');
   const [providerId, setProviderId] = useState('');
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Usamos claves internas para la UI
   const [typeKey, setTypeKey] = useState<string>('ENGRASE');
@@ -26,6 +28,7 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true); // Bloqueo inmediato
     
     // Mapeo para descripción human-readable
     const labels: Record<string, string> = {
@@ -129,9 +132,10 @@ export const MaintenanceForm: React.FC<Props> = ({ machine, onSubmit, onCancel }
       </div>
 
       <div className="flex gap-3 mt-6">
-        <button type="button" onClick={onCancel} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Cancelar</button>
-        <button type="submit" className="flex-1 py-3 bg-amber-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-amber-700">
-          <Save className="w-5 h-5" /> Guardar
+        <button type="button" disabled={isSaving} onClick={onCancel} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Cancelar</button>
+        <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-amber-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-amber-700 disabled:opacity-50">
+          {isSaving ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />}
+          {isSaving ? 'Guardando...' : 'Guardar'}
         </button>
       </div>
     </form>
