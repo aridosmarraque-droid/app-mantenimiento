@@ -21,6 +21,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
   const [hours, setHours] = useState<number>(machine.currentHours);
   const [providerId, setProviderId] = useState('');
   const [sendingWhatsapp, setSendingWhatsapp] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     getServiceProviders().then(setProviders);
@@ -36,7 +37,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
     setSelectedDefId(defId);
   };
 
-  const handleSendWhatsapp = async (def: MaintenanceDefinition) => {
+  const handleSendWhatsApp = async (def: MaintenanceDefinition) => {
       const responsible = workers.find(w => w.id === machine.responsibleWorkerId);
       if (!responsible || !responsible.phone) {
           alert("La máquina no tiene un responsable con teléfono asignado.");
@@ -55,6 +56,8 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
   const handleConfirm = (e: React.FormEvent) => {
       e.preventDefault();
       if (!selectedDefId) return;
+      
+      setIsSubmitting(true); // Bloqueo inmediato de doble clic
       const def = machine.maintenanceDefs.find(d => d.id === selectedDefId);
 
       onSubmit({
@@ -99,9 +102,10 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                 </select>
             </div>
             <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setSelectedDefId(null)} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Volver</button>
-                <button type="submit" className="flex-1 py-3 bg-purple-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-purple-700">
-                <Save className="w-5 h-5" /> Confirmar
+                <button type="button" disabled={isSubmitting} onClick={() => setSelectedDefId(null)} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Volver</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 py-3 bg-purple-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-purple-700 disabled:opacity-50">
+                {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} 
+                {isSubmitting ? 'Registrando...' : 'Confirmar'}
                 </button>
             </div>
         </form>
@@ -159,7 +163,7 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
                                Registrar Parte
                            </button>
                            <button 
-                             onClick={() => handleSendWhatsapp(def)}
+                             onClick={() => handleSendWhatsApp(def)}
                              disabled={sendingWhatsapp === def.id}
                              className="w-14 bg-green-500 text-white flex items-center justify-center rounded-xl hover:bg-green-600 transition-all shadow-sm disabled:opacity-50"
                              title="Notificar por WhatsApp"
