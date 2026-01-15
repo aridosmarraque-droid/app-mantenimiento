@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { PersonalReport, CostCenter, Machine } from '../../types';
 import { getCostCenters, getAllMachines, getPersonalReports } from '../../services/db';
@@ -38,11 +39,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                 getPersonalReports(workerId),
                 getAllMachines(true) // Solo máquinas activas
             ]);
-            
-            // FILTRADO DE CENTROS: Solo los marcados como seleccionables para partes
-            const filteredCenters = centersData.filter(c => c.selectableForReports !== false);
-            setCenters(filteredCenters);
-            
+            setCenters(centersData);
             setHistory(historyData);
             
             // Filtrar y Ordenar máquinas seleccionables
@@ -66,12 +63,14 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSaving) return; // Evitar re-entrada
+        
         if (!selectedCenterId || !selectedMachineId || !hours) {
             alert("Por favor rellena todos los campos.");
             return;
         }
 
-        setIsSaving(true);
+        setIsSaving(true); // Bloqueo de UI inmediato
         onSubmit({
             date: new Date(date),
             workerId,
@@ -102,7 +101,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                         required
                         value={date}
                         onChange={e => setDate(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 font-bold"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     />
                 </div>
                 
@@ -113,7 +112,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     <select
                         value={selectedCenterId}
                         onChange={(e) => setSelectedCenterId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 font-bold bg-white"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
                         <option value="">-- Seleccionar Centro --</option>
                         {centers.map(c => (
@@ -129,7 +128,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     <select
                         value={selectedMachineId}
                         onChange={e => setSelectedMachineId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 font-bold bg-white"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
                         <option value="">-- Seleccionar Máquina --</option>
                         {allSelectableMachines.map(m => {
@@ -178,8 +177,8 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                                     <span className="font-bold text-slate-700">{item.date.toLocaleDateString()}</span>
                                     <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">{item.hours}h</span>
                                 </div>
-                                <div className="text-slate-600 font-bold">{item.machineName || 'Máquina desconocida'}</div>
-                                <div className="text-xs text-slate-400 uppercase font-bold">{item.costCenterName}</div>
+                                <div className="text-slate-600">{item.machineName || 'Máquina desconocida'}</div>
+                                <div className="text-xs text-slate-400">{item.costCenterName}</div>
                             </div>
                         ))}
                     </div>
