@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Machine, OperationLog } from '../../types';
-import { Save } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 
 interface Props {
   machine: Machine;
@@ -14,9 +14,11 @@ export const LevelsForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) => 
   const [motorOil, setMotorOil] = useState<number | ''>('');
   const [hydraulicOil, setHydraulicOil] = useState<number | ''>('');
   const [coolant, setCoolant] = useState<number | ''>('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true); // Bloqueo inmediato
     onSubmit({
       hoursAtExecution: Number(hours),
       motorOil: Number(motorOil) || 0,
@@ -80,9 +82,10 @@ export const LevelsForm: React.FC<Props> = ({ machine, onSubmit, onCancel }) => 
       </div>
 
       <div className="flex gap-3 mt-6">
-        <button type="button" onClick={onCancel} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Cancelar</button>
-        <button type="submit" className="flex-1 py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700">
-          <Save className="w-5 h-5" /> Guardar
+        <button type="button" disabled={isSaving} onClick={onCancel} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-medium">Cancelar</button>
+        <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-blue-600 rounded-lg text-white font-bold flex justify-center items-center gap-2 hover:bg-blue-700 disabled:opacity-50">
+          {isSaving ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} 
+          {isSaving ? 'Guardando...' : 'Guardar'}
         </button>
       </div>
     </form>
