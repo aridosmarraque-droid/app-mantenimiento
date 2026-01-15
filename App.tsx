@@ -28,9 +28,10 @@ import { DatabaseDiagnostics } from './components/admin/DatabaseDiagnostics';
 import { FuelReportViewer } from './components/admin/FuelReportViewer';
 import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
+import { ScheduledMaintenanceReport } from './components/admin/ScheduledMaintenanceReport';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -57,7 +58,8 @@ enum ViewState {
   ADMIN_DIAGNOSTICS,
   ADMIN_FUEL_REPORT,
   ADMIN_FLUID_REPORT,
-  ADMIN_WHATSAPP_CONFIG
+  ADMIN_WHATSAPP_CONFIG,
+  ADMIN_MAINTENANCE_REPORT
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'informes' | 'config' | null;
@@ -300,6 +302,7 @@ function App() {
                     </button>
                     {openCategory === 'informes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MAINTENANCE_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Mantenimientos Programados</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Rendimiento de Plantas</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría Diaria</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_VIEW_LOGS)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2">Histórico Maquinaria</button>
@@ -390,6 +393,7 @@ function App() {
             {viewState === ViewState.ADMIN_MANAGE_PROVIDERS && <ProviderManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FUEL_REPORT && <FuelReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FLUID_REPORT && <FluidReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_MAINTENANCE_REPORT && <ScheduledMaintenanceReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         </main>
       </div>
     );
