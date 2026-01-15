@@ -2,7 +2,7 @@
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
 import * as offline from './offlineQueue';
-import { checkMaintenanceThresholds, resetNotificationFlags } from './notifications';
+import { checkMaintenanceThresholds } from './notifications';
 import { 
     CostCenter, 
     SubCenter, 
@@ -271,11 +271,8 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.name !== undefined) p.nombre = updates.name;
     if (updates.companyCode !== undefined) p.codigo_empresa = updates.companyCode;
     if (updates.costCenterId !== undefined) p.centro_id = updates.costCenterId;
-    
-    // Para IDs que pueden ser nulos, usamos el helper cleanUuid para asegurar envío de null si están vacíos
     if (updates.subCenterId !== undefined) p.subcentro_id = cleanUuid(updates.subCenterId);
     if (updates.responsibleWorkerId !== undefined) p.responsable_id = cleanUuid(updates.responsibleWorkerId);
-    
     if (updates.currentHours !== undefined) p.horas_actuales = updates.currentHours;
     if (updates.requiresHours !== undefined) p.requiere_horas = updates.requiresHours;
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
@@ -283,7 +280,6 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
     if (updates.active !== undefined) p.activo = updates.active;
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
-    
     const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
     if (error) throw error;
 };
@@ -342,7 +338,7 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
     
-    if (!log.date) throw new Error("Faltan datos críticos: Fecha obligatoria.");
+    if (!log.date) throw new Error("Fecha obligatoria.");
     const dateStr = toLocalDateString(log.date);
     const trabajadorId = cleanUuid(log.workerId);
     const maquinaId = cleanUuid(log.machineId);
@@ -351,7 +347,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
 
     const h = cleanNum(log.hoursAtExecution) || 0;
 
-    // Payload de inserción
     const payload = {
         fecha: dateStr,
         trabajador_id: trabajadorId,
@@ -371,21 +366,12 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
         mantenimiento_def_id: cleanUuid(log.maintenanceDefId)
     };
 
-    console.log("[DB] Intentando insertar registro:", payload);
-
     const { data, error } = await supabase.from('mant_registros').insert(payload).select().single();
     
     if (error) {
-        console.error("[DB] Error de inserción en mant_registros:", error);
         if (error.code === '23505') {
              const { data: existing } = await supabase
-                .from('mant_registros')
-                .select('*')
-                .eq('maquina_id', maquinaId)
-                .eq('fecha', dateStr)
-                .eq('horas_registro', h)
-                .eq('tipo_operacion', log.type)
-                .maybeSingle();
+                .from('mant_registros').select('*').eq('maquina_id', maquinaId).eq('fecha', dateStr).eq('horas_registro', h).eq('tipo_operacion', log.type).maybeSingle();
              if (existing) return mapLogFromDb(existing);
         }
         throw new Error(`Error en base de datos: ${error.message}`);
@@ -394,14 +380,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
     // --- LÓGICA DE ACTUALIZACIÓN DE MANTENIMIENTO PROGRAMADO ---
     const defId = cleanUuid(log.maintenanceDefId);
     if (defId) {
-        console.log(`[DB] Cerrando ciclo de mantenimiento para Def ID: ${defId}`);
-        
-        // Obtenemos la definición para saber si es por fecha y calcular el siguiente ciclo
-        const { data: defData } = await supabase
-            .from('mant_mantenimientos_def')
-            .select('*')
-            .eq('id', defId)
-            .single();
+        const { data: defData } = await supabase.from('mant_mantenimientos_def').select('*').eq('id', defId).single();
 
         if (defData) {
             const updates: any = {
@@ -412,34 +391,20 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
                 pendiente: false
             };
 
-            // Si es por fechas, calculamos la próxima basándonos en el intervalo de meses
             if (defData.tipo_programacion === 'DATE' && defData.intervalo_meses > 0) {
                 const nextDate = new Date(log.date);
                 nextDate.setMonth(nextDate.getMonth() + Number(defData.intervalo_meses));
                 updates.proxima_fecha = toLocalDateString(nextDate);
             }
 
-            const { error: defUpdateError } = await supabase
-                .from('mant_mantenimientos_def')
-                .update(updates)
-                .eq('id', defId);
-                
-            if (defUpdateError) console.error("[DB] Error actualizando definición de mantenimiento:", defUpdateError);
+            await supabase.from('mant_mantenimientos_def').update(updates).eq('id', defId);
         }
     }
     
-    // Actualizar horas de la máquina si las nuevas son superiores
     if (h > 0) {
-        const { error: hError } = await supabase
-            .from('mant_maquinas')
-            .update({ horas_actuales: h })
-            .eq('id', maquinaId)
-            .lt('horas_actuales', h);
-            
-        if (hError) console.warn("[DB] Error actualizando horas máquina:", hError);
+        await supabase.from('mant_maquinas').update({ horas_actuales: h }).eq('id', maquinaId).lt('horas_actuales', h);
     }
     
-    // Comprobar notificaciones de mantenimiento para el PRÓXIMO ciclo
     const { data: machineData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', maquinaId).single();
     if (machineData) {
         await checkMaintenanceThresholds(mapMachine(machineData), h);
@@ -594,8 +559,12 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>) => {
     const { error } = await supabase.from('partes_trabajo').insert({
-        fecha: toLocalDateString(r.date), trabajador_id: r.workerId, hours: r.hours,
-        maquina_id: r.machineId, centro_id: r.costCenterId, comentarios: r.description
+        fecha: toLocalDateString(r.date), 
+        trabajador_id: r.workerId, 
+        horas: r.hours, // CORRECCIÓN: Usamos 'horas' en lugar de 'hours'
+        maquina_id: r.machineId, 
+        centro_id: r.costCenterId, 
+        comentarios: r.description
     });
     if (error) throw error;
 };
@@ -603,7 +572,7 @@ export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>) => {
 export const updatePersonalReport = async (id: string, r: Partial<PersonalReport>): Promise<void> => {
     const p: any = {};
     if (r.date) p.fecha = toLocalDateString(r.date);
-    if (r.hours !== undefined) p.horas = r.hours;
+    if (r.hours !== undefined) p.horas = r.hours; // CORRECCIÓN: Usamos 'horas'
     if (r.machineId) p.maquina_id = r.machineId;
     if (r.costCenterId) p.centro_id = r.costCenterId;
     if (r.description !== undefined) p.comentarios = r.description;
@@ -644,16 +613,11 @@ export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
 
 export const getMachineDependencyCount = async (machineId: string): Promise<{ logs: number, reports: number }> => {
     if (!isConfigured) return { logs: 0, reports: 0 };
-    
     const [logsRes, reportsRes] = await Promise.all([
         supabase.from('mant_registros').select('id', { count: 'exact', head: true }).eq('maquina_id', machineId),
         supabase.from('partes_trabajo').select('id', { count: 'exact', head: true }).eq('maquina_id', machineId)
     ]);
-    
-    return {
-        logs: logsRes.count || 0,
-        reports: reportsRes.count || 0
-    };
+    return { logs: logsRes.count || 0, reports: reportsRes.count || 0 };
 };
 
 export const syncPendingData = async () => {
@@ -682,36 +646,20 @@ export const syncPendingData = async () => {
 export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocument[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_documentos').select('*').eq('worker_id', workerId);
-    if (error) {
-        console.error("Error fetching worker documents:", error);
-        return [];
-    }
+    if (error) return [];
     return (data || []).map(d => ({
-        id: d.id,
-        workerId: d.worker_id,
-        title: d.titulo,
-        category: d.categoria,
-        issueDate: new Date(d.fecha_emision),
-        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
-        fileUrl: d.url_archivo,
-        status: d.estado,
-        docType: d.tipo_documento,
-        notes: d.notes
+        id: d.id, workerId: d.worker_id, title: d.titulo, category: d.categoria, issueDate: new Date(d.fecha_emision),
+        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined, fileUrl: d.url_archivo, status: d.estado,
+        docType: d.tipo_documento, notes: d.notes
     }));
 };
 
 export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_documentos').insert({
-        worker_id: doc.workerId,
-        titulo: doc.title,
-        category: doc.category,
-        fecha_emision: toLocalDateString(doc.issueDate),
-        fecha_vencimiento: doc.expiryDate ? toLocalDateString(doc.expiryDate) : null,
-        url_archivo: doc.fileUrl,
-        estado: doc.status,
-        tipo_documento: doc.docType,
-        notas: doc.notes
+        worker_id: doc.workerId, titulo: doc.title, category: doc.category, fecha_emision: toLocalDateString(doc.issueDate),
+        fecha_vencimiento: doc.expiryDate ? toLocalDateString(doc.expiryDate) : null, url_archivo: doc.fileUrl, estado: doc.status,
+        tipo_documento: doc.docType, notas: doc.notes
     });
     if (error) throw error;
 };
