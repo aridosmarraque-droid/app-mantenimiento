@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { createMachine, getCostCenters, getSubCentersByCenter, getWorkers } from '../../services/db';
 import { CostCenter, SubCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, ToggleRight, LayoutGrid } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight, LayoutGrid, Calculator, Truck } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -56,11 +56,13 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
 
     const handleExpenseChange = (type: 'admin' | 'transport') => {
         if (type === 'admin') {
-            setAdminExpenses(!adminExpenses);
-            if (!adminExpenses) setTransportExpenses(false);
+            const nextVal = !adminExpenses;
+            setAdminExpenses(nextVal);
+            if (nextVal) setTransportExpenses(false);
         } else {
-            setTransportExpenses(!transportExpenses);
-            if (!transportExpenses) setAdminExpenses(false);
+            const nextVal = !transportExpenses;
+            setTransportExpenses(nextVal);
+            if (nextVal) setAdminExpenses(false);
         }
     };
 
@@ -105,7 +107,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 name,
                 companyCode,
                 costCenterId: centerId,
-                subCenterId: subId || undefined, // Incluimos el subcentro
+                subCenterId: subId || undefined,
                 responsibleWorkerId: responsibleId || undefined,
                 currentHours,
                 requiresHours,
@@ -137,7 +139,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <span className="text-sm font-bold text-slate-600 uppercase">Estado inicial</span>
                     <button type="button" onClick={() => setActive(!active)} className="flex items-center gap-2 text-green-600 font-bold">
-                        <ToggleRight size={32} className={active ? 'text-green-500' : 'text-slate-300 rotate-180'} />
+                        {active ? <ToggleRight size={32} className="text-green-500" /> : <ToggleRight size={32} className="text-slate-300 rotate-180" />}
                         {active ? 'ACTIVO' : 'INACTIVO'}
                     </button>
                 </div>
@@ -171,8 +173,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                     </select>
                 </div>
 
-                {/* NUEVO: Selección de Subcentro */}
-                <div className="animate-in fade-in duration-300">
+                <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                         <LayoutGrid size={14} className="text-blue-500"/> Subcentro / Planta
                     </label>
@@ -187,7 +188,6 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                             <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                     </select>
-                    {!centerId && <p className="text-[10px] text-slate-400 mt-1 italic">Seleccione primero una cantera para ver sus plantas.</p>}
                 </div>
 
                 <div>
@@ -201,6 +201,38 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>
                 </div>
+            </div>
+
+            {/* Gastos e Imputaciones - ESTILO IGUAL A EDICIÓN */}
+            <div className="flex flex-col gap-2 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Gastos e Imputaciones</h5>
+                
+                <div className="grid grid-cols-2 gap-2">
+                    <label className={`flex items-center gap-2 cursor-pointer p-3 border rounded-xl transition-all ${adminExpenses ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'}`}>
+                        <input 
+                            type="checkbox" 
+                            checked={adminExpenses} 
+                            onChange={() => handleExpenseChange('admin')} 
+                            className="w-5 h-5 rounded" 
+                        />
+                        <div className="flex items-center gap-2 font-bold text-xs uppercase">
+                            <Calculator size={14} /> Admón.
+                        </div>
+                    </label>
+                    
+                    <label className={`flex items-center gap-2 cursor-pointer p-3 border rounded-xl transition-all ${transportExpenses ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-600'}`}>
+                        <input 
+                            type="checkbox" 
+                            checked={transportExpenses} 
+                            onChange={() => handleExpenseChange('transport')} 
+                            className="w-5 h-5 rounded" 
+                        />
+                        <div className="flex items-center gap-2 font-bold text-xs uppercase">
+                            <Truck size={14} /> Transp.
+                        </div>
+                    </label>
+                </div>
+                <p className="text-[9px] text-slate-400 italic mt-1 leading-tight">Define si los gastos de esta unidad imputan a Administración o a Transporte.</p>
             </div>
 
             {/* Config Checkboxes */}
