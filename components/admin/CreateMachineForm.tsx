@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { createMachine, getCostCenters, getSubCentersByCenter, getWorkers } from '../../services/db';
 import { CostCenter, SubCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, ToggleRight, LayoutGrid, Calculator, Truck } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight, LayoutGrid, Calculator, Truck, Clock, Calendar } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -73,7 +73,8 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             tasks: newDefTasks,
             maintenanceType: newDefType,
             intervalHours: 0,
-            warningHours: 0
+            warningHours: 0,
+            intervalMonths: 0
         };
         if (newDefType === 'HOURS') {
             if (!newDefInterval || !newDefWarning) return;
@@ -203,7 +204,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 </div>
             </div>
 
-            {/* Gastos e Imputaciones - ESTILO IGUAL A EDICIÓN */}
+            {/* Gastos e Imputaciones */}
             <div className="flex flex-col gap-2 p-4 bg-slate-50 rounded-lg border border-slate-100">
                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Gastos e Imputaciones</h5>
                 
@@ -232,18 +233,51 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         </div>
                     </label>
                 </div>
-                <p className="text-[9px] text-slate-400 italic mt-1 leading-tight">Define si los gastos de esta unidad imputan a Administración o a Transporte.</p>
             </div>
 
-            {/* Config Checkboxes */}
-            <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                <div className="flex items-center gap-3">
-                    <input type="checkbox" id="reqHours" checked={requiresHours} onChange={e => setRequiresHours(e.target.checked)} className="w-5 h-5 text-blue-600 rounded" />
-                    <label htmlFor="reqHours" className="text-slate-700 font-medium">Controlar Horas/Kms</label>
+            {/* Programación de Mantenimientos (Alta) */}
+            <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <h4 className="font-bold text-slate-700 uppercase text-xs tracking-widest">Plan Preventivo Inicial</h4>
+                
+                <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200">
+                    <input className="w-full p-2 border rounded" placeholder="Tarea (Ej. Cambio Aceite)" value={newDefName} onChange={e => setNewDefName(e.target.value)} />
+                    
+                    <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
+                        <button type="button" onClick={() => setNewDefType('HOURS')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${newDefType === 'HOURS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>Por Horas</button>
+                        <button type="button" onClick={() => setNewDefType('DATE')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${newDefType === 'DATE' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-400'}`}>Calendario</button>
+                    </div>
+
+                    {newDefType === 'HOURS' ? (
+                        <div className="grid grid-cols-2 gap-2">
+                            <input type="number" className="w-full p-2 border rounded text-xs" placeholder="Intervalo (h)" value={newDefInterval} onChange={e => setNewDefInterval(Number(e.target.value))} />
+                            <input type="number" className="w-full p-2 border rounded text-xs" placeholder="Aviso (h)" value={newDefWarning} onChange={e => setNewDefWarning(Number(e.target.value))} />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                            <input type="number" className="w-full p-2 border rounded text-xs" placeholder="Meses" value={newDefIntervalMonths} onChange={e => setNewDefIntervalMonths(Number(e.target.value))} />
+                            <input type="date" className="w-full p-2 border rounded text-xs" value={newDefNextDate} onChange={e => setNewDefNextDate(e.target.value)} />
+                        </div>
+                    )}
+                    
+                    <textarea className="w-full p-2 border rounded text-xs" placeholder="Detalles de la tarea..." rows={2} value={newDefTasks} onChange={e => setNewDefTasks(e.target.value)} />
+                    
+                    <button type="button" onClick={addMaintenanceDef} className="w-full py-2 bg-blue-600 text-white rounded font-bold text-xs uppercase flex items-center justify-center gap-2">
+                        <Plus size={14}/> Añadir Tarea al Plan
+                    </button>
                 </div>
-                <div className="flex items-center gap-3">
-                    <input type="checkbox" id="selectableReports" checked={selectableForReports} onChange={e => setSelectableForReports(e.target.checked)} className="w-5 h-5 text-green-600 rounded" />
-                    <label htmlFor="selectableReports" className="text-slate-700 font-medium">Seleccionable en Partes de Trabajo</label>
+
+                <div className="space-y-2">
+                    {defs.map((d, i) => (
+                        <div key={i} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-200">
+                            <div>
+                                <p className="text-xs font-bold text-slate-700">{d.name}</p>
+                                <p className="text-[9px] text-slate-500 uppercase font-black">
+                                    {d.maintenanceType === 'DATE' ? `Cada ${d.intervalMonths} meses` : `Cada ${d.intervalHours}h`}
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => removeDef(i)} className="text-red-400 p-1 hover:text-red-600"><Trash2 size={16}/></button>
+                        </div>
+                    ))}
                 </div>
             </div>
 
