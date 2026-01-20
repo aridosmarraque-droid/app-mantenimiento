@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, getSubCentersByCenter, calculateAndSyncMachineStatus, getWorkers, deleteMachine, getMachineDependencyCount } from '../../services/db';
 import { CostCenter, SubCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock } from 'lucide-react';
 
 interface Props {
     machine: Machine;
@@ -137,10 +138,10 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
             machineId: machine.id, 
             name: defName, 
             maintenanceType: defType, 
-            intervalHours: Number(defInterval) || 0, 
-            warningHours: Number(defWarning) || 0, 
-            intervalMonths: Number(defIntervalMonths) || 0, 
-            nextDate: defNextDate ? new Date(defNextDate) : undefined, 
+            intervalHours: defType === 'HOURS' ? Number(defInterval) || 0 : 0, 
+            warningHours: defType === 'HOURS' ? Number(defWarning) || 0 : 0, 
+            intervalMonths: defType === 'DATE' ? Number(defIntervalMonths) || 0 : 0, 
+            nextDate: defType === 'DATE' && defNextDate ? new Date(defNextDate) : undefined, 
             tasks: defTasks,
             notifiedWarning: isNew ? false : (machine.maintenanceDefs.find(d => d.id === editingDefId)?.notifiedWarning || false),
             notifiedOverdue: isNew ? false : (machine.maintenanceDefs.find(d => d.id === editingDefId)?.notifiedOverdue || false),
@@ -319,18 +320,52 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                             <p className="text-xs font-black uppercase text-slate-400">{editingDefId === 'new' ? 'Nueva Tarea' : 'Editar Tarea'}</p>
                             <button type="button" onClick={resetDefForm}><X size={16} /></button>
                         </div>
+                        
                         <input className="w-full p-2 border rounded" placeholder="Nombre (Ej. Aceite 500h)" value={defName} onChange={e => setDefName(e.target.value)} />
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase">Intervalo (h)</label>
-                                <input type="number" className="w-full p-2 border rounded" value={defInterval} onChange={e => setDefInterval(Number(e.target.value))} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase">Aviso Previo (h)</label>
-                                <input type="number" className="w-full p-2 border rounded" value={defWarning} onChange={e => setDefWarning(Number(e.target.value))} />
-                            </div>
+                        
+                        <div className="flex gap-1 p-1 bg-slate-200 rounded-lg">
+                            <button 
+                                type="button" 
+                                onClick={() => setDefType('HOURS')} 
+                                className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-md text-[10px] font-black uppercase transition-all ${defType === 'HOURS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+                            >
+                                <Clock size={14}/> Horas/Km
+                            </button>
+                            <button 
+                                type="button" 
+                                onClick={() => setDefType('DATE')} 
+                                className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-md text-[10px] font-black uppercase transition-all ${defType === 'DATE' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500'}`}
+                            >
+                                <Calendar size={14}/> Calendario
+                            </button>
                         </div>
+
+                        {defType === 'HOURS' ? (
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Intervalo (h)</label>
+                                    <input type="number" className="w-full p-2 border rounded" value={defInterval} onChange={e => setDefInterval(Number(e.target.value))} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Aviso Previo (h)</label>
+                                    <input type="number" className="w-full p-2 border rounded" value={defWarning} onChange={e => setDefWarning(Number(e.target.value))} />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Cada (Meses)</label>
+                                    <input type="number" className="w-full p-2 border rounded" value={defIntervalMonths} onChange={e => setDefIntervalMonths(Number(e.target.value))} placeholder="Ej. 6" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Siguiente Vencim.</label>
+                                    <input type="date" className="w-full p-2 border rounded" value={defNextDate} onChange={e => setDefNextDate(e.target.value)} />
+                                </div>
+                            </div>
+                        )}
+
                         <textarea className="w-full p-2 border rounded text-xs" placeholder="Tareas a realizar..." rows={2} value={defTasks} onChange={e => setDefTasks(e.target.value)} />
+                        
                         <button type="button" onClick={handleSaveDef} disabled={loading} className="w-full py-2 bg-slate-800 text-white rounded font-bold">
                             {loading ? <Loader2 className="animate-spin inline" size={14} /> : 'Guardar Tarea'}
                         </button>
@@ -339,7 +374,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
 
                 <div className="space-y-2">
                     {machine.maintenanceDefs.map((def) => (
-                        <div key={def.id || Math.random().toString()} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-200 hover:border-blue-300 transition-colors">
+                        <div key={def.id || Math.random().toString()} className={`flex justify-between items-center bg-slate-50 p-3 rounded border-2 hover:border-blue-300 transition-colors ${def.maintenanceType === 'DATE' ? 'border-purple-50' : 'border-slate-100'}`}>
                             <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                     <p className="font-bold text-slate-800">{def.name}</p>
@@ -348,7 +383,13 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                                         {def.notifiedOverdue && <span title="Vencimiento Enviado" className="text-red-500"><Mail size={12} /></span>}
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-slate-500 uppercase font-bold">Cada {def.intervalHours}h (Aviso a las {def.warningHours}h)</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1">
+                                    {def.maintenanceType === 'DATE' ? (
+                                        <><Calendar size={10} className="text-purple-500"/> Cada {def.intervalMonths} meses (Próximo: {def.nextDate ? new Date(def.nextDate).toLocaleDateString() : '?'})</>
+                                    ) : (
+                                        <><Clock size={10} className="text-blue-500"/> Cada {def.intervalHours}h (Aviso: {def.warningHours}h)</>
+                                    )}
+                                </p>
                             </div>
                             <div className="flex gap-1">
                                 <button type="button" onClick={() => handleEditClick(def)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"><Edit2 size={16} /></button>
