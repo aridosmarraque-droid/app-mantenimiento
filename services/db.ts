@@ -335,6 +335,47 @@ export const deleteServiceProvider = async (id: string): Promise<void> => {
     if (error) throw error;
 };
 
+/**
+ * Función auxiliar para sincronizar horas de máquinas fijas vinculadas a producción
+ */
+const syncLinkedFixedMachinery = async (campo: string, nuevasHoras: number) => {
+    try {
+        // 1. Localizar subcentros que tengan este campo de producción configurado
+        const { data: subcenters } = await supabase
+            .from('mant_subcentros')
+            .select('id')
+            .eq('campo_produccion', campo);
+        
+        if (!subcenters || subcenters.length === 0) return;
+
+        const subcenterIds = subcenters.map(s => s.id);
+
+        // 2. Localizar máquinas fijas de esos subcentros con vinculación activa
+        const { data: machinesToUpdate } = await supabase
+            .from('mant_maquinas')
+            .select('*, mant_mantenimientos_def(*)')
+            .in('subcentro_id', subcenterIds)
+            .eq('vinculada_produccion', true);
+        
+        if (!machinesToUpdate || machinesToUpdate.length === 0) return;
+
+        for (const mData of machinesToUpdate) {
+            // 3. Actualizar contador de la máquina si las nuevas horas son superiores
+            if (nuevasHoras > (mData.horas_actuales || 0)) {
+                await supabase
+                    .from('mant_maquinas')
+                    .update({ horas_actuales: nuevasHoras })
+                    .eq('id', mData.id);
+                
+                // 4. Disparar chequeo de mantenimientos preventivos para esta máquina fija
+                await checkMaintenanceThresholds(mapMachine(mData), nuevasHoras);
+            }
+        }
+    } catch (e) {
+        console.error("Error sincronizando maquinaria fija vinculada:", e);
+    }
+};
+
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<OperationLog> => {
     if (!isConfigured) return mock.saveOperationLog(log);
     
@@ -483,6 +524,10 @@ export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>) => {
         machacadora_fin: r.crusherEnd, molinos_inicio: r.millsStart, molinos_fin: r.millsEnd, comentarios: r.comments
     });
     if (error) throw error;
+
+    // Sincronización automática de horas para maquinaria fija de Machacadora y Molinos
+    await syncLinkedFixedMachinery('MACHACADORA', r.crusherEnd);
+    await syncLinkedFixedMachinery('MOLINOS', r.millsEnd);
 };
 
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
@@ -521,6 +566,10 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         comentarios: r.comments
     });
     if (error) throw error;
+
+    // Sincronización automática de horas para maquinaria fija de Lavado y Trituración
+    await syncLinkedFixedMachinery('LAVADO', r.washingEnd);
+    await syncLinkedFixedMachinery('TRITURACION', r.triturationEnd);
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
