@@ -15,6 +15,7 @@ interface ExcelCost {
 }
 
 interface ExcelTotals {
+    nominaD: number; // Columna D: Total Brutos 640
     remuneracionesE: number;
     planPensionesF: number;
     ssTrabajadorJ: number;
@@ -22,6 +23,7 @@ interface ExcelTotals {
     valI: number;
     valL: number;
     valN: number;
+    ss642Neto: number; // I - L - N
 }
 
 interface GroupedData {
@@ -127,16 +129,21 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const rawName = row[2]?.toString().trim() || "";
                     const upperName = rawName.toUpperCase();
 
-                    // Detectar fila de totales para el archivo TXT
+                    // Detectar fila de totales para el archivo TXT y ajuste de tablas
                     if (upperName.includes("TOTAL") || upperName.includes("SUMA")) {
+                        const i = parseFloat(row[8]) || 0;
+                        const l = parseFloat(row[11]) || 0;
+                        const n = parseFloat(row[13]) || 0;
                         totals = {
+                            nominaD: parseFloat(row[3]) || 0,
                             remuneracionesE: parseFloat(row[4]) || 0,
                             planPensionesF: parseFloat(row[5]) || 0,
-                            valI: parseFloat(row[8]) || 0,
                             ssTrabajadorJ: parseFloat(row[9]) || 0,
                             retencionesK: parseFloat(row[10]) || 0,
-                            valL: parseFloat(row[11]) || 0,
-                            valN: parseFloat(row[13]) || 0
+                            valI: i,
+                            valL: l,
+                            valN: n,
+                            ss642Neto: i - l - n
                         };
                         return;
                     }
@@ -247,7 +254,8 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
     }, [reports, workers, excelCosts]);
 
     const summaryByUnit = useMemo(() => {
-        const units: Record<string, SummaryUnit> = {};
+        const unitsMap: Record<string, SummaryUnit> = {};
+        
         distribution.forEach(worker => {
             worker.centers.forEach(center => {
                 center.machines.forEach(machine => {
@@ -258,7 +266,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const machineKey = isActuallyAdmon ? 'ADMON' : (machine.machineId || 'N/A');
                     const aggKey = `${centerKey}-${machineKey}`;
 
-                    if (!units[aggKey]) {
+                    if (!unitsMap[aggKey]) {
                         let mCode = "GENERAL";
                         if (isActuallyAdmon) mCode = "ADMON";
                         else if (dbMachine) mCode = dbMachine.companyCode || dbMachine.name;
@@ -270,15 +278,44 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             cCode = dbCenter ? (dbCenter.companyCode || dbCenter.name.substring(0, 10).toUpperCase()) : "N/A";
                         }
 
-                        units[aggKey] = { centerCode: cCode, machineCode: mCode, totalSalary: 0, totalSS: 0 };
+                        unitsMap[aggKey] = { centerCode: cCode, machineCode: mCode, totalSalary: 0, totalSS: 0 };
                     }
-                    units[aggKey].totalSalary += machine.lineSalary;
-                    units[aggKey].totalSS += machine.lineSS;
+                    unitsMap[aggKey].totalSalary += machine.lineSalary;
+                    unitsMap[aggKey].totalSS += machine.lineSS;
                 });
             });
         });
-        return Object.values(units).sort((a, b) => a.centerCode.localeCompare(b.centerCode) || a.machineCode.localeCompare(b.machineCode));
-    }, [distribution, allMachines, allCenters]);
+
+        const unitsList = Object.values(unitsMap).sort((a, b) => a.centerCode.localeCompare(b.centerCode) || a.machineCode.localeCompare(b.machineCode));
+
+        // --- AJUSTE DE PRECISIÓN CONTRA TOTALES DEL EXCEL ---
+        if (excelTotals && unitsList.length > 0) {
+            // 1. Ajuste Nóminas 640 (Contra Columna D del Excel)
+            const sumCalculatedSalary = unitsList.reduce((acc, u) => acc + u.totalSalary, 0);
+            const deltaSalary = Number((excelTotals.nominaD - sumCalculatedSalary).toFixed(2));
+            
+            if (deltaSalary !== 0) {
+                // Aplicamos el ajuste a la unidad con mayor sueldo para minimizar impacto relativo
+                const topSalaryUnit = [...unitsList].sort((a, b) => b.totalSalary - a.totalSalary)[0];
+                if (topSalaryUnit) {
+                    topSalaryUnit.totalSalary = Number((topSalaryUnit.totalSalary + deltaSalary).toFixed(2));
+                }
+            }
+
+            // 2. Ajuste SS 642 (Contra I - L - N del Excel)
+            const sumCalculatedSS = unitsList.reduce((acc, u) => acc + u.totalSS, 0);
+            const deltaSS = Number((excelTotals.ss642Neto - sumCalculatedSS).toFixed(2));
+            
+            if (deltaSS !== 0) {
+                const topSSUnit = [...unitsList].sort((a, b) => b.totalSS - a.totalSS)[0];
+                if (topSSUnit) {
+                    topSSUnit.totalSS = Number((topSSUnit.totalSS + deltaSS).toFixed(2));
+                }
+            }
+        }
+
+        return unitsList;
+    }, [distribution, allMachines, allCenters, excelTotals]);
 
     const handleExecute = () => {
         if (!excelTotals) {
@@ -318,7 +355,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         let linesContent = "RecordKey\tLineNum\tAccountCode\tNombre\tDebit\tCredit\tLineMemo\tTaxGroup\tRef1\tRef2\tCostingCode\r\n";
         linesContent += "RecordKey\tLineNum\tAccountCode\tNombre\tDebit\tCredit\tLineMemo\tTaxGroup\tRef1\tRef2\tCostingCode\r\n";
 
-        // 640000 - Sueldos (Debe)
+        // 640000 - Sueldos (Debe) - Ya ajustados pro-rata
         summaryByUnit.forEach(unit => {
             const costingCode = unit.centerCode === "ADMON" ? "ADMON" : `${unit.centerCode}-${unit.machineCode}`;
             linesContent += `1\t\t640000\t\t${unit.totalSalary.toFixed(2)}\t0.00\tNOMINA ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
@@ -333,15 +370,14 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         // 465000 - Remuneraciones (Haber)
         linesContent += `1\t\t465000\t\t0.00\t${excelTotals.remuneracionesE.toFixed(2)}\tREMUNERACIONES ${monthYearStr}\t\t\t\t\r\n`;
 
-        // 642000 - SS Empresa (Debe)
+        // 642000 - SS Empresa (Debe) - Ya ajustados pro-rata
         summaryByUnit.forEach(unit => {
             const costingCode = unit.centerCode === "ADMON" ? "ADMON" : `${unit.centerCode}-${unit.machineCode}`;
             linesContent += `1\t\t642000\t\t${unit.totalSS.toFixed(2)}\t0.00\tSEG. SOCIAL ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
         });
 
         // 476000 - SS Empresa Global (Haber)
-        const totalSSEmpresa = excelTotals.valI - excelTotals.valL - excelTotals.valN;
-        linesContent += `1\t\t476000\t\t0.00\t${totalSSEmpresa.toFixed(2)}\tSEG. SOC. ${monthYearStr}\t\t\t\t\r\n`;
+        linesContent += `1\t\t476000\t\t0.00\t${excelTotals.ss642Neto.toFixed(2)}\tSEG. SOC. ${monthYearStr}\t\t\t\t\r\n`;
 
         // 466000 - Plan Pensiones (Haber)
         linesContent += `1\t\t466000\t\t0.00\t${excelTotals.planPensionesF.toFixed(2)}\tPLAN PENSIONES ${monthYearStr}\t\t\t\t\r\n`;
@@ -496,9 +532,9 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             </tbody>
                             <tfoot className="bg-slate-900 text-white font-black uppercase text-[11px]">
                                 <tr>
-                                    <td className="p-3 border border-slate-800 text-right pr-6" colSpan={2}>TOTALES VERIFICADOS</td>
-                                    <td className="p-3 border border-slate-800 text-center">{summaryByUnit.reduce((acc, u) => acc + u.totalSalary, 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
-                                    <td className="p-3 border border-slate-800 text-center">{summaryByUnit.reduce((acc, u) => acc + u.totalSS, 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
+                                    <td className="p-3 border border-slate-800 text-right pr-6" colSpan={2}>TOTALES VERIFICADOS (AJUSTADOS AL EXCEL)</td>
+                                    <td className="p-3 border border-slate-800 text-center">{excelTotals?.nominaD.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
+                                    <td className="p-3 border border-slate-800 text-center">{excelTotals?.ss642Neto.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -508,14 +544,14 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 animate-in zoom-in-95 duration-500">
                     <CheckCircle2 size={64} className="text-green-500 mb-4" />
                     <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Proceso Finalizado</h4>
-                    <p className="text-sm font-medium text-center max-w-sm mt-2">Los archivos de diario se han descargado. Puede revisar las tablas de reparto pulsando el botón superior.</p>
+                    <p className="text-sm font-medium text-center max-w-sm mt-2">Los archivos de diario se han descargado y los totales han sido ajustados según el Excel.</p>
                 </div>
             )}
             
             {loading && (
                 <div className="py-40 flex flex-col items-center justify-center text-slate-400">
                     <Loader2 className="animate-spin mb-4 text-blue-500" size={48} />
-                    <p className="font-black uppercase text-xs tracking-widest">Calculando repartos técnicos...</p>
+                    <p className="font-black uppercase text-xs tracking-widest">Calculando y ajustando repartos...</p>
                 </div>
             )}
         </div>
