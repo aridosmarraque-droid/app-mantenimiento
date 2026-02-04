@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getWorkers, getAllPersonalReportsByRange } from '../../services/db';
 import { Worker, PersonalReport } from '../../types';
-import { ArrowLeft, Loader2, Calendar, Printer, User, Clock, Factory, Truck, FileSpreadsheet, Upload, AlertCircle, Coins, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, Printer, User, Clock, Factory, Truck, FileSpreadsheet, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Props {
@@ -62,7 +62,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             setWorkers(workersData);
             setReports(reportsData);
         } catch (e) {
-            console.error("Error loading worker hours data:", e);
+            console.error("Error cargando datos:", e);
         } finally {
             setLoading(false);
         }
@@ -84,12 +84,9 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
 
                 const costsMap: Record<string, ExcelCost> = {};
 
-                // Procesamiento de columnas según especificación del usuario
-                // Columna C (índice 2) = Nombre
-                // Columna D (índice 3) = Nominas 640
-                // Columna I (8), L (11), N (13) = SS 642
+                // Procesamiento de columnas: C=Nombre(2), D=640(3), I,L,N=642(8,11,13)
                 data.forEach((row, idx) => {
-                    if (idx < 1) return; // Saltamos cabeceras potenciales
+                    if (idx < 1) return; 
                     
                     const rawName = row[2]?.toString().trim();
                     if (!rawName || rawName === "TOTAL" || rawName === "TRABAJADOR") return;
@@ -109,8 +106,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
 
                 setExcelCosts(costsMap);
             } catch (err) {
-                alert("Error al leer el archivo Excel. Asegúrese de que el formato sea correcto.");
-                console.error(err);
+                alert("Error al leer el Excel.");
             }
         };
         reader.readAsBinaryString(file);
@@ -120,7 +116,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         const grouped: Record<string, GroupedData> = {};
         const matchedExcelNames = new Set<string>();
 
-        // 1. Agrupar por partes registrados en la base de datos
+        // 1. Agrupar trabajadores con partes de trabajo
         reports.forEach(r => {
             const worker = workers.find(w => w.id === r.workerId);
             const workerName = worker?.name || "Desconocido";
@@ -164,7 +160,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             machineEntry.hours += r.hours;
         });
 
-        // 2. Gestionar trabajadores que están en el Excel pero NO tienen partes -> Grupo ADMON
+        // 2. Trabajadores del Excel sin partes registrados -> Grupo ADMON
         Object.entries(excelCosts).forEach(([lowerName, data]) => {
             if (!matchedExcelNames.has(lowerName)) {
                 const id = `admon-${lowerName}`;
@@ -182,7 +178,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             machineId: 'office',
                             machineName: 'Gestión / Administración',
                             hours: 0,
-                            ratio: 1, // 100% al centro ADMON
+                            ratio: 1, 
                             lineSalary: data.salary640,
                             lineSS: data.ss642
                         }]
@@ -191,7 +187,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             }
         });
 
-        // 3. Cálculo Final de Coeficientes y Reparto de Costes
+        // 3. Cálculo de Ratios y Reparto
         const finalData = Object.values(grouped).sort((a, b) => a.workerName.localeCompare(b.workerName));
         
         finalData.forEach(worker => {
@@ -201,8 +197,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                         machine.ratio = Number((machine.hours / worker.totalWorkerHours).toFixed(4));
                         machine.lineSalary = Number((worker.salary640 * machine.ratio).toFixed(2));
                         machine.lineSS = Number((worker.ss642 * machine.ratio).toFixed(2));
-                    } else if (worker.isAdmon) {
-                        // Valores ya asignados por defecto al 100% en paso 2
                     }
                 });
             });
@@ -211,61 +205,33 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         return finalData;
     }, [reports, workers, excelCosts]);
 
-    const handlePrint = () => {
-        window.print();
-    };
+    const handlePrint = () => window.print();
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
-                    @page {
-                        size: A3 landscape;
-                        margin: 1cm;
-                    }
-                    body {
-                        background: white !important;
-                    }
-                    header, .no-print {
-                        display: none !important;
-                    }
-                    main {
-                        padding: 0 !important;
-                        margin: 0 !important;
-                        max-width: none !important;
-                    }
-                    .print-container {
-                        box-shadow: none !important;
-                        border: none !important;
-                        padding: 0 !important;
-                        width: 100% !important;
-                    }
-                    .printable-table {
-                        width: 100% !important;
-                        border-collapse: collapse !important;
-                        font-size: 8pt !important;
-                    }
-                    .printable-table th, .printable-table td {
-                        border: 0.1pt solid #ccc !important;
-                        padding: 4px 2px !important;
-                    }
-                    .worker-row {
-                        background-color: #f8fafc !important;
-                        -webkit-print-color-adjust: exact;
-                    }
+                    @page { size: A3 landscape; margin: 1cm; }
+                    body { background: white !important; }
+                    header, .no-print { display: none !important; }
+                    main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+                    .print-container { box-shadow: none !important; border: none !important; padding: 0 !important; width: 100% !important; }
+                    .printable-table { width: 100% !important; border-collapse: collapse !important; font-size: 8pt !important; }
+                    .printable-table th, .printable-table td { border: 0.1pt solid #ccc !important; padding: 4px 2px !important; }
+                    .worker-row { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
                 }
             `}} />
 
             <div className="flex flex-col gap-4 border-b pb-4 bg-white p-4 rounded-xl shadow-sm no-print">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700 transition-colors">
+                        <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                             <ArrowLeft size={24} />
                         </button>
                         <div>
                             <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none uppercase">Horas y Costes Personal</h3>
                             <p className="text-[10px] font-bold text-blue-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                                <Clock size={10}/> Reparto de Nominas y Seg. Sociales
+                                <Clock size={10}/> Imputación de Nóminas y Seguridad Social
                             </p>
                         </div>
                     </div>
@@ -279,32 +245,26 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                                 className="pl-10 pr-4 py-2 border rounded-xl font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-blue-500 text-sm outline-none"
                             />
                         </div>
-                        <button 
-                            onClick={handlePrint}
-                            className="p-2.5 bg-slate-900 text-white rounded-xl shadow-lg hover:bg-black transition-all flex items-center gap-2 text-xs font-black uppercase"
-                        >
+                        <button onClick={handlePrint} className="p-2.5 bg-slate-900 text-white rounded-xl shadow-lg hover:bg-black transition-all flex items-center gap-2 text-xs font-black uppercase">
                             <Printer size={18}/> <span className="hidden sm:inline">Imprimir A3</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Zona de Carga de Excel */}
                 <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col sm:flex-row items-center gap-4 transition-all hover:border-indigo-300">
-                    <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full">
-                        <FileSpreadsheet size={24}/>
-                    </div>
+                    <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full"><FileSpreadsheet size={24}/></div>
                     <div className="flex-1 text-center sm:text-left">
-                        <h4 className="text-sm font-black text-slate-700 uppercase">Importar Gastos de Personal</h4>
-                        <p className="text-[10px] text-slate-500 font-medium">Sube el archivo de costes para calcular el reparto 640 y 642 automáticamente</p>
+                        <h4 className="text-sm font-black text-slate-700 uppercase">Cargar Gastos de Personal</h4>
+                        <p className="text-[10px] text-slate-500 font-medium">Sube el Excel para vincular Nóminas (640) y Seg. Sociales (642)</p>
                     </div>
-                    <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-md transition-all active:scale-95">
-                        <Upload size={14}/> {fileName ? 'Cambiar Excel' : 'Seleccionar Archivo'}
+                    <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-md">
+                        <Upload size={14}/> {fileName ? 'Cambiar Excel' : 'Subir Archivo'}
                         <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} />
                     </label>
                 </div>
                 {fileName && (
                     <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase px-2">
-                        <CheckCircle2 size={12}/> Archivo cargado correctamente: {fileName}
+                        <CheckCircle2 size={12}/> {fileName} procesado
                     </div>
                 )}
             </div>
@@ -313,17 +273,17 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                 {loading ? (
                     <div className="py-40 flex flex-col items-center justify-center text-slate-400">
                         <Loader2 className="animate-spin mb-4 text-blue-500" size={48} />
-                        <p className="font-black uppercase text-xs tracking-widest">Analizando partes y costes...</p>
+                        <p className="font-black uppercase text-xs tracking-widest">Calculando repartos...</p>
                     </div>
                 ) : distribution.length === 0 ? (
                     <div className="py-40 text-center text-slate-400">
                         <User size={48} className="mx-auto mb-4 opacity-20" />
-                        <p className="font-black uppercase text-xs">Sin registros para el mes seleccionado</p>
+                        <p className="font-black uppercase text-xs">Sin registros para este periodo</p>
                     </div>
                 ) : (
                     <div>
                         <div className="mb-6 hidden print:block border-b-2 border-slate-900 pb-4">
-                            <h2 className="text-2xl font-black text-slate-900 uppercase">ARIDOS MARRAQUE - Coeficientes y Reparto Personal</h2>
+                            <h2 className="text-2xl font-black text-slate-900 uppercase">ARIDOS MARRAQUE - Reparto de Costes de Personal</h2>
                             <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Periodo: {new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
                         </div>
 
@@ -331,8 +291,8 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             <thead>
                                 <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
                                     <th className="p-3 border border-slate-700 text-left sticky left-0 bg-slate-900 z-10">Trabajador / Centro / Máquina</th>
-                                    <th className="p-3 border border-slate-700 text-center w-24">Horas Totales</th>
-                                    <th className="p-3 border border-slate-700 text-center w-32">Coeficiente (Ratio)</th>
+                                    <th className="p-3 border border-slate-700 text-center w-24">Horas</th>
+                                    <th className="p-3 border border-slate-700 text-center w-32">Ratio</th>
                                     <th className="p-3 border border-slate-700 text-center w-32 bg-slate-800">Nóminas 640 (€)</th>
                                     <th className="p-3 border border-slate-700 text-center w-32 bg-slate-800">S. Sociales 642 (€)</th>
                                 </tr>
@@ -340,7 +300,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             <tbody>
                                 {distribution.map(worker => (
                                     <React.Fragment key={worker.workerId}>
-                                        {/* Fila del Trabajador (Resumen) */}
                                         <tr className="worker-row bg-slate-50">
                                             <td className="p-3 border border-slate-200 font-black text-slate-900 flex items-center gap-2 sticky left-0 bg-inherit z-10">
                                                 <User size={14} className="text-blue-600" /> {worker.workerName}
@@ -349,17 +308,14 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                                             <td className="p-3 border border-slate-200 text-center font-black text-blue-700">
                                                 {worker.totalWorkerHours > 0 ? `${worker.totalWorkerHours.toFixed(1)}h` : '-'}
                                             </td>
-                                            <td className="p-3 border border-slate-200 text-center font-black text-slate-400">
-                                                1,0000
-                                            </td>
-                                            <td className="p-3 border border-slate-200 text-center font-black text-slate-800 bg-slate-100/30">
+                                            <td className="p-3 border border-slate-200 text-center font-black text-slate-400">1,0000</td>
+                                            <td className="p-3 border border-slate-200 text-center font-black text-slate-800">
                                                 {worker.salary640.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €
                                             </td>
-                                            <td className="p-3 border border-slate-200 text-center font-black text-slate-800 bg-slate-100/30">
+                                            <td className="p-3 border border-slate-200 text-center font-black text-slate-800">
                                                 {worker.ss642.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €
                                             </td>
                                         </tr>
-                                        {/* Desglose por Centro y Máquina */}
                                         {worker.centers.map(center => (
                                             <React.Fragment key={center.centerId}>
                                                 {center.machines.map((machine) => (
@@ -392,26 +348,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                                 ))}
                             </tbody>
                         </table>
-
-                        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
-                            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                                <h4 className="font-black text-blue-800 text-xs uppercase mb-2 flex items-center gap-2">
-                                    <AlertCircle size={14}/> Lógica del Informe
-                                </h4>
-                                <ul className="text-[10px] text-blue-600 space-y-1 font-medium list-disc pl-4">
-                                    <li>Las horas proceden de los <b>Partes de Trabajo Personales</b>.</li>
-                                    <li>El <b>Ratio</b> se calcula como: (Horas Línea / Horas Totales Trabajador).</li>
-                                    <li>Los valores <b>640</b> y <b>642</b> resultan de multiplicar el Ratio por el total del Excel.</li>
-                                    <li>Los trabajadores del Excel sin partes se asignan automáticamente al grupo <b>ADMON</b> con ratio 1.0.</li>
-                                </ul>
-                            </div>
-                            <div className="p-4 bg-slate-900 rounded-xl text-white flex flex-col justify-center items-end">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gasto Total Personal Imputado</span>
-                                <div className="text-3xl font-black text-green-400">
-                                    {distribution.reduce((acc, w) => acc + w.salary640 + w.ss642, 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 )}
             </div>
