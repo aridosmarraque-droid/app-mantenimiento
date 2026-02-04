@@ -77,7 +77,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.descripcion, 
+        description: dbLog.description, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -275,6 +275,7 @@ export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean 
 export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> => {
     const { data, error } = await supabase.from('mant_maquinas').insert({
         centro_id: m.costCenterId, subcentro_id: m.subCenterId, nombre: m.name, codigo_empresa: m.companyCode,
+        // Fix: Changed m.gastos_admin to m.adminExpenses as it is the correct property name on Machine type
         horas_actuales: m.currentHours, requiere_horas: m.requiresHours, gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses, es_parte_trabajo: m.selectableForReports, responsable_id: m.responsibleWorkerId,
         activo: m.active, vinculada_produccion: m.vinculadaProduccion
@@ -526,8 +527,8 @@ export const getCPReportsByRange = async (s: Date, e: Date) => {
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
         crusherStart: Number(r.machacadora_inicio || 0), 
         crusherEnd: Number(r.machacadora_fin || 0), 
-        millsStart: Number(r.molinos_inicio || 0), 
-        millsEnd: Number(r.molinos_fin || 0), 
+        millsStart: Number(r.trituracion_inicio || 0), 
+        millsEnd: Number(r.trituracion_fin || 0), 
         comments: r.comentarios 
     }));
 };
@@ -539,8 +540,8 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
         crusherStart: Number(data.machacadora_inicio || 0), 
         crusherEnd: Number(data.machacadora_fin || 0), 
-        millsStart: Number(data.molinos_inicio || 0), 
-        millsEnd: Number(data.molinos_fin || 0), 
+        millsStart: Number(data.trituracion_inicio || 0), 
+        millsEnd: Number(data.trituracion_fin || 0), 
         comments: data.comentarios
     };
 };
@@ -548,25 +549,37 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
 export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>) => {
     const { error } = await supabase.from('cp_partes_diarios').insert({
         fecha: toLocalDateString(r.date), trabajador_id: r.workerId, machacadora_inicio: r.crusherStart,
-        machacadora_fin: r.crusherEnd, molinos_inicio: r.millsStart, molinos_fin: r.millsEnd, comentarios: r.comments
+        machacadora_fin: r.crusherEnd, trituracion_inicio: r.millsStart, trituracion_fin: r.millsEnd, comentarios: r.comments
     });
     if (error) throw error;
 
-    // Sincronización automática de horas para maquinaria fija de Machacadora y Molinos
+    // Sincronización automática de horas para maquinaria fija de Machacadora y Molinos (Trituradora CP)
     await syncLinkedFixedMachinery('MACHACADORA', r.crusherEnd);
     await syncLinkedFixedMachinery('MOLINOS', r.millsEnd);
 };
 
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
-    const { data, error } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle();
-    if (error || !data) return null;
+    // Para Canto Rodado, Trituración se hereda de la tabla CP según instrucción del usuario
+    const [crRes, cpRes] = await Promise.all([
+        supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('cp_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1).maybeSingle()
+    ]);
+
+    const crData = crRes.data;
+    const cpData = cpRes.data;
+
+    if (!crData && !cpData) return null;
+
     return {
-        id: data.id, date: new Date(data.fecha), workerId: data.trabajador_id, 
-        washingStart: Number(data.lavado_inicio || 0),
-        washingEnd: Number(data.lavado_fin || 0), 
-        triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituration_fin || 0), 
-        comments: data.comentarios
+        id: crData?.id || 'temp',
+        date: crData ? new Date(crData.fecha) : new Date(),
+        workerId: crData?.trabajador_id || '',
+        washingStart: Number(crData?.lavado_inicio || 0),
+        washingEnd: Number(crData?.lavado_fin || 0),
+        // IMPORTANTE: Trituración inicio se toma de cp_partes_diarios.trituracion_fin
+        triturationStart: Number(cpData?.trituration_inicio || crData?.trituration_inicio || 0),
+        triturationEnd: Number(cpData?.trituration_fin || crData?.trituration_fin || 0),
+        comments: crData?.comentarios
     };
 };
 
