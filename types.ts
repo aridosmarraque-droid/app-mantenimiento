@@ -230,3 +230,13 @@ export interface PersonalReport {
     description?: string;
     location?: string;
 }
+
+// --- 7. REPARTO DE COSTES ---
+
+export interface SpecificCostRule {
+    id: string;
+    machineOriginId: string;
+    targetCenterId: string;
+    targetMachineId?: string;
+    percentage: number;
+}
