@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+port React, { useState, useEffect } from 'react';
 import { getCPWeeklyPlan, saveCPWeeklyPlan, toLocalDateString } from '../../services/db';
 import { CPWeeklyPlan } from '../../types';
 // Fix: Added missing CheckCircle2 import from lucide-react
@@ -28,7 +28,7 @@ export const WeeklyPlanning: React.FC<Props> = ({ onBack }) => {
     const formattedMonday = toLocalDateString(selectedMonday);
 
     useEffect(() => {
-        console.log(`[WeeklyPlanning] Iniciando carga para la fecha: ${formattedMonday}`);
+        console.log(`[WeeklyPlanning] Iniciando carga para la tabla 'cp_planificacion' y fecha: ${formattedMonday}`);
         loadPlan();
     }, [formattedMonday]);
 
@@ -77,7 +77,7 @@ export const WeeklyPlanning: React.FC<Props> = ({ onBack }) => {
             setTimeout(() => setMsg(''), 2000);
         } catch (e) {
             console.error("[WeeklyPlanning] Error crítico al guardar planificación:", e);
-            alert("Error al guardar planificación. Revise la consola del navegador para más detalles técnicos.");
+            alert("Error al guardar planificación. Revise la consola del navegador para ver si la tabla 'cp_planificacion' existe.");
         } finally {
             setLoading(false);
         }
@@ -155,7 +155,7 @@ export const WeeklyPlanning: React.FC<Props> = ({ onBack }) => {
                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3">
                     <CalendarDays className="text-amber-500 shrink-0" size={20}/>
                     <p className="text-[10px] text-amber-800 leading-relaxed italic">
-                        Configure las horas teóricas de funcionamiento de la planta para esta semana. Este dato se usará para calcular el porcentaje de rendimiento diario en los cuadros de mando de administración.
+                        Configure las horas teóricas de funcionamiento de la planta para esta semana en la tabla 'cp_planificacion'. Este dato se usará para calcular el porcentaje de rendimiento diario en los cuadros de mando de administración.
                     </p>
                 </div>
             </div>
