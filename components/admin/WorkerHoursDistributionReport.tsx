@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getWorkers, getAllPersonalReportsByRange, getAllMachines, getCostCenters } from '../../services/db';
 import { Worker, PersonalReport, Machine, CostCenter } from '../../types';
-// Fix: Added missing 'X' icon to lucide-react imports
 import { ArrowLeft, Loader2, Calendar, Printer, User, Clock, Factory, Truck, FileSpreadsheet, Upload, CheckCircle2, Sigma, TableProperties, Play, Download, Eye, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -133,9 +132,9 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                         totals = {
                             remuneracionesE: parseFloat(row[4]) || 0,
                             planPensionesF: parseFloat(row[5]) || 0,
+                            valI: parseFloat(row[8]) || 0,
                             ssTrabajadorJ: parseFloat(row[9]) || 0,
                             retencionesK: parseFloat(row[10]) || 0,
-                            valI: parseFloat(row[8]) || 0,
                             valL: parseFloat(row[11]) || 0,
                             valN: parseFloat(row[13]) || 0
                         };
@@ -283,7 +282,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
 
     const handleExecute = () => {
         if (!excelTotals) {
-            alert("No se ha podido detectar la fila de totales en el Excel. Revise el formato.");
+            alert("No se ha podido detectar la fila de totales en el Excel. Revise que la última fila contenga la palabra TOTAL.");
             return;
         }
         
