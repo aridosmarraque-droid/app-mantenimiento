@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getWorkers, getAllPersonalReportsByRange, getAllMachines, getCostCenters } from '../../services/db';
 import { Worker, PersonalReport, Machine, CostCenter } from '../../types';
-import { ArrowLeft, Loader2, Calendar, Printer, User, Clock, Factory, Truck, FileSpreadsheet, Upload, CheckCircle2, Sigma, TableProperties } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, Printer, User, Clock, Factory, Truck, FileSpreadsheet, Upload, CheckCircle2, Sigma, TableProperties, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Props {
@@ -42,12 +42,14 @@ interface SummaryUnit {
     totalSS: number;
 }
 
-// Función para normalizar nombres y evitar fallos de coincidencia
+// Normalización agresiva para evitar fallos por puntos, mayúsculas o espacios
 const normalizeName = (name: string) => {
+    if (!name) return "";
     return name
-        .toLowerCase()
+        .toUpperCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+        .replace(/\./g, '')              // Quitar puntos (Ej: "J." -> "J")
         .replace(/\s+/g, ' ')           // Quitar espacios dobles
         .trim();
 };
@@ -107,18 +109,28 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
 
                 const costsMap: Record<string, ExcelCost> = {};
 
-                // Procesamiento de columnas: C=Nombre(2), D=640(3), I(8), L(11), N(13)
+                // Procesamiento del Excel filtrando filas de totales
                 data.forEach((row, idx) => {
                     if (idx < 1) return; 
                     
-                    const rawName = row[2]?.toString().trim();
-                    if (!rawName || rawName === "TOTAL" || rawName === "TRABAJADOR") return;
+                    const rawName = row[2]?.toString().trim() || "";
+                    const upperName = rawName.toUpperCase();
+                    
+                    // CRÍTICO: Filtrar cualquier fila que sea un sumatorio del Excel
+                    if (!rawName || 
+                        upperName.includes("TOTAL") || 
+                        upperName.includes("SUMA") || 
+                        upperName.includes("DIFERENCIA") ||
+                        upperName === "TRABAJADOR") return;
 
                     const salary640 = parseFloat(row[3]) || 0;
                     const valI = parseFloat(row[8]) || 0;
                     const valL = parseFloat(row[11]) || 0;
                     const valN = parseFloat(row[13]) || 0;
                     
+                    // Solo procesar si hay algún valor económico
+                    if (salary640 === 0 && valI === 0) return;
+
                     const ss642 = valI - valL - valN;
 
                     costsMap[normalizeName(rawName)] = {
@@ -140,10 +152,10 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         const grouped: Record<string, GroupedData> = {};
         const matchedExcelKeys = new Set<string>();
 
-        // 1. Procesar primero los trabajadores que tienen partes registrados
+        // 1. Procesar primero operarios que TIENEN partes registrados en la APP
         reports.forEach(r => {
-            const worker = workers.find(w => w.id === r.workerId);
-            const workerName = worker?.name || "Desconocido";
+            const dbWorker = workers.find(w => w.id === r.workerId);
+            const workerName = dbWorker?.name || "Desconocido";
             const normKey = normalizeName(workerName);
 
             if (!grouped[r.workerId]) {
@@ -184,12 +196,23 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             machineEntry.hours += r.hours;
         });
 
-        // 2. Procesar trabajadores del Excel que NO tienen partes registrados
+        // 2. Procesar personas del Excel que NO tienen partes (ADMON o errores de nombre)
         Object.entries(excelCosts).forEach(([normKey, data]) => {
             if (!matchedExcelKeys.has(normKey)) {
+                // Buscamos si la persona del Excel existe en la DB aunque no tenga partes
                 const dbWorker = workers.find(w => normalizeName(w.name) === normKey);
-                const id = dbWorker ? dbWorker.id : `admon-${normKey}`;
                 
+                // Si el trabajador existe en la DB pero ya estaba en 'grouped' por partes (caso Francisco Javier),
+                // le inyectamos su sueldo y lo marcamos.
+                if (dbWorker && grouped[dbWorker.id]) {
+                    grouped[dbWorker.id].salary640 = data.salary640;
+                    grouped[dbWorker.id].ss642 = data.ss642;
+                    matchedExcelKeys.add(normKey);
+                    return;
+                }
+
+                // Si no existe o no tiene partes, se crea como nueva entrada de ADMON
+                const id = dbWorker ? dbWorker.id : `admon-${normKey}`;
                 grouped[id] = {
                     workerId: id,
                     workerName: data.name,
@@ -213,7 +236,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             }
         });
 
-        // 3. Cálculo de Ratios y Reparto Final
         const finalData = Object.values(grouped).sort((a, b) => a.workerName.localeCompare(b.workerName));
         
         finalData.forEach(worker => {
@@ -238,8 +260,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             worker.centers.forEach(center => {
                 center.machines.forEach(machine => {
                     const dbMachine = allMachines.find(m => m.id === machine.machineId);
-                    
-                    // Lógica ADMON: si la máquina tiene marcada adminExpenses o el trabajador es ADMON sin horas
                     const isActuallyAdmon = dbMachine?.adminExpenses || worker.isAdmon;
                     
                     const centerKey = isActuallyAdmon ? 'ADMON' : (center.centerId || 'N/A');
@@ -247,28 +267,18 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const aggKey = `${centerKey}-${machineKey}`;
 
                     if (!units[aggKey]) {
-                        // Obtener códigos
                         let mCode = "GENERAL";
-                        if (isActuallyAdmon) {
-                            mCode = "ADMON";
-                        } else if (dbMachine) {
-                            mCode = dbMachine.companyCode || dbMachine.name;
-                        }
+                        if (isActuallyAdmon) mCode = "ADMON";
+                        else if (dbMachine) mCode = dbMachine.companyCode || dbMachine.name;
 
                         let cCode = "N/A";
-                        if (isActuallyAdmon) {
-                            cCode = "ADMON";
-                        } else {
+                        if (isActuallyAdmon) cCode = "ADMON";
+                        else {
                             const dbCenter = allCenters.find(c => c.id === center.centerId);
                             cCode = dbCenter ? dbCenter.name.substring(0, 10).toUpperCase() : "N/A";
                         }
 
-                        units[aggKey] = {
-                            centerCode: cCode,
-                            machineCode: mCode,
-                            totalSalary: 0,
-                            totalSS: 0
-                        };
+                        units[aggKey] = { centerCode: cCode, machineCode: mCode, totalSalary: 0, totalSS: 0 };
                     }
 
                     units[aggKey].totalSalary += machine.lineSalary;
@@ -298,14 +308,12 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     header, .no-print { display: none !important; }
                     main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
                     .print-container { box-shadow: none !important; border: none !important; padding: 0 !important; width: 100% !important; }
-                    .printable-table { width: 100% !important; border-collapse: collapse !important; font-size: 8pt !important; }
-                    .printable-table th, .printable-table td { border: 0.1pt solid #ccc !important; padding: 4px 2px !important; }
+                    .printable-table { width: 100% !important; border-collapse: collapse !important; font-size: 7.5pt !important; }
+                    .printable-table th, .printable-table td { border: 0.1pt solid #ccc !important; padding: 3px 2px !important; }
                     .worker-row { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
-                    .summary-header { background-color: #1e293b !important; color: white !important; -webkit-print-color-adjust: exact; }
                 }
             `}} />
 
-            {/* HEADER NO PRINT */}
             <div className="flex flex-col gap-4 border-b pb-4 bg-white p-4 rounded-xl shadow-sm no-print">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -339,7 +347,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full"><FileSpreadsheet size={24}/></div>
                     <div className="flex-1 text-center sm:text-left">
                         <h4 className="text-sm font-black text-slate-700 uppercase">Importación de Costes</h4>
-                        <p className="text-[10px] text-slate-500 font-medium">Fórmula SS: Columna I - L - N</p>
+                        <p className="text-[10px] text-slate-500 font-medium">SS: I - L - N. Se filtran automáticamente las filas de TOTALES del Excel.</p>
                     </div>
                     <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 shadow-md transition-all active:scale-95">
                         <Upload size={14}/> {fileName ? 'Cambiar Excel' : 'Subir Excel'}
@@ -348,7 +356,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                 </div>
             </div>
 
-            {/* TABLA 1: DETALLE POR TRABAJADOR */}
             <div className="bg-white p-2 sm:p-6 rounded-2xl shadow-md border border-slate-100 mx-auto print-container overflow-x-auto">
                 <div className="mb-6 flex items-center gap-2 border-b pb-4">
                     <User className="text-blue-600" size={24} />
@@ -358,7 +365,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                 {loading ? (
                     <div className="py-20 flex flex-col items-center justify-center text-slate-400">
                         <Loader2 className="animate-spin mb-4 text-blue-500" size={48} />
-                        <p className="font-black uppercase text-xs tracking-widest text-center">Cruzando datos...</p>
+                        <p className="font-black uppercase text-xs tracking-widest text-center">Analizando registros...</p>
                     </div>
                 ) : distribution.length === 0 ? (
                     <div className="py-20 text-center text-slate-400">
@@ -368,9 +375,9 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     <table className="w-full border-collapse printable-table min-w-[1000px]">
                         <thead>
                             <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
-                                <th className="p-3 border border-slate-700 text-left w-64">Trabajador / Centro / Máquina</th>
+                                <th className="p-3 border border-slate-700 text-left w-52">Trabajador / Unidad</th>
                                 <th className="p-3 border border-slate-700 text-center w-24">Horas</th>
-                                <th className="p-3 border border-slate-700 text-center w-32">Ratio</th>
+                                <th className="p-3 border border-slate-700 text-center w-28">Ratio</th>
                                 <th className="p-3 border border-slate-700 text-center w-32 bg-slate-800">Nóminas 640 (€)</th>
                                 <th className="p-3 border border-slate-700 text-center w-32 bg-slate-800">S. Sociales 642 (€)</th>
                             </tr>
@@ -378,10 +385,10 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                         <tbody>
                             {distribution.map(worker => (
                                 <React.Fragment key={worker.workerId}>
-                                    <tr className="worker-row bg-slate-50">
+                                    <tr className="worker-row bg-slate-50 border-t-2 border-slate-200">
                                         <td className="p-3 border border-slate-200 font-black text-slate-900 flex items-center gap-2">
                                             <User size={14} className="text-blue-600 flex-shrink-0" /> 
-                                            <span className="truncate">{worker.workerName}</span>
+                                            <span className="truncate max-w-[200px]">{worker.workerName}</span>
                                             {worker.isAdmon && <span className="text-[8px] bg-indigo-100 text-indigo-700 px-1.5 rounded uppercase ml-auto">ADMON</span>}
                                         </td>
                                         <td className="p-3 border border-slate-200 text-center font-black text-blue-700">
@@ -399,7 +406,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                                         <React.Fragment key={center.centerId}>
                                             {center.machines.map((machine) => (
                                                 <tr key={`${center.centerId}-${machine.machineId}`} className="hover:bg-slate-50/50">
-                                                    <td className="p-2 pl-12 border border-slate-100 text-slate-600 flex flex-col">
+                                                    <td className="p-2 pl-10 border border-slate-100 text-slate-600 flex flex-col">
                                                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-800">
                                                             <Truck size={10} className="text-slate-400 flex-shrink-0" /> {machine.machineName}
                                                         </div>
@@ -500,12 +507,6 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             </tr>
                         </tfoot>
                     </table>
-                    
-                    <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl no-print">
-                        <p className="text-[10px] text-indigo-700 font-bold leading-relaxed italic">
-                            * El resumen agrupa los costes imputados a cada unidad técnica. Las máquinas marcadas con "Gastos ADMON" en su ficha han sido consolidadas en el grupo ADMON de forma automática.
-                        </p>
-                    </div>
                 </div>
             )}
         </div>
