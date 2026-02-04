@@ -260,6 +260,7 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         centro_id: m.costCenterId, subcentro_id: m.subCenterId, nombre: m.name, codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours, requiere_horas: m.requiresHours, gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses, es_parte_trabajo: m.selectableForReports, responsable_id: m.responsibleWorkerId,
+        // Fix: vinculada_produccion mapping
         activo: m.active, vinculada_produccion: m.vinculadaProduccion
     }).select().single();
     if (error) throw error;
@@ -599,6 +600,17 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     const { data } = await supabase.from('partes_trabajo').select('*, mant_maquinas(nombre), mant_centros(nombre)').eq('trabajador_id', workerId).order('fecha', { ascending: false }).limit(10);
+    return (data || []).map(r => ({
+        id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, hours: Number(r.horas || 0),
+        machineId: r.maquina_id, machineName: r.mant_maquinas?.nombre, costCenterId: r.centro_id,
+        costCenterName: r.mant_centros?.nombre, description: r.comentarios
+    }));
+};
+
+export const getAllPersonalReportsByRange = async (s: Date, e: Date): Promise<PersonalReport[]> => {
+    if (!isConfigured) return [];
+    const { data } = await supabase.from('partes_trabajo').select('*, mant_maquinas(nombre), mant_centros(nombre)')
+        .gte('fecha', toLocalDateString(s)).lte('fecha', toLocalDateString(e));
     return (data || []).map(r => ({
         id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, hours: Number(r.horas || 0),
         machineId: r.maquina_id, machineName: r.mant_maquinas?.nombre, costCenterId: r.centro_id,
