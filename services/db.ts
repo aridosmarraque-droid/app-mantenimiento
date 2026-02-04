@@ -133,6 +133,13 @@ const mapMachine = (m: any): Machine => {
     };
 };
 
+const mapCostCenter = (c: any): CostCenter => ({
+    id: c.id,
+    name: c.nombre,
+    companyCode: c.codigo_empresa,
+    selectableForReports: c.es_parte_trabajo !== undefined ? c.es_parte_trabajo : true
+});
+
 // --- FUNCIONES CORE ---
 
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
@@ -170,17 +177,26 @@ export const getCostCenters = async (): Promise<CostCenter[]> => {
     if (!isConfigured) return mock.getCostCenters();
     const { data, error } = await supabase.from('mant_centros').select('*');
     if (error) return [];
-    return (data || []).map((c: any) => ({ id: c.id, name: c.nombre }));
+    return (data || []).map(mapCostCenter);
 };
 
-export const createCostCenter = async (name: string): Promise<CostCenter> => {
-    const { data, error } = await supabase.from('mant_centros').insert({ nombre: name }).select().single();
+export const createCostCenter = async (center: Omit<CostCenter, 'id'>): Promise<CostCenter> => {
+    const { data, error } = await supabase.from('mant_centros').insert({ 
+        nombre: center.name,
+        codigo_empresa: center.companyCode,
+        es_parte_trabajo: center.selectableForReports
+    }).select().single();
     if (error) throw error;
-    return { id: data.id, name: data.nombre };
+    return mapCostCenter(data);
 };
 
-export const updateCostCenter = async (id: string, name: string): Promise<void> => {
-    const { error } = await supabase.from('mant_centros').update({ nombre: name }).eq('id', id);
+export const updateCostCenter = async (id: string, updates: Partial<CostCenter>): Promise<void> => {
+    const p: any = {};
+    if (updates.name !== undefined) p.nombre = updates.name;
+    if (updates.companyCode !== undefined) p.codigo_empresa = updates.companyCode;
+    if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
+    
+    const { error } = await supabase.from('mant_centros').update(p).eq('id', id);
     if (error) throw error;
 };
 
