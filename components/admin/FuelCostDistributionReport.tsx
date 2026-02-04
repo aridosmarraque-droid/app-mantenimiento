@@ -67,12 +67,31 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
 
         // 2. Procesar cada máquina que consumió gasoil
         Object.entries(machineLiters).forEach(([machineId, totalLiters]) => {
-            const rules = specificRules.filter(r => r.machineOriginId === machineId);
             const machine = machines.find(m => m.id === machineId);
             const machineName = machine ? machine.name : 'Desconocida';
 
+            // PRIORIDAD 0: GASTOS DIRECTOS A ADMON O TTE (FICHA MÁQUINA)
+            if (machine?.adminExpenses) {
+                const key = `ADMON-ADMON`;
+                if (!units[key]) {
+                    units[key] = { centerCode: 'ADMON', centerName: 'ADMINISTRACIÓN', machineName: 'ADMINISTRACIÓN', liters: 0 };
+                }
+                units[key].liters += totalLiters;
+                return;
+            }
+
+            if (machine?.transportExpenses) {
+                const key = `TTE-TTE`;
+                if (!units[key]) {
+                    units[key] = { centerCode: 'TTE', centerName: 'TRANSPORTE', machineName: 'TRANSPORTE', liters: 0 };
+                }
+                units[key].liters += totalLiters;
+                return;
+            }
+
+            // PRIORIDAD 1: REPARTO POR REGLA ESPECÍFICA (GRUPOS, ETC)
+            const rules = specificRules.filter(r => r.machineOriginId === machineId);
             if (rules.length > 0) {
-                // REPARTO POR REGLA ESPECÍFICA (GRUPOS, ETC)
                 rules.forEach(rule => {
                     const center = centers.find(c => c.id === rule.targetCenterId);
                     const cCode = center?.companyCode || 'N/A';
@@ -87,7 +106,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     units[key].liters += totalLiters * (rule.percentage / 100);
                 });
             } else {
-                // REPARTO POR RATIO DE PARTES DE TRABAJO (RESTO MAQUINARIA)
+                // PRIORIDAD 2: REPARTO POR RATIO DE PARTES DE TRABAJO (RESTO MAQUINARIA)
                 const reports = laborReports.filter(r => r.machineId === machineId);
                 const totalHours = reports.reduce((acc, r) => acc + r.hours, 0);
 
@@ -111,7 +130,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         units[key].liters += totalLiters * ratio;
                     });
                 } else {
-                    // Si no tiene reglas ni partes, lo asignamos a su centro por defecto
+                    // PRIORIDAD 3: ASIGNACIÓN A CENTRO POR DEFECTO
                     const cId = machine?.costCenterId || 'none';
                     const center = centers.find(c => c.id === cId);
                     const cCode = center?.companyCode || 'N/A';
@@ -218,7 +237,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-3 no-print">
                     <AlertCircle className="text-blue-600 flex-shrink-0" size={20}/>
                     <p className="text-[10px] text-blue-800 leading-relaxed italic">
-                        <b>Lógica de Reparto:</b> Primero se aplican las reglas fijas (Costes Específicos). Para el resto de máquinas, el consumo total registrado se divide proporcionalmente entre los centros donde la unidad reportó horas en sus partes de trabajo mensuales.
+                        <b>Lógica de Reparto:</b> Las unidades con casillas de gastos "Admon" o "Transp" se asignan directamente a ADMON o TTE. Para el resto, primero se aplican las reglas fijas (Costes Específicos) y luego el reparto proporcional por horas en partes de trabajo mensuales.
                     </p>
                 </div>
             </div>
