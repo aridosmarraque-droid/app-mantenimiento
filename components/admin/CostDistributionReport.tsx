@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getAllMachines, getAllPersonalReportsByRange } from '../../services/db';
-import { Machine, PersonalReport } from '../../types';
-import { ArrowLeft, Loader2, Calendar, Printer, FileText, LayoutGrid } from 'lucide-react';
+import { getAllMachines, getAllOperationLogsByRange } from '../../services/db';
+import { Machine, OperationLog } from '../../types';
+import { ArrowLeft, Loader2, Calendar, Printer, Fuel, LayoutGrid } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -11,8 +11,8 @@ interface Props {
 export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().substring(0, 7)); // YYYY-MM
-    const [machines, setMachines] = useState<Machine[]>([]);
-    const [reports, setReports] = useState<PersonalReport[]>([]);
+    const [allMachines, setAllMachines] = useState<Machine[]>([]);
+    const [refuelingLogs, setRefuelingLogs] = useState<OperationLog[]>([]);
 
     useEffect(() => {
         loadData();
@@ -25,15 +25,15 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
             const startDate = new Date(year, month - 1, 1);
             const endDate = new Date(year, month, 0);
 
-            const [machinesData, reportsData] = await Promise.all([
+            const [machinesData, logsData] = await Promise.all([
                 getAllMachines(false),
-                getAllPersonalReportsByRange(startDate, endDate)
+                getAllOperationLogsByRange(startDate, endDate, ['REFUELING'])
             ]);
 
-            setMachines(machinesData.sort((a, b) => (a.companyCode || a.name).localeCompare(b.companyCode || b.name)));
-            setReports(reportsData);
+            setAllMachines(machinesData);
+            setRefuelingLogs(logsData);
         } catch (e) {
-            console.error("Error loading distribution data:", e);
+            console.error("Error loading fuel distribution data:", e);
         } finally {
             setLoading(false);
         }
@@ -50,47 +50,55 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
         return days;
     }, [selectedMonth]);
 
-    // Matrix calculation
+    // Omit machines with NO consumption in the selected month
+    const consumedMachines = useMemo(() => {
+        const consumedIds = new Set(refuelingLogs.map(l => l.machineId));
+        return allMachines
+            .filter(m => consumedIds.has(m.id))
+            .sort((a, b) => (a.companyCode || a.name).localeCompare(b.companyCode || b.name));
+    }, [allMachines, refuelingLogs]);
+
+    // Matrix calculation (Day x Machine)
     const grid = useMemo(() => {
         const matrix: Record<number, Record<string, number>> = {};
         daysInMonth.forEach(day => {
             matrix[day] = {};
-            machines.forEach(m => matrix[day][m.id] = 0);
+            consumedMachines.forEach(m => matrix[day][m.id] = 0);
         });
 
-        reports.forEach(r => {
-            const day = new Date(r.date).getDate();
-            if (matrix[day] && r.machineId) {
-                matrix[day][r.machineId] = (matrix[day][r.machineId] || 0) + r.hours;
+        refuelingLogs.forEach(l => {
+            const day = new Date(l.date).getDate();
+            if (matrix[day] && consumedMachines.find(m => m.id === l.machineId)) {
+                matrix[day][l.machineId] = (matrix[day][l.machineId] || 0) + (l.fuelLitres || 0);
             }
         });
 
         return matrix;
-    }, [reports, machines, daysInMonth]);
+    }, [refuelingLogs, consumedMachines, daysInMonth]);
 
     const machineTotals = useMemo(() => {
         const totals: Record<string, number> = {};
-        machines.forEach(m => {
-            totals[m.id] = reports
-                .filter(r => r.machineId === m.id)
-                .reduce((acc, curr) => acc + curr.hours, 0);
+        consumedMachines.forEach(m => {
+            totals[m.id] = refuelingLogs
+                .filter(l => l.machineId === m.id)
+                .reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
         });
         return totals;
-    }, [reports, machines]);
+    }, [refuelingLogs, consumedMachines]);
 
     const dayTotals = useMemo(() => {
         const totals: Record<number, number> = {};
         daysInMonth.forEach(day => {
-            totals[day] = reports
-                .filter(r => new Date(r.date).getDate() === day)
-                .reduce((acc, curr) => acc + curr.hours, 0);
+            totals[day] = refuelingLogs
+                .filter(l => new Date(l.date).getDate() === day)
+                .reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
         });
         return totals;
-    }, [reports, daysInMonth]);
+    }, [refuelingLogs, daysInMonth]);
 
     const grandTotal = useMemo(() => {
-        return reports.reduce((acc, curr) => acc + curr.hours, 0);
-    }, [reports]);
+        return refuelingLogs.reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
+    }, [refuelingLogs]);
 
     const handlePrint = () => {
         window.print();
@@ -139,9 +147,9 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none uppercase">Reparto de Costes</h3>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none uppercase">Gasoil Mensual</h3>
                         <p className="text-[10px] font-bold text-green-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            <LayoutGrid size={10}/> Distribución Mensual por Máquina
+                            <Fuel size={10}/> Distribución Mensual por Unidad
                         </p>
                     </div>
                 </div>
@@ -168,12 +176,17 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 {loading ? (
                     <div className="py-40 flex flex-col items-center justify-center text-slate-400">
                         <Loader2 className="animate-spin mb-4 text-green-500" size={48} />
-                        <p className="font-black uppercase text-xs tracking-widest">Calculando distribución...</p>
+                        <p className="font-black uppercase text-xs tracking-widest">Generando matriz de gasoil...</p>
+                    </div>
+                ) : consumedMachines.length === 0 ? (
+                    <div className="py-40 text-center text-slate-400">
+                        <Fuel size={48} className="mx-auto mb-4 opacity-20" />
+                        <p className="font-black uppercase text-xs">No hay datos de consumo en este mes</p>
                     </div>
                 ) : (
                     <div className="min-w-max">
                         <div className="mb-4 hidden print:block border-b pb-4">
-                            <h2 className="text-2xl font-black text-slate-900 uppercase">ARIDOS MARRAQUE - Reparto de Costes de Personal</h2>
+                            <h2 className="text-2xl font-black text-slate-900 uppercase">ARIDOS MARRAQUE - Reparto Mensual de Gasoil (Litros)</h2>
                             <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Periodo: {new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
                         </div>
 
@@ -181,7 +194,7 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                             <thead>
                                 <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-tighter">
                                     <th className="p-2 border border-slate-700 text-left sticky left-0 bg-slate-900 z-10 w-20">Día</th>
-                                    {machines.map(m => (
+                                    {consumedMachines.map(m => (
                                         <th key={m.id} className="p-2 border border-slate-700 text-center min-w-[50px] leading-tight">
                                             {m.companyCode ? <div className="text-[7px] opacity-70">{m.companyCode}</div> : null}
                                             <div className="rotate-0 sm:rotate-0">{m.name}</div>
@@ -196,13 +209,13 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                                         <td className="p-2 border border-slate-200 font-black text-slate-500 sticky left-0 bg-inherit z-10">
                                             {day}
                                         </td>
-                                        {machines.map(m => (
-                                            <td key={m.id} className={`p-2 border border-slate-100 text-center font-mono ${grid[day][m.id] > 0 ? 'font-black text-slate-900' : 'text-slate-300'}`}>
-                                                {grid[day][m.id] > 0 ? grid[day][m.id] : ''}
+                                        {consumedMachines.map(m => (
+                                            <td key={m.id} className={`p-2 border border-slate-100 text-center font-mono ${grid[day][m.id] > 0 ? 'font-black text-green-700' : 'text-slate-200'}`}>
+                                                {grid[day][m.id] > 0 ? grid[day][m.id].toFixed(1) : ''}
                                             </td>
                                         ))}
                                         <td className="p-2 border border-slate-200 text-center bg-slate-100 font-black text-slate-900">
-                                            {dayTotals[day] > 0 ? dayTotals[day] : '-'}
+                                            {dayTotals[day] > 0 ? dayTotals[day].toFixed(1) : '-'}
                                         </td>
                                     </tr>
                                 ))}
@@ -210,31 +223,22 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                             <tfoot className="bg-slate-100 text-[10px] font-black uppercase">
                                 <tr>
                                     <td className="p-2 border border-slate-300 bg-slate-200 sticky left-0 z-10">Total Maq.</td>
-                                    {machines.map(m => (
+                                    {consumedMachines.map(m => (
                                         <td key={m.id} className="p-2 border border-slate-300 text-center text-blue-700 bg-blue-50/30">
-                                            {machineTotals[m.id]}
+                                            {machineTotals[m.id].toFixed(1)}
                                         </td>
                                     ))}
                                     <td className="p-2 border border-slate-400 text-center bg-slate-900 text-white text-xs">
-                                        {grandTotal}
+                                        {grandTotal.toFixed(1)}
                                     </td>
                                 </tr>
                             </tfoot>
                         </table>
 
                         <div className="mt-6 flex flex-col sm:flex-row justify-between items-start gap-4 print:mt-10">
-                            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 no-print max-w-sm">
-                                <h4 className="font-black text-slate-800 text-xs uppercase mb-2 flex items-center gap-2">
-                                    <FileText size={14} className="text-blue-500" /> Información del Informe
-                                </h4>
-                                <p className="text-[10px] text-slate-500 leading-relaxed italic">
-                                    Este reparto muestra la suma de horas registradas en los <b>Partes de Trabajo de Personal</b>. 
-                                    Se recomienda imprimir este informe en formato <b>A3 Horizontal</b> para una visualización correcta de todas las columnas de maquinaria.
-                                </p>
-                            </div>
-                            <div className="text-right flex flex-col items-end">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Acumulado Mensual</span>
-                                <span className="text-4xl font-black text-slate-900 leading-none">{grandTotal} <small className="text-sm">horas</small></span>
+                            <div className="text-right flex flex-col items-end w-full">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Litros Mensual</span>
+                                <span className="text-4xl font-black text-slate-900 leading-none">{grandTotal.toFixed(1)} <small className="text-sm">Litros</small></span>
                             </div>
                         </div>
                     </div>
