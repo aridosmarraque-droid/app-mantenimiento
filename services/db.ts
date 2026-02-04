@@ -218,9 +218,6 @@ export const getSubCentersByCenter = async (centerId: string): Promise<SubCenter
     }));
 };
 
-/**
- * Fix: Added missing export createSubCenter
- */
 export const createSubCenter = async (sub: Omit<SubCenter, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_subcentros').insert({
@@ -231,9 +228,6 @@ export const createSubCenter = async (sub: Omit<SubCenter, 'id'>): Promise<void>
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export updateSubCenter
- */
 export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): Promise<void> => {
     if (!isConfigured) return;
     const p: any = {};
@@ -245,18 +239,12 @@ export const updateSubCenter = async (id: string, updates: Partial<SubCenter>): 
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deleteSubCenter
- */
 export const deleteSubCenter = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_subcentros').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getMachinesBySubCenter
- */
 export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subId);
@@ -266,9 +254,6 @@ export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean 
     return (data || []).map(mapMachine);
 };
 
-/**
- * Fix: Added missing export getMachinesByCenter
- */
 export const getMachinesByCenter = async (centerId: string, onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
@@ -278,21 +263,21 @@ export const getMachinesByCenter = async (centerId: string, onlyActive: boolean 
     return (data || []).map(mapMachine);
 };
 
-/**
- * Fix: Added missing export getAllMachines
- */
 export const getAllMachines = async (onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
+    // Simplificamos el select para evitar errores 400 si la relación no es estándar
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
     if (onlyActive) query = query.eq('active', true);
     const { data, error } = await query;
-    if (error) return [];
+    if (error) {
+        console.error("Error cargando máquinas:", error);
+        // Fallback sin definiciones si hay error 400
+        const fallback = await supabase.from('mant_maquinas').select('*');
+        return (fallback.data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+    }
     return (data || []).map(mapMachine);
 };
 
-/**
- * Fix: Added missing export createMachine
- */
 export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> & { maintenanceDefs: MaintenanceDefinition[] }): Promise<void> => {
     if (!isConfigured) return;
     const { data: machineData, error: machineError } = await supabase.from('mant_maquinas').insert({
@@ -329,9 +314,6 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
     }
 };
 
-/**
- * Fix: Added missing export updateMachineAttributes
- */
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     if (!isConfigured) return;
     const p: any = {};
@@ -352,18 +334,12 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deleteMachine
- */
 export const deleteMachine = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_maquinas').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getMachineDependencyCount
- */
 export const getMachineDependencyCount = async (id: string): Promise<{ logs: number, reports: number }> => {
     if (!isConfigured) return { logs: 0, reports: 0 };
     const [logsRes, reportsRes] = await Promise.all([
@@ -373,9 +349,6 @@ export const getMachineDependencyCount = async (id: string): Promise<{ logs: num
     return { logs: logsRes.count || 0, reports: reportsRes.count || 0 };
 };
 
-/**
- * Fix: Added missing export addMaintenanceDef
- */
 export const addMaintenanceDef = async (def: MaintenanceDefinition, currentHours: number): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_mantenimientos_def').insert({
@@ -392,9 +365,6 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentHours
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export updateMaintenanceDef
- */
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
     if (!isConfigured) return;
     const p: any = {
@@ -412,18 +382,12 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deleteMaintenanceDef
- */
 export const deleteMaintenanceDef = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_mantenimientos_def').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export calculateAndSyncMachineStatus
- */
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => {
     if (!isConfigured) return m;
     const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
@@ -431,9 +395,6 @@ export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine
     return mapMachine(data);
 };
 
-/**
- * Fix: Added missing export saveOperationLog
- */
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<void> => {
     if (!isConfigured) {
         offline.addToQueue('LOG', log);
@@ -469,9 +430,6 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
     }
 };
 
-/**
- * Fix: Added missing export getMachineLogs
- */
 export const getMachineLogs = async (machineId: string, start?: Date, end?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('mant_registros').select('*').eq('maquina_id', machineId);
@@ -485,9 +443,6 @@ export const getMachineLogs = async (machineId: string, start?: Date, end?: Date
     return (data || []).map(mapLogFromDb);
 };
 
-/**
- * Fix: Added missing export updateOperationLog
- */
 export const updateOperationLog = async (id: string, log: Partial<OperationLog>): Promise<void> => {
     if (!isConfigured) return;
     const p: any = {};
@@ -506,18 +461,12 @@ export const updateOperationLog = async (id: string, log: Partial<OperationLog>)
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deleteOperationLog
- */
 export const deleteOperationLog = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_registros').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getServiceProviders
- */
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
     if (!isConfigured) return mock.getServiceProviders();
     const { data, error } = await supabase.from('mant_proveedores').select('*').order('nombre');
@@ -525,36 +474,24 @@ export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
     return (data || []).map(p => ({ id: p.id, name: p.nombre }));
 };
 
-/**
- * Fix: Added missing export createServiceProvider
- */
 export const createServiceProvider = async (name: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_proveedores').insert({ nombre: name });
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export updateServiceProvider
- */
 export const updateServiceProvider = async (id: string, name: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_proveedores').update({ nombre: name }).eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deleteServiceProvider
- */
 export const deleteServiceProvider = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_proveedores').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getLastCPReport
- */
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
     if (!isConfigured) return mock.getLastCPReport();
     const { data, error } = await supabase.from('cp_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1);
@@ -566,15 +503,13 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         workerId: r.trabajador_id,
         crusherStart: r.machacadora_inicio,
         crusherEnd: r.machacadora_fin,
-        millsStart: r.molinos_inicio,
-        millsEnd: r.molinos_fin,
+        // Corregido de molinos_ a trituracion_
+        millsStart: r.trituracion_inicio,
+        millsEnd: r.trituracion_fin,
         comments: r.comentarios
     };
 };
 
-/**
- * Fix: Added missing export saveCPReport
- */
 export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>): Promise<void> => {
     if (!isConfigured) {
         offline.addToQueue('CP_REPORT', r);
@@ -585,16 +520,14 @@ export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         machacadora_inicio: r.crusherStart,
         machacadora_fin: r.crusherEnd,
-        molinos_inicio: r.millsStart,
-        molinos_fin: r.millsEnd,
+        // Corregido de molinos_ a trituracion_
+        trituracion_inicio: r.millsStart,
+        trituracion_fin: r.millsEnd,
         comentarios: r.comments
     });
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getCPReportsByRange
- */
 export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDailyReport[]> => {
     if (!isConfigured) return mock.getCPReportsByRange(start, end);
     const { data, error } = await supabase.from('cp_partes_diarios')
@@ -610,15 +543,13 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
         workerId: r.trabajador_id,
         crusherStart: r.machacadora_inicio,
         crusherEnd: r.machacadora_fin,
-        millsStart: r.molinos_inicio,
-        millsEnd: r.molinos_fin,
+        // Corregido de molinos_ a trituracion_
+        millsStart: r.trituracion_inicio,
+        millsEnd: r.trituracion_fin,
         comments: r.comentarios
     }));
 };
 
-/**
- * Fix: Added missing export getLastCRReport
- */
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
     if (!isConfigured) return mock.getLastCRReport();
     const { data, error } = await supabase.from('cr_partes_diarios').select('*').order('fecha', { ascending: false }).limit(1);
@@ -630,15 +561,13 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         workerId: r.trabajador_id,
         washingStart: r.lavado_inicio,
         washingEnd: r.lavado_fin,
+        // Corregido de trituration_ a trituracion_
         triturationStart: r.trituracion_inicio,
         triturationEnd: r.trituracion_fin,
         comments: r.comentarios
     };
 };
 
-/**
- * Fix: Added missing export saveCRReport
- */
 export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> => {
     if (!isConfigured) {
         offline.addToQueue('CR_REPORT', r);
@@ -649,6 +578,7 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
+        // Corregido de trituration_ a trituracion_
         trituracion_inicio: r.triturationStart,
         trituracion_fin: r.triturationEnd,
         comentarios: r.comments
@@ -656,17 +586,9 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getCRReportsByRange
- */
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('cr_partes_diarios')
-        .select('*')
-        .gte('fecha', toLocalDateString(start))
-        .lte('fecha', toLocalDateString(end))
-        .order('fecha');
-    
+    const { data, error } = await queryReports('cr_partes_diarios', start, end);
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -674,15 +596,22 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: r.lavado_inicio,
         washingEnd: r.lavado_fin,
-        triturationStart: r.trituration_inicio,
-        triturationEnd: r.trituration_fin,
+        // Corregido de trituration_ a trituracion_
+        triturationStart: r.trituracion_inicio,
+        triturationEnd: r.trituracion_fin,
         comments: r.comentarios
     }));
 };
 
-/**
- * Fix: Added missing export getCPWeeklyPlan
- */
+// Helper genérico para evitar duplicación
+const queryReports = async (table: string, start: Date, end: Date) => {
+    return supabase.from(table)
+        .select('*')
+        .gte('fecha', toLocalDateString(start))
+        .lte('fecha', toLocalDateString(end))
+        .order('fecha');
+};
+
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
     const { data, error } = await supabase.from('mant_planeamiento_semanal').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
@@ -698,9 +627,6 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
     };
 };
 
-/**
- * Fix: Added missing export saveCPWeeklyPlan
- */
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_planeamiento_semanal').upsert({
@@ -714,13 +640,11 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getPersonalReports
- */
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
+    // Simplificamos select para evitar error 400
     const { data, error } = await supabase.from('partes_trabajo')
-        .select('*, mant_centros(nombre), mant_maquinas(nombre)')
+        .select('*')
         .eq('trabajador_id', workerId)
         .order('fecha', { ascending: false })
         .limit(20);
@@ -731,19 +655,14 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         workerId: r.trabajador_id,
         hours: r.horas,
         costCenterId: r.centro_id,
-        machineId: r.maquina_id,
-        machineName: r.mant_maquinas?.nombre,
-        costCenterName: r.mant_centros?.nombre
+        machineId: r.maquina_id
     }));
 };
 
-/**
- * Fix: Added missing export getAllPersonalReportsByRange
- */
 export const getAllPersonalReportsByRange = async (start: Date, end: Date): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('partes_trabajo')
-        .select('*, mant_centros(nombre, codigo_empresa), mant_maquinas(nombre, codigo_empresa)')
+        .select('*')
         .gte('fecha', toLocalDateString(start))
         .lte('fecha', toLocalDateString(end))
         .order('fecha');
@@ -755,15 +674,10 @@ export const getAllPersonalReportsByRange = async (start: Date, end: Date): Prom
         workerId: r.trabajador_id,
         hours: r.horas,
         costCenterId: r.centro_id,
-        machineId: r.maquina_id,
-        machineName: r.mant_maquinas?.nombre,
-        costCenterName: r.mant_centros?.nombre
+        machineId: r.maquina_id
     }));
 };
 
-/**
- * Fix: Added missing export savePersonalReport
- */
 export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>): Promise<void> => {
     if (!isConfigured) {
         offline.addToQueue('PERSONAL_REPORT', r);
@@ -779,9 +693,6 @@ export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>): Promise
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export updatePersonalReport
- */
 export const updatePersonalReport = async (id: string, r: Partial<PersonalReport>): Promise<void> => {
     if (!isConfigured) return;
     const p: any = {};
@@ -794,24 +705,23 @@ export const updatePersonalReport = async (id: string, r: Partial<PersonalReport
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deletePersonalReport
- */
 export const deletePersonalReport = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('partes_trabajo').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getDailyAuditLogs
- */
-export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[] }> => {
-    if (!isConfigured) return { ops: [], personal: [] };
+export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[], cp: CPDailyReport[], cr: CRDailyReport[] }> => {
+    if (!isConfigured) return { ops: [], personal: [], cp: [], cr: [] };
     const dateStr = toLocalDateString(date);
-    const [opsRes, personalRes] = await Promise.all([
+    
+    // Eliminamos los joins complejos para evitar errores 400. 
+    // El frontend ya hace lookup de nombres por ID.
+    const [opsRes, personalRes, cpRes, crRes] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
-        supabase.from('partes_trabajo').select('*, mant_centros(nombre), mant_maquinas(nombre)').eq('fecha', dateStr)
+        supabase.from('partes_trabajo').select('*').eq('fecha', dateStr),
+        supabase.from('cp_partes_diarios').select('*').eq('fecha', dateStr),
+        supabase.from('cr_partes_diarios').select('*').eq('fecha', dateStr)
     ]);
 
     return {
@@ -822,16 +732,23 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id,
             hours: r.horas,
             costCenterId: r.centro_id,
-            machineId: r.maquina_id,
-            machineName: r.mant_maquinas?.nombre,
-            costCenterName: r.mant_centros?.nombre
+            machineId: r.maquina_id
+        })),
+        cp: (cpRes.data || []).map(r => ({
+            id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+            crusherStart: r.machacadora_inicio, crusherEnd: r.machacadora_fin,
+            millsStart: r.trituracion_inicio, millsEnd: r.trituracion_fin,
+            comments: r.comentarios
+        })),
+        cr: (crRes.data || []).map(r => ({
+            id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
+            washingStart: r.lavado_inicio, washingEnd: r.lavado_fin,
+            triturationStart: r.trituracion_inicio, triturationEnd: r.trituracion_fin,
+            comments: r.comentarios
         }))
     };
 };
 
-/**
- * Fix: Added missing export getSchemaInfo
- */
 export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
     if (!isConfigured) return [];
     const results = await Promise.all(tables.map(async (t) => {
@@ -841,9 +758,6 @@ export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
     return results;
 };
 
-/**
- * Fix: Added missing export syncPendingData
- */
 export const syncPendingData = async (): Promise<{ synced: number }> => {
     if (!isConfigured || !navigator.onLine) return { synced: 0 };
     const queue = offline.getQueue();
@@ -863,9 +777,6 @@ export const syncPendingData = async (): Promise<{ synced: number }> => {
     return { synced: count };
 };
 
-/**
- * Fix: Added missing export getWorkerDocuments
- */
 export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocument[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_documentos_trabajador').select('*').eq('trabajador_id', workerId);
@@ -882,9 +793,6 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
     }));
 };
 
-/**
- * Fix: Added missing export saveWorkerDocument
- */
 export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_documentos_trabajador').insert({
@@ -898,9 +806,6 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getSpecificCostRules
- */
 export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
     if (!isConfigured) return [];
     const { data, error } = await supabase.from('mant_reglas_costes').select('*');
@@ -914,9 +819,6 @@ export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
     }));
 };
 
-/**
- * Fix: Added missing export createSpecificCostRule
- */
 export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_reglas_costes').insert({
@@ -928,18 +830,12 @@ export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>)
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export deleteSpecificCostRule
- */
 export const deleteSpecificCostRule = async (id: string): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_reglas_costes').delete().eq('id', id);
     if (error) throw error;
 };
 
-/**
- * Fix: Added missing export getAllOperationLogsByRange
- */
 export const getAllOperationLogsByRange = async (start: Date, end: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('mant_registros').select('*')
