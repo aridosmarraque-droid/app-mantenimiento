@@ -32,7 +32,7 @@ import { ScheduledMaintenanceReport } from './components/admin/ScheduledMaintena
 import { CostDistributionReport } from './components/admin/CostDistributionReport';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock, PieChart } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock, PieChart, Coins } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -64,7 +64,7 @@ enum ViewState {
   ADMIN_COST_DISTRIBUTION
 }
 
-type MenuCategory = 'datos' | 'produccion' | 'informes' | 'config' | null;
+type MenuCategory = 'datos' | 'produccion' | 'costes' | 'informes' | 'config' | null;
 
 function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -328,6 +328,22 @@ function App() {
                     )}
                   </div>
 
+                  {/* CATEGORÍA: REPARTO DE COSTES */}
+                  <div className="border-b border-slate-100">
+                    <button onClick={() => toggleCategory('costes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'costes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
+                        <div className="flex items-center gap-3">
+                            <Coins className={`w-5 h-5 ${openCategory === 'costes' ? 'text-green-400' : 'text-green-600'}`} />
+                            <span className="text-xs font-black uppercase tracking-tight">Reparto de Costes</span>
+                        </div>
+                        {openCategory === 'costes' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {openCategory === 'costes' && (
+                        <div className="bg-slate-50 divide-y divide-slate-100">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_COST_DISTRIBUTION)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Fuel size={14} className="text-green-500" /> Gasoil Mensual</button>
+                        </div>
+                    )}
+                  </div>
+
                   {/* CATEGORÍA: INFORMES */}
                   <div className="border-b border-slate-100">
                     <button onClick={() => toggleCategory('informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
@@ -339,7 +355,6 @@ function App() {
                     </button>
                     {openCategory === 'informes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
-                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_COST_DISTRIBUTION)} className="w-full text-left pl-14 py-3 text-xs font-black text-green-700 hover:bg-white flex items-center gap-2"><PieChart size={14} /> Reparto de Costes</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MAINTENANCE_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Mantenimientos Programados</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Rendimiento de Plantas</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría Diaria</button>
