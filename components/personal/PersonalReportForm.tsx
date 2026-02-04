@@ -39,7 +39,9 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                 getPersonalReports(workerId),
                 getAllMachines(true) // Solo máquinas activas
             ]);
-            setCenters(centersData);
+            
+            // FILTRO: Solo mostrar centros marcados como seleccionables para partes
+            setCenters(centersData.filter(c => c.selectableForReports !== false));
             setHistory(historyData);
             
             // Filtrar y Ordenar máquinas seleccionables
@@ -116,7 +118,9 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     >
                         <option value="">-- Seleccionar Centro --</option>
                         {centers.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.id}>
+                                {c.companyCode ? `[${c.companyCode}] ` : ''}{c.name}
+                            </option>
                         ))}
                     </select>
                 </div>
