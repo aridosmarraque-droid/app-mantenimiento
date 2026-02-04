@@ -29,9 +29,10 @@ import { FuelReportViewer } from './components/admin/FuelReportViewer';
 import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { ScheduledMaintenanceReport } from './components/admin/ScheduledMaintenanceReport';
+import { CostDistributionReport } from './components/admin/CostDistributionReport';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock, PieChart } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -59,7 +60,8 @@ enum ViewState {
   ADMIN_FUEL_REPORT,
   ADMIN_FLUID_REPORT,
   ADMIN_WHATSAPP_CONFIG,
-  ADMIN_MAINTENANCE_REPORT
+  ADMIN_MAINTENANCE_REPORT,
+  ADMIN_COST_DISTRIBUTION
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'informes' | 'config' | null;
@@ -247,8 +249,8 @@ function App() {
   if (viewState === ViewState.LOGIN) return <Login onLogin={handleLogin} />;
 
   return (
-      <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl relative overflow-x-hidden">
-        <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20">
+      <div className="min-h-screen flex flex-col max-w-lg mx-auto bg-slate-50 shadow-xl relative overflow-x-hidden print:max-w-none print:bg-white print:p-0">
+        <header className="bg-slate-800 text-white shadow-lg sticky top-0 z-20 print:hidden">
           {(!isOnline || pendingItems > 0) && (
               <div className={`text-white text-[10px] text-center p-2 font-black uppercase flex items-center justify-between px-4 ${isOnline ? 'bg-orange-500' : 'bg-red-600'}`}>
                   <div className="flex items-center gap-2">
@@ -337,6 +339,7 @@ function App() {
                     </button>
                     {openCategory === 'informes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_COST_DISTRIBUTION)} className="w-full text-left pl-14 py-3 text-xs font-black text-green-700 hover:bg-white flex items-center gap-2"><PieChart size={14} /> Reparto de Costes</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_MAINTENANCE_REPORT)} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Mantenimientos Programados</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_PRODUCTION_DASHBOARD)} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Rendimiento de Plantas</button>
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_DAILY_AUDIT)} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría Diaria</button>
@@ -356,9 +359,9 @@ function App() {
           )}
         </header>
         
-        {isMenuOpen && <div className="fixed inset-0 bg-slate-900/60 z-10 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)}></div>}
+        {isMenuOpen && <div className="fixed inset-0 bg-slate-900/60 z-10 backdrop-blur-sm print:hidden" onClick={() => setIsMenuOpen(false)}></div>}
 
-        <main className="flex-1 p-4 overflow-y-auto">
+        <main className="flex-1 p-4 overflow-y-auto print:overflow-visible print:p-0">
           {successMsg && (
             <div className="flex flex-col items-center justify-center h-full text-green-600 animate-in zoom-in-95 duration-300 absolute inset-0 bg-white/95 z-50">
               <CheckCircle2 className="w-20 h-20 mb-6" />
@@ -440,6 +443,7 @@ function App() {
             {viewState === ViewState.ADMIN_FUEL_REPORT && <FuelReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_FLUID_REPORT && <FluidReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MAINTENANCE_REPORT && <ScheduledMaintenanceReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_COST_DISTRIBUTION && <CostDistributionReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         </main>
       </div>
     );
