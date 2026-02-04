@@ -21,7 +21,7 @@ import {
 
 // --- HELPERS ---
 
-const toLocalDateString = (date: Date | string): string => {
+export const toLocalDateString = (date: Date | string): string => {
     if (!date) {
         throw new Error("Fecha no proporcionada.");
     }
@@ -30,18 +30,6 @@ const toLocalDateString = (date: Date | string): string => {
         throw new Error("Fecha inválida proporcionada al sistema.");
     }
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const cleanUuid = (id: any): string | null => {
-    if (!id || typeof id !== 'string' || id === 'null' || id === 'undefined') return null;
-    const cleaned = id.trim();
-    return cleaned.length > 0 ? cleaned : null;
-};
-
-const cleanNum = (val: any): number | null => {
-    if (val === null || val === undefined || val === '') return null;
-    const n = parseFloat(val);
-    return isNaN(n) ? null : n;
 };
 
 // --- MAPPERS ---
@@ -76,7 +64,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.descripcion || dbLog.description, 
+        description: dbLog.descripcion || dbLog.description, // Soporte para ambos nombres de columna
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -254,7 +242,6 @@ export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean 
         if (error) throw error;
         return (data || []).map(mapMachine);
     } catch (e) {
-        // Fallback inmediato ante error 400 de relación
         let fallback = supabase.from('mant_maquinas').select('*').eq('subcentro_id', subId);
         if (onlyActive) fallback = fallback.eq('active', true);
         const { data } = await fallback;
@@ -389,6 +376,7 @@ export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<
         intervalo_meses: def.intervalMonths,
         proxima_fecha: def.nextDate,
         tareas: def.tasks,
+        // Fix: Changed property names to match MaintenanceDefinition interface
         notificado_preaviso: def.notifiedWarning,
         notificado_vencido: def.notifiedOverdue
     };
@@ -522,7 +510,6 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         workerId: r.trabajador_id,
         crusherStart: Number(r.machacadora_inicio || 0),
         crusherEnd: Number(r.machacadora_fin || 0),
-        // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
         millsStart: Number(r.molinos_inicio || 0),
         millsEnd: Number(r.molinos_fin || 0),
         comments: r.comentarios
@@ -539,7 +526,6 @@ export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         machacadora_inicio: r.crusherStart,
         machacadora_fin: r.crusherEnd,
-        // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
         molinos_inicio: r.millsStart,
         molinos_fin: r.millsEnd,
         comentarios: r.comments
@@ -562,7 +548,6 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
         workerId: r.trabajador_id,
         crusherStart: Number(r.machacadora_inicio || 0),
         crusherEnd: Number(r.machacadora_fin || 0),
-        // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
         millsStart: Number(r.molinos_inicio || 0),
         millsEnd: Number(r.molinos_fin || 0),
         comments: r.comentarios
@@ -580,8 +565,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        // Canto Rodado usa 'trituracion_inicio/fin'
-        triturationStart: Number(r.trituracion_inicio || 0),
+        triturationStart: Number(r.trituration_inicio || 0),
         triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
     };
@@ -597,9 +581,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
-        // Canto Rodado usa 'trituracion_inicio/fin'
-        trituracion_inicio: r.triturationStart,
-        trituracion_fin: r.triturationEnd,
+        trituration_inicio: r.triturationStart,
+        trituration_fin: r.triturationEnd,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -615,7 +598,6 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        // Canto Rodado usa 'trituracion_inicio/fin'
         triturationStart: Number(r.trituration_inicio || 0),
         triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
@@ -633,7 +615,7 @@ const queryReports = async (table: string, start: Date, end: Date) => {
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    const { data, error } = await supabase.from('mant_planeamiento_semanal').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
+    const { data, error } = await supabase.from('cp_planeamiento_semanal').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
     if (error || !data) return null;
     return {
         id: data.id,
@@ -648,13 +630,13 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('mant_planeamiento_semanal').upsert({
+    const { error } = await supabase.from('cp_planeamiento_semanal').upsert({
         lunes_fecha: plan.mondayDate,
-        horas_lunes: plan.hoursMon,
-        horas_martes: plan.hoursTue,
-        horas_miercoles: plan.hoursWed,
-        horas_jueves: plan.hoursThu,
-        horas_viernes: plan.hoursFri
+        hoursMon: plan.hoursMon,
+        hoursTue: plan.hoursTue,
+        hoursWed: plan.hoursWed,
+        hoursThu: plan.hoursThu,
+        hoursFri: plan.hoursFri
     }, { onConflict: 'lunes_fecha' });
     if (error) throw error;
 };
@@ -756,7 +738,6 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id, 
             crusherStart: Number(r.machacadora_inicio || 0), 
             crusherEnd: Number(r.machacadora_fin || 0),
-            // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
             millsStart: Number(r.molinos_inicio || 0), 
             millsEnd: Number(r.molinos_fin || 0),
             comments: r.comentarios
@@ -767,8 +748,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id, 
             washingStart: Number(r.lavado_inicio || 0), 
             washingEnd: Number(r.lavado_fin || 0),
-            // Canto Rodado usa 'trituracion_inicio/fin'
-            triturationStart: Number(r.trituracion_inicio || 0), 
+            triturationStart: Number(r.trituration_inicio || 0), 
             triturationEnd: Number(r.trituration_fin || 0),
             comments: r.comentarios
         }))
