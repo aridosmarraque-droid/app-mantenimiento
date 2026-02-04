@@ -85,6 +85,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
 
 const mapMachine = (m: any): Machine => {
     const currentHours = Number(m.horas_actuales || 0);
+    const defsRaw = m.mant_mantenimientos_def || [];
     
     return {
         id: m.id,
@@ -96,17 +97,13 @@ const mapMachine = (m: any): Machine => {
         requiresHours: !!m.requiere_horas, 
         adminExpenses: !!m.gastos_admin,
         transportExpenses: !!m.gastos_transporte,
-        maintenanceDefs: (m.mant_mantenimientos_def || []).map((d: any) => {
+        maintenanceDefs: defsRaw.map((d: any) => {
             const interval = Number(d.intervalo_horas || 0);
             const lastHours = Number(d.ultimas_horas_realizadas || 0);
             const warning = Number(d.horas_preaviso || 0);
-            
             const nextDueHours = lastHours + interval;
             const remaining = nextDueHours - currentHours;
-            
-            const isActuallyPending = d.tipo_programacion === 'HOURS' 
-                ? (remaining <= warning)
-                : !!d.pendiente;
+            const isActuallyPending = d.tipo_programacion === 'HOURS' ? (remaining <= warning) : !!d.pendiente;
 
             return {
                 id: d.id,
@@ -145,7 +142,10 @@ const mapCostCenter = (c: any): CostCenter => ({
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
     if (!isConfigured) return mock.getWorkers();
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
-    if (error) return [];
+    if (error) {
+        console.error("Error cargando trabajadores:", error);
+        return [];
+    }
     const workers = (data || []).map(mapWorker).sort((a, b) => a.name.localeCompare(b.name));
     return onlyActive ? workers.filter(w => w.active !== false) : workers;
 };
@@ -250,7 +250,13 @@ export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean 
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subId);
     if (onlyActive) query = query.eq('active', true);
     const { data, error } = await query;
-    if (error) return [];
+    if (error) {
+        console.warn("Fallo select relacional en subcentro, reintentando plano:", error);
+        let fallback = supabase.from('mant_maquinas').select('*').eq('subcentro_id', subId);
+        if (onlyActive) fallback = fallback.eq('active', true);
+        const { data: fbData } = await fallback;
+        return (fbData || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+    }
     return (data || []).map(mapMachine);
 };
 
@@ -259,23 +265,29 @@ export const getMachinesByCenter = async (centerId: string, onlyActive: boolean 
     let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
     if (onlyActive) query = query.eq('active', true);
     const { data, error } = await query;
-    if (error) return [];
+    if (error) {
+        console.warn("Fallo select relacional en centro, reintentando plano:", error);
+        let fallback = supabase.from('mant_maquinas').select('*').eq('centro_id', centerId);
+        if (onlyActive) fallback = fallback.eq('active', true);
+        const { data: fbData } = await fallback;
+        return (fbData || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+    }
     return (data || []).map(mapMachine);
 };
 
 export const getAllMachines = async (onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
-    // Simplificamos el select para evitar errores 400 si la relación no es estándar
-    let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
-    if (onlyActive) query = query.eq('active', true);
-    const { data, error } = await query;
+    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
     if (error) {
-        console.error("Error cargando máquinas:", error);
-        // Fallback sin definiciones si hay error 400
-        const fallback = await supabase.from('mant_maquinas').select('*');
-        return (fallback.data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+        console.error("Error 400/Fetch en máquinas. Detalles completos:", JSON.stringify(error, null, 2));
+        // Fallback inmediato a select plano si el join falla (error 400 común)
+        const { data: fallback, error: err2 } = await supabase.from('mant_maquinas').select('*');
+        if (err2) return [];
+        const machines = (fallback || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+        return onlyActive ? machines.filter(m => m.active !== false) : machines;
     }
-    return (data || []).map(mapMachine);
+    const machines = (data || []).map(mapMachine);
+    return onlyActive ? machines.filter(m => m.active !== false) : machines;
 };
 
 export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> & { maintenanceDefs: MaintenanceDefinition[] }): Promise<void> => {
@@ -501,11 +513,10 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
-        crusherStart: r.machacadora_inicio,
-        crusherEnd: r.machacadora_fin,
-        // Corregido de molinos_ a trituracion_
-        millsStart: r.trituracion_inicio,
-        millsEnd: r.trituracion_fin,
+        crusherStart: Number(r.machacadora_inicio || 0),
+        crusherEnd: Number(r.machacadora_fin || 0),
+        millsStart: Number(r.trituracion_inicio || 0),
+        millsEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     };
 };
@@ -520,7 +531,6 @@ export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         machacadora_inicio: r.crusherStart,
         machacadora_fin: r.crusherEnd,
-        // Corregido de molinos_ a trituracion_
         trituracion_inicio: r.millsStart,
         trituracion_fin: r.millsEnd,
         comentarios: r.comments
@@ -541,11 +551,10 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
-        crusherStart: r.machacadora_inicio,
-        crusherEnd: r.machacadora_fin,
-        // Corregido de molinos_ a trituracion_
-        millsStart: r.trituracion_inicio,
-        millsEnd: r.trituracion_fin,
+        crusherStart: Number(r.machacadora_inicio || 0),
+        crusherEnd: Number(r.machacadora_fin || 0),
+        millsStart: Number(r.trituracion_inicio || 0),
+        millsEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -559,11 +568,10 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
-        washingStart: r.lavado_inicio,
-        washingEnd: r.lavado_fin,
-        // Corregido de trituration_ a trituracion_
-        triturationStart: r.trituracion_inicio,
-        triturationEnd: r.trituracion_fin,
+        washingStart: Number(r.lavado_inicio || 0),
+        washingEnd: Number(r.lavado_fin || 0),
+        triturationStart: Number(r.trituracion_inicio || 0),
+        triturationEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     };
 };
@@ -578,9 +586,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
-        // Corregido de trituration_ a trituracion_
         trituracion_inicio: r.triturationStart,
-        trituracion_fin: r.triturationEnd,
+        trituration_fin: r.triturationEnd,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -594,11 +601,10 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
-        washingStart: r.lavado_inicio,
-        washingEnd: r.lavado_fin,
-        // Corregido de trituration_ a trituracion_
-        triturationStart: r.trituracion_inicio,
-        triturationEnd: r.trituracion_fin,
+        washingStart: Number(r.lavado_inicio || 0),
+        washingEnd: Number(r.lavado_fin || 0),
+        triturationStart: Number(r.trituracion_inicio || 0),
+        triturationEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -642,7 +648,6 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
-    // Simplificamos select para evitar error 400
     const { data, error } = await supabase.from('partes_trabajo')
         .select('*')
         .eq('trabajador_id', workerId)
@@ -653,7 +658,7 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
-        hours: r.horas,
+        hours: Number(r.horas || 0),
         costCenterId: r.centro_id,
         machineId: r.maquina_id
     }));
@@ -672,7 +677,7 @@ export const getAllPersonalReportsByRange = async (start: Date, end: Date): Prom
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
-        hours: r.horas,
+        hours: Number(r.horas || 0),
         costCenterId: r.centro_id,
         machineId: r.maquina_id
     }));
@@ -715,8 +720,6 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
     if (!isConfigured) return { ops: [], personal: [], cp: [], cr: [] };
     const dateStr = toLocalDateString(date);
     
-    // Eliminamos los joins complejos para evitar errores 400. 
-    // El frontend ya hace lookup de nombres por ID.
     const [opsRes, personalRes, cpRes, crRes] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
         supabase.from('partes_trabajo').select('*').eq('fecha', dateStr),
@@ -724,26 +727,40 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
         supabase.from('cr_partes_diarios').select('*').eq('fecha', dateStr)
     ]);
 
+    // Diagnóstico en consola para verificar nombres de columnas devueltos por Supabase
+    if (cpRes.data && cpRes.data.length > 0) {
+        console.log(" INSPECCIÓN DATA CP (RAW):", cpRes.data[0]);
+    }
+
     return {
         ops: (opsRes.data || []).map(mapLogFromDb),
         personal: (personalRes.data || []).map(r => ({
             id: r.id,
             date: new Date(r.fecha),
             workerId: r.trabajador_id,
-            hours: r.horas,
+            hours: Number(r.horas || 0),
             costCenterId: r.centro_id,
             machineId: r.maquina_id
         })),
         cp: (cpRes.data || []).map(r => ({
-            id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
-            crusherStart: r.machacadora_inicio, crusherEnd: r.machacadora_fin,
-            millsStart: r.trituracion_inicio, millsEnd: r.trituracion_fin,
+            id: r.id, 
+            date: new Date(r.fecha), 
+            workerId: r.trabajador_id, 
+            crusherStart: Number(r.machacadora_inicio || 0), 
+            crusherEnd: Number(r.machacadora_fin || 0),
+            // Aseguramos conversión a Number para evitar NaNh
+            millsStart: Number(r.trituracion_inicio || r.molinos_inicio || 0), 
+            millsEnd: Number(r.trituracion_fin || r.molinos_fin || 0),
             comments: r.comentarios
         })),
         cr: (crRes.data || []).map(r => ({
-            id: r.id, date: new Date(r.fecha), workerId: r.trabajador_id, 
-            washingStart: r.lavado_inicio, washingEnd: r.lavado_fin,
-            triturationStart: r.trituracion_inicio, triturationEnd: r.trituracion_fin,
+            id: r.id, 
+            date: new Date(r.fecha), 
+            workerId: r.trabajador_id, 
+            washingStart: Number(r.lavado_inicio || 0), 
+            washingEnd: Number(r.lavado_fin || 0),
+            triturationStart: Number(r.trituracion_inicio || 0), 
+            triturationEnd: Number(r.trituration_fin || 0),
             comments: r.comentarios
         }))
     };
