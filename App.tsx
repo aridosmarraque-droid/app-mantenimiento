@@ -30,9 +30,10 @@ import { FluidReportViewer } from './components/admin/FluidReportViewer';
 import { WhatsAppConfig } from './components/admin/WhatsAppConfig';
 import { ScheduledMaintenanceReport } from './components/admin/ScheduledMaintenanceReport';
 import { CostDistributionReport } from './components/admin/CostDistributionReport';
+import { WorkerHoursDistributionReport } from './components/admin/WorkerHoursDistributionReport';
 import { saveOperationLog, saveCPReport, saveCRReport, syncPendingData, savePersonalReport } from './services/db';
 import { getQueue } from './services/offlineQueue';
-import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock, PieChart, Coins } from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, DatabaseZap, Menu, X, Factory, Truck, Settings, TrendingUp, WifiOff, RefreshCcw, LogOut, SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, Database, Users, Wrench, Droplet, MessageSquare, Loader2, FileText, BarChart3, CalendarClock, PieChart, Coins, Clock } from 'lucide-react';
 
 enum ViewState {
   LOGIN,
@@ -61,7 +62,8 @@ enum ViewState {
   ADMIN_FLUID_REPORT,
   ADMIN_WHATSAPP_CONFIG,
   ADMIN_MAINTENANCE_REPORT,
-  ADMIN_COST_DISTRIBUTION
+  ADMIN_COST_DISTRIBUTION,
+  ADMIN_WORKER_HOURS_DISTRIBUTION
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'costes' | 'informes' | 'config' | null;
@@ -340,6 +342,7 @@ function App() {
                     {openCategory === 'costes' && (
                         <div className="bg-slate-50 divide-y divide-slate-100">
                             <button onClick={() => handleAdminNavigate(ViewState.ADMIN_COST_DISTRIBUTION)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Fuel size={14} className="text-green-500" /> Gasoil Mensual</button>
+                            <button onClick={() => handleAdminNavigate(ViewState.ADMIN_WORKER_HOURS_DISTRIBUTION)} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Clock size={14} className="text-green-500" /> Horas por Trabajador</button>
                         </div>
                     )}
                   </div>
@@ -459,6 +462,7 @@ function App() {
             {viewState === ViewState.ADMIN_FLUID_REPORT && <FluidReportViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_MAINTENANCE_REPORT && <ScheduledMaintenanceReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
             {viewState === ViewState.ADMIN_COST_DISTRIBUTION && <CostDistributionReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+            {viewState === ViewState.ADMIN_WORKER_HOURS_DISTRIBUTION && <WorkerHoursDistributionReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         </main>
       </div>
     );
