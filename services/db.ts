@@ -76,7 +76,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.description, 
+        description: dbLog.descripcion || dbLog.description, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -432,7 +432,7 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
         solucion_averia: log.breakdownSolution,
         reparador_id: log.repairerId,
         tipo_mantenimiento: log.maintenanceType,
-        description: log.description,
+        descripcion: log.description,
         materiales: log.materials,
         mantenimiento_def_id: log.maintenanceDefId,
         litros_combustible: log.fuelLitres
@@ -473,7 +473,7 @@ export const updateOperationLog = async (id: string, log: Partial<OperationLog>)
     if (log.fuelLitres !== undefined) p.litros_combustible = log.fuelLitres;
     if (log.breakdownCause !== undefined) p.causa_averia = log.breakdownCause;
     if (log.breakdownSolution !== undefined) p.solucion_averia = log.breakdownSolution;
-    if (log.description !== undefined) p.description = log.description;
+    if (log.description !== undefined) p.descripcion = log.description;
     if (log.materials !== undefined) p.materiales = log.materials;
 
     const { error } = await supabase.from('mant_registros').update(p).eq('id', id);
@@ -582,7 +582,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingEnd: Number(r.lavado_fin || 0),
         // Canto Rodado usa 'trituracion_inicio/fin'
         triturationStart: Number(r.trituracion_inicio || 0),
-        triturationEnd: Number(r.trituracion_fin || 0),
+        triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
     };
 };
@@ -616,8 +616,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
         // Canto Rodado usa 'trituracion_inicio/fin'
-        triturationStart: Number(r.trituracion_inicio || 0),
-        triturationEnd: Number(r.trituracion_fin || 0),
+        triturationStart: Number(r.trituration_inicio || 0),
+        triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -813,7 +813,7 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         title: d.titulo,
         category: 'TRABAJADOR',
         issueDate: new Date(d.fecha_emision),
-        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
+        expiryDate: d.expiryDate ? new Date(d.expiryDate) : undefined,
         status: d.estado,
         docType: d.tipo_documento
     }));
