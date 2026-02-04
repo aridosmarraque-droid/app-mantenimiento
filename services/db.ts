@@ -247,47 +247,49 @@ export const deleteSubCenter = async (id: string): Promise<void> => {
 
 export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return [];
-    let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subId);
-    if (onlyActive) query = query.eq('active', true);
-    const { data, error } = await query;
-    if (error) {
-        console.warn("Fallo select relacional en subcentro, reintentando plano:", error);
+    try {
+        let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subId);
+        if (onlyActive) query = query.eq('active', true);
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data || []).map(mapMachine);
+    } catch (e) {
+        // Fallback inmediato ante error 400 de relación
         let fallback = supabase.from('mant_maquinas').select('*').eq('subcentro_id', subId);
         if (onlyActive) fallback = fallback.eq('active', true);
-        const { data: fbData } = await fallback;
-        return (fbData || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+        const { data } = await fallback;
+        return (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
     }
-    return (data || []).map(mapMachine);
 };
 
 export const getMachinesByCenter = async (centerId: string, onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
-    let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
-    if (onlyActive) query = query.eq('active', true);
-    const { data, error } = await query;
-    if (error) {
-        console.warn("Fallo select relacional en centro, reintentando plano:", error);
+    try {
+        let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
+        if (onlyActive) query = query.eq('active', true);
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data || []).map(mapMachine);
+    } catch (e) {
         let fallback = supabase.from('mant_maquinas').select('*').eq('centro_id', centerId);
         if (onlyActive) fallback = fallback.eq('active', true);
-        const { data: fbData } = await fallback;
-        return (fbData || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+        const { data } = await fallback;
+        return (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
     }
-    return (data || []).map(mapMachine);
 };
 
 export const getAllMachines = async (onlyActive: boolean = true): Promise<Machine[]> => {
     if (!isConfigured) return mock.getAllMachines();
-    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
-    if (error) {
-        console.error("Error 400/Fetch en máquinas. Detalles completos:", JSON.stringify(error, null, 2));
-        // Fallback inmediato a select plano si el join falla (error 400 común)
-        const { data: fallback, error: err2 } = await supabase.from('mant_maquinas').select('*');
-        if (err2) return [];
-        const machines = (fallback || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
+    try {
+        const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
+        if (error) throw error;
+        const machines = (data || []).map(mapMachine);
+        return onlyActive ? machines.filter(m => m.active !== false) : machines;
+    } catch (e) {
+        const { data } = await supabase.from('mant_maquinas').select('*');
+        const machines = (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
         return onlyActive ? machines.filter(m => m.active !== false) : machines;
     }
-    const machines = (data || []).map(mapMachine);
-    return onlyActive ? machines.filter(m => m.active !== false) : machines;
 };
 
 export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> & { maintenanceDefs: MaintenanceDefinition[] }): Promise<void> => {
@@ -402,9 +404,14 @@ export const deleteMaintenanceDef = async (id: string): Promise<void> => {
 
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => {
     if (!isConfigured) return m;
-    const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
-    if (error || !data) return m;
-    return mapMachine(data);
+    try {
+        const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', m.id).single();
+        if (error || !data) throw error;
+        return mapMachine(data);
+    } catch (e) {
+        const { data } = await supabase.from('mant_maquinas').select('*').eq('id', m.id).single();
+        return data ? mapMachine({...data, mant_mantenimientos_def: []}) : m;
+    }
 };
 
 export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<void> => {
@@ -515,8 +522,9 @@ export const getLastCPReport = async (): Promise<CPDailyReport | null> => {
         workerId: r.trabajador_id,
         crusherStart: Number(r.machacadora_inicio || 0),
         crusherEnd: Number(r.machacadora_fin || 0),
-        millsStart: Number(r.trituracion_inicio || 0),
-        millsEnd: Number(r.trituracion_fin || 0),
+        // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
+        millsStart: Number(r.molinos_inicio || 0),
+        millsEnd: Number(r.molinos_fin || 0),
         comments: r.comentarios
     };
 };
@@ -531,8 +539,9 @@ export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         machacadora_inicio: r.crusherStart,
         machacadora_fin: r.crusherEnd,
-        trituracion_inicio: r.millsStart,
-        trituracion_fin: r.millsEnd,
+        // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
+        molinos_inicio: r.millsStart,
+        molinos_fin: r.millsEnd,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -553,8 +562,9 @@ export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDai
         workerId: r.trabajador_id,
         crusherStart: Number(r.machacadora_inicio || 0),
         crusherEnd: Number(r.machacadora_fin || 0),
-        millsStart: Number(r.trituracion_inicio || 0),
-        millsEnd: Number(r.trituracion_fin || 0),
+        // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
+        millsStart: Number(r.molinos_inicio || 0),
+        millsEnd: Number(r.molinos_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -570,6 +580,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
+        // Canto Rodado usa 'trituracion_inicio/fin'
         triturationStart: Number(r.trituracion_inicio || 0),
         triturationEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
@@ -586,8 +597,9 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
+        // Canto Rodado usa 'trituracion_inicio/fin'
         trituracion_inicio: r.triturationStart,
-        trituration_fin: r.triturationEnd,
+        trituracion_fin: r.triturationEnd,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -603,6 +615,7 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
+        // Canto Rodado usa 'trituracion_inicio/fin'
         triturationStart: Number(r.trituracion_inicio || 0),
         triturationEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
@@ -727,11 +740,6 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
         supabase.from('cr_partes_diarios').select('*').eq('fecha', dateStr)
     ]);
 
-    // Diagnóstico en consola para verificar nombres de columnas devueltos por Supabase
-    if (cpRes.data && cpRes.data.length > 0) {
-        console.log(" INSPECCIÓN DATA CP (RAW):", cpRes.data[0]);
-    }
-
     return {
         ops: (opsRes.data || []).map(mapLogFromDb),
         personal: (personalRes.data || []).map(r => ({
@@ -748,9 +756,9 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id, 
             crusherStart: Number(r.machacadora_inicio || 0), 
             crusherEnd: Number(r.machacadora_fin || 0),
-            // Aseguramos conversión a Number para evitar NaNh
-            millsStart: Number(r.trituracion_inicio || r.molinos_inicio || 0), 
-            millsEnd: Number(r.trituracion_fin || r.molinos_fin || 0),
+            // IMPORTANTE: Cantera Pura usa 'molinos_inicio/fin'
+            millsStart: Number(r.molinos_inicio || 0), 
+            millsEnd: Number(r.molinos_fin || 0),
             comments: r.comentarios
         })),
         cr: (crRes.data || []).map(r => ({
@@ -759,6 +767,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id, 
             washingStart: Number(r.lavado_inicio || 0), 
             washingEnd: Number(r.lavado_fin || 0),
+            // Canto Rodado usa 'trituracion_inicio/fin'
             triturationStart: Number(r.trituracion_inicio || 0), 
             triturationEnd: Number(r.trituration_fin || 0),
             comments: r.comentarios
