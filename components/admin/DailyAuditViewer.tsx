@@ -16,7 +16,7 @@ import {
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, 
     Mountain, Waves, Droplets, Factory, Edit2, Save, X, UserX, Clock,
-    CheckCircle2, Trash2
+    CheckCircle2, Trash2, TrendingUp
 } from 'lucide-react';
 
 interface Props {
@@ -209,6 +209,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         }
     };
 
+    // Helper para determinar el estado semafórico de las horas del trabajador
+    const getWorkerStatusConfig = (total: number, expected: number) => {
+        if (total === 0 || total < expected) return { color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle, label: 'Incompleto' };
+        if (total === expected) return { color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle2, label: 'Correcto' };
+        return { color: 'text-blue-600', bg: 'bg-blue-50', icon: TrendingUp, label: 'Superiores' };
+    };
+
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500 relative">
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
@@ -382,54 +389,64 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                         </div>
                         
                         <div className="space-y-4">
-                            {workerReports.map(entry => (
-                                <div key={entry.worker.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                                    <div className={`p-4 flex justify-between items-center border-b ${entry.totalHours < entry.worker.expectedHours! ? 'bg-red-50' : 'bg-slate-50'}`}>
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${entry.totalHours > 0 ? 'bg-green-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>
-                                                {entry.worker.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <p className="font-black text-slate-800 text-sm uppercase leading-none">{entry.worker.name}</p>
-                                                <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest">Jornada Plan: {entry.worker.expectedHours}h</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className={`text-xl font-black ${entry.totalHours < entry.worker.expectedHours! ? 'text-red-600' : 'text-green-600'}`}>
-                                                {entry.totalHours}h
-                                            </p>
-                                            <p className="text-[8px] font-black text-slate-400 uppercase">Total Real</p>
-                                        </div>
-                                    </div>
-                                    <div className="divide-y divide-slate-50">
-                                        {entry.reports.map(rep => (
-                                            <div key={rep.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                                        <span className="font-bold text-slate-700 text-xs truncate">{getMachineName(rep.machineId!)}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
-                                                        <Factory size={10}/> {centers.find(c => c.id === rep.costCenterId)?.name || 'Sin Centro'}
-                                                    </div>
+                            {workerReports.map(entry => {
+                                const status = getWorkerStatusConfig(entry.totalHours, entry.worker.expectedHours || 0);
+                                const StatusIcon = status.icon;
+
+                                return (
+                                    <div key={entry.worker.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                                        <div className={`p-4 flex justify-between items-center border-b transition-colors duration-300 ${status.bg}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${entry.totalHours > 0 ? 'bg-slate-800 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>
+                                                    {entry.worker.name.charAt(0)}
                                                 </div>
-                                                <div className="flex items-center gap-4">
-                                                    <span className="text-sm font-black text-slate-800">{rep.hours}h</span>
-                                                    <button onClick={() => setEditingPersonal(rep)} className="p-2 text-slate-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all">
-                                                        <Edit2 size={16}/>
-                                                    </button>
+                                                <div>
+                                                    <p className="font-black text-slate-800 text-sm uppercase leading-none">{entry.worker.name}</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest">Jornada Plan: {entry.worker.expectedHours}h</p>
                                                 </div>
                                             </div>
-                                        ))}
-                                        {entry.reports.length === 0 && (
-                                            <div className="p-6 text-center text-slate-300">
-                                                <UserX size={24} className="mx-auto mb-2 opacity-20"/>
-                                                <p className="text-[9px] font-black uppercase tracking-widest italic">Parte no presentado</p>
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right">
+                                                    <div className="flex items-center gap-2 justify-end">
+                                                        <StatusIcon size={20} className={status.color} />
+                                                        <p className={`text-xl font-black ${status.color}`}>
+                                                            {entry.totalHours}h
+                                                        </p>
+                                                    </div>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{status.label}</p>
+                                                </div>
                                             </div>
-                                        )}
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {entry.reports.map(rep => (
+                                                <div key={rep.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                                            <span className="font-bold text-slate-700 text-xs truncate">{getMachineName(rep.machineId!)}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
+                                                            <Factory size={10}/> {centers.find(c => c.id === rep.costCenterId)?.name || 'Sin Centro'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="text-sm font-black text-slate-800">{rep.hours}h</span>
+                                                        <button onClick={() => setEditingPersonal(rep)} className="p-2 text-slate-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <Edit2 size={16}/>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {entry.reports.length === 0 && (
+                                                <div className="p-6 text-center text-slate-300 bg-red-50/10">
+                                                    <UserX size={24} className="mx-auto mb-2 opacity-20"/>
+                                                    <p className="text-[9px] font-black uppercase tracking-widest italic text-red-400">Parte no presentado</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
