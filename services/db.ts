@@ -581,7 +581,7 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
         trituracion_inicio: r.triturationStart,
-        trituration_fin: r.triturationEnd,
+        trituracion_fin: r.triturationEnd,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -614,8 +614,8 @@ const queryReports = async (table: string, start: Date, end: Date) => {
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    console.log(`[DB] Consultando plan semanal en 'mant_planeamiento_semanal' para: ${mondayDate}`);
-    const { data, error, status } = await supabase.from('mant_planeamiento_semanal').select('*').eq('lunes_fecha', mondayDate).maybeSingle();
+    console.log(`[DB] Consultando plan semanal en 'cp_planificacion' para: ${mondayDate}`);
+    const { data, error, status } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
     
     if (error) {
         console.error(`[DB] Error en getCPWeeklyPlan (Status: ${status}):`, error);
@@ -629,7 +629,7 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
     
     return {
         id: data.id,
-        mondayDate: data.lunes_fecha,
+        mondayDate: data.fecha_lunes,
         hoursMon: data.horas_lunes,
         hoursTue: data.horas_martes,
         hoursWed: data.horas_miercoles,
@@ -640,15 +640,15 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return;
-    console.log(`[DB] Intentando guardar en 'mant_planeamiento_semanal':`, plan);
-    const { error, status } = await supabase.from('mant_planeamiento_semanal').upsert({
-        lunes_fecha: plan.mondayDate,
+    console.log(`[DB] Intentando guardar en 'cp_planificacion':`, plan);
+    const { error, status } = await supabase.from('cp_planificacion').upsert({
+        fecha_lunes: plan.mondayDate,
         horas_lunes: plan.hoursMon,
         horas_martes: plan.hoursTue,
         horas_miercoles: plan.hoursWed,
         horas_jueves: plan.hoursThu,
         horas_viernes: plan.hoursFri
-    }, { onConflict: 'lunes_fecha' });
+    }, { onConflict: 'fecha_lunes' });
     
     if (error) {
         console.error(`[DB] Error al guardar plan (Status: ${status}):`, error);
