@@ -28,6 +28,7 @@ export const WeeklyPlanning: React.FC<Props> = ({ onBack }) => {
     const formattedMonday = toLocalDateString(selectedMonday);
 
     useEffect(() => {
+        console.log(`[WeeklyPlanning] Iniciando carga para la fecha: ${formattedMonday}`);
         loadPlan();
     }, [formattedMonday]);
 
@@ -47,7 +48,7 @@ export const WeeklyPlanning: React.FC<Props> = ({ onBack }) => {
                 setHours({ mon: 8, tue: 8, wed: 8, thu: 8, fri: 8 }); // Valores por defecto
             }
         } catch (e) {
-            console.error("Error al cargar planificación:", e);
+            console.error("[WeeklyPlanning] Error crítico al cargar planificación:", e);
         } finally {
             setLoading(false);
         }
@@ -75,7 +76,8 @@ export const WeeklyPlanning: React.FC<Props> = ({ onBack }) => {
             setMsg('Planificación guardada');
             setTimeout(() => setMsg(''), 2000);
         } catch (e) {
-            alert("Error al guardar planificación.");
+            console.error("[WeeklyPlanning] Error crítico al guardar planificación:", e);
+            alert("Error al guardar planificación. Revise la consola del navegador para más detalles técnicos.");
         } finally {
             setLoading(false);
         }
