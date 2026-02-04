@@ -16,7 +16,8 @@ import {
     CPWeeklyPlan, 
     PersonalReport, 
     CRDailyReport,
-    WorkerDocument
+    WorkerDocument,
+    SpecificCostRule
 } from '../types';
 
 // --- HELPERS ---
@@ -564,7 +565,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingStart: Number(data.lavado_inicio || 0),
         washingEnd: Number(data.lavado_fin || 0), 
         triturationStart: Number(data.trituracion_inicio || 0), 
-        triturationEnd: Number(data.trituracion_fin || 0), 
+        triturationEnd: Number(data.trituration_fin || 0), 
         comments: data.comentarios
     };
 };
@@ -576,7 +577,7 @@ export const getCRReportsByRange = async (s: Date, e: Date): Promise<CRDailyRepo
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0), 
         triturationStart: Number(r.trituracion_inicio || 0), 
-        triturationEnd: Number(r.trituracion_fin || 0), 
+        triturationEnd: Number(r.trituration_fin || 0), 
         comments: r.comentarios
     }));
 };
@@ -647,7 +648,7 @@ export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>) => {
     const { error } = await supabase.from('partes_trabajo').insert({
         fecha: toLocalDateString(r.date), 
         trabajador_id: r.workerId, 
-        horas: r.hours, // CORRECCIÓN: Usamos 'horas' en lugar de 'hours'
+        horas: r.hours,
         maquina_id: r.machineId, 
         centro_id: r.costCenterId, 
         comentarios: r.description
@@ -658,7 +659,7 @@ export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>) => {
 export const updatePersonalReport = async (id: string, r: Partial<PersonalReport>): Promise<void> => {
     const p: any = {};
     if (r.date) p.fecha = toLocalDateString(r.date);
-    if (r.hours !== undefined) p.horas = r.hours; // CORRECCIÓN: Usamos 'horas'
+    if (r.hours !== undefined) p.horas = r.hours;
     if (r.machineId) p.maquina_id = r.machineId;
     if (r.costCenterId) p.centro_id = r.costCenterId;
     if (r.description !== undefined) p.comentarios = r.description;
@@ -671,6 +672,40 @@ export const deletePersonalReport = async (id: string): Promise<void> => {
     const { error } = await supabase.from('partes_trabajo').delete().eq('id', id);
     if (error) throw error;
 };
+
+// --- 9. REGLAS DE COSTES ESPECÍFICOS ---
+
+export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
+    if (!isConfigured) return [];
+    const { data, error } = await supabase.from('mant_costes_especificos').select('*');
+    if (error) return [];
+    return data.map(r => ({
+        id: r.id, 
+        machineOriginId: r.maquina_origen_id,
+        targetCenterId: r.centro_destino_id, 
+        targetMachineId: r.maquina_destino_id,
+        percentage: Number(r.porcentaje)
+    }));
+};
+
+export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('mant_costes_especificos').insert({
+        maquina_origen_id: rule.machineOriginId, 
+        centro_destino_id: rule.targetCenterId,
+        maquina_destino_id: rule.targetMachineId || null, 
+        porcentaje: rule.percentage
+    });
+    if (error) throw error;
+};
+
+export const deleteSpecificCostRule = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('mant_costes_especificos').delete().eq('id', id);
+    if (error) throw error;
+};
+
+// --- 10. AUDITORÍA Y UTILIDADES ---
 
 export const getDailyAuditLogs = async (date: Date) => {
     const dStr = toLocalDateString(date);
