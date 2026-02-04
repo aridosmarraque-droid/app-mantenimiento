@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { getWorkers, getAllPersonalReportsByRange, getAllMachines, getCostCenters } from '../../services/db';
 import { Worker, PersonalReport, Machine, CostCenter } from '../../types';
@@ -261,19 +262,24 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                 center.machines.forEach(machine => {
                     const dbMachine = allMachines.find(m => m.id === machine.machineId);
                     const isActuallyAdmon = dbMachine?.adminExpenses || worker.isAdmon;
+                    const isActuallyTransport = dbMachine?.transportExpenses;
                     
-                    const centerKey = isActuallyAdmon ? 'ADMON' : (center.centerId || 'N/A');
-                    const machineKey = isActuallyAdmon ? 'ADMON' : (machine.machineId || 'N/A');
+                    const centerKey = isActuallyAdmon ? 'ADMON' : isActuallyTransport ? 'TTE' : (center.centerId || 'N/A');
+                    const machineKey = isActuallyAdmon ? 'ADMON' : isActuallyTransport ? 'TTE' : (machine.machineId || 'N/A');
                     const aggKey = `${centerKey}-${machineKey}`;
 
                     if (!unitsMap[aggKey]) {
                         let mCode = "GENERAL";
-                        if (isActuallyAdmon) mCode = "ADMON";
-                        else if (dbMachine) mCode = dbMachine.companyCode || dbMachine.name;
-
                         let cCode = "N/A";
-                        if (isActuallyAdmon) cCode = "ADMON";
-                        else {
+
+                        if (isActuallyAdmon) {
+                            mCode = "ADMON";
+                            cCode = "ADMON";
+                        } else if (isActuallyTransport) {
+                            mCode = "TTE";
+                            cCode = "TTE";
+                        } else {
+                            if (dbMachine) mCode = dbMachine.companyCode || dbMachine.name;
                             const dbCenter = allCenters.find(c => c.id === center.centerId);
                             cCode = dbCenter ? (dbCenter.companyCode || dbCenter.name.substring(0, 10).toUpperCase()) : "N/A";
                         }
@@ -357,7 +363,11 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
 
         // 640000 - Sueldos (Debe) - Ya ajustados pro-rata
         summaryByUnit.forEach(unit => {
-            const costingCode = unit.centerCode === "ADMON" ? "ADMON" : `${unit.centerCode}-${unit.machineCode}`;
+            let costingCode = "";
+            if (unit.centerCode === "ADMON") costingCode = "ADMON";
+            else if (unit.centerCode === "TTE") costingCode = "TTE";
+            else costingCode = `${unit.centerCode}-${unit.machineCode}`;
+            
             linesContent += `1\t\t640000\t\t${unit.totalSalary.toFixed(2)}\t0.00\tNOMINA ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
         });
 
@@ -372,7 +382,11 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
 
         // 642000 - SS Empresa (Debe) - Ya ajustados pro-rata
         summaryByUnit.forEach(unit => {
-            const costingCode = unit.centerCode === "ADMON" ? "ADMON" : `${unit.centerCode}-${unit.machineCode}`;
+            let costingCode = "";
+            if (unit.centerCode === "ADMON") costingCode = "ADMON";
+            else if (unit.centerCode === "TTE") costingCode = "TTE";
+            else costingCode = `${unit.centerCode}-${unit.machineCode}`;
+            
             linesContent += `1\t\t642000\t\t${unit.totalSS.toFixed(2)}\t0.00\tSEG. SOCIAL ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
         });
 
