@@ -260,7 +260,6 @@ export const createMachine = async (m: Omit<Machine, 'id'>): Promise<Machine> =>
         centro_id: m.costCenterId, subcentro_id: m.subCenterId, nombre: m.name, codigo_empresa: m.companyCode,
         horas_actuales: m.currentHours, requiere_horas: m.requiresHours, gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses, es_parte_trabajo: m.selectableForReports, responsable_id: m.responsibleWorkerId,
-        // Fix: vinculada_produccion mapping
         activo: m.active, vinculada_produccion: m.vinculadaProduccion
     }).select().single();
     if (error) throw error;
@@ -488,6 +487,16 @@ export const getMachineLogs = async (machineId: string, startDate?: Date, endDat
     return (data || []).map(mapLogFromDb);
 };
 
+export const getAllOperationLogsByRange = async (s: Date, e: Date, types?: OperationType[]): Promise<OperationLog[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('mant_registros').select('*')
+        .gte('fecha', toLocalDateString(s))
+        .lte('fecha', toLocalDateString(e));
+    if (types && types.length > 0) query = query.in('tipo_operacion', types);
+    const { data } = await query;
+    return (data || []).map(mapLogFromDb);
+};
+
 export const getFuelLogs = async (machineId: string, startDate: Date, endDate: Date): Promise<OperationLog[]> => {
     return getMachineLogs(machineId, startDate, endDate, ['REFUELING']);
 };
@@ -563,7 +572,7 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>) => {
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd, 
         trituracion_inicio: r.triturationStart, 
-        trituracion_fin: r.triturationEnd, 
+        trituration_fin: r.triturationEnd, 
         comentarios: r.comments
     });
     if (error) throw error;
