@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { getPerformanceDashboardStats, PerformanceDashboardData, ProductionComparison } from '../../services/stats';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Search, Activity, Clock, Minus, Target, BarChart3, Loader2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Calendar, Activity, Target, BarChart3, Loader2, Minus } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -74,28 +74,28 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                             title="Rendimiento Hoy" 
                             data={stats.daily} 
                             color="bg-amber-500"
-                            info="Comparado con ayer"
+                            info={`Comparado con ayer (${stats.daily.previous.efficiency}%)`}
                         />
 
                         <PerformanceCard 
                             title="Rendimiento Semanal" 
                             data={stats.weekly} 
                             color="bg-blue-600"
-                            info="Semana actual vs anterior"
+                            info={`Semana actual vs anterior (${stats.weekly.previous.efficiency}%)`}
                         />
 
                         <PerformanceCard 
                             title="Rendimiento Mensual" 
                             data={stats.monthly} 
                             color="bg-indigo-600"
-                            info="Mes actual vs anterior"
+                            info={`Mes actual vs anterior (${stats.monthly.previous.efficiency}%)`}
                         />
 
                         <PerformanceCard 
                             title="Rendimiento Anual" 
                             data={stats.yearly} 
                             color="bg-slate-800"
-                            info="Año actual vs anterior"
+                            info={`Año actual vs anterior (${stats.yearly.previous.efficiency}%)`}
                         />
 
                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mt-2">
@@ -165,7 +165,6 @@ const PerformanceCard: React.FC<CardProps> = ({ title, data, color, info }) => {
                 </div>
             </div>
             
-            {/* Barra de progreso visual */}
             <div className="h-1.5 w-full bg-slate-50 relative">
                 <div 
                     className={`h-full transition-all duration-1000 ${eff >= 85 ? 'bg-green-500' : eff >= 60 ? 'bg-blue-500' : 'bg-red-500'}`}
