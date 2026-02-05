@@ -99,7 +99,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
         
         workers
-            .filter(w => w.active && w.role !== 'admin' && w.requiresReport !== false)
+            // Fix: changed w.active to w.activo
+            .filter(w => w.activo && w.role !== 'admin' && w.requiresReport !== false)
             .forEach(w => {
                 grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
             });
@@ -455,7 +456,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             {/* MODAL EDICIÓN TÉCNICA */}
             {editingOp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+                    <div className="bg-white w-full max-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
                         <div className="bg-indigo-600 text-white p-5 flex justify-between items-center">
                             <h4 className="font-bold flex items-center gap-2"><Wrench size={20}/> Corregir Registro</h4>
                             <button onClick={() => setEditingOp(null)} className="p-1 hover:bg-indigo-500 rounded-lg"><X size={24}/></button>
@@ -509,7 +510,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             {/* MODAL EDICIÓN PERSONAL */}
             {editingPersonal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+                    <div className="bg-white w-full max-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
                         <div className="bg-blue-600 text-white p-5 flex justify-between items-center">
                             <h4 className="font-bold flex items-center gap-2"><Clock size={20}/> Editar Horas Personal</h4>
                             <button onClick={() => setEditingPersonal(null)} className="p-1 hover:bg-blue-500 rounded-lg"><X size={24}/></button>
