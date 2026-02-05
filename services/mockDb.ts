@@ -142,3 +142,12 @@ export const getSubCentersByCenter = async (id: string): Promise<any[]> => [];
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => null;
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => null;
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => m;
+
+export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
+    const machine = MACHINES.find(m => m.id === def.machineId);
+    if (machine) {
+        const idx = machine.maintenanceDefs.findIndex(d => d.id === def.id);
+        if (idx !== -1) machine.maintenanceDefs[idx] = { ...machine.maintenanceDefs[idx], ...def };
+    }
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
