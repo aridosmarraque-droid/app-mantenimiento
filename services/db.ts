@@ -575,8 +575,8 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituracion_inicio || 0),
-        triturationEnd: Number(r.trituration_fin || 0),
+        trituracion_inicio: Number(r.trituracion_inicio || 0),
+        trituracion_fin: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     };
 };
@@ -591,8 +591,8 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
-        trituracion_inicio: r.triturationStart,
-        trituration_fin: r.triturationEnd,
+        trituracion_inicio: r.trituracion_inicio,
+        trituracion_fin: r.trituracion_fin,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -608,8 +608,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituration_inicio || 0),
-        triturationEnd: Number(r.trituration_fin || 0),
+        trituracion_inicio: Number(r.trituracion_inicio || 0),
+        trituracion_fin: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -765,8 +765,8 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id, 
             washingStart: Number(r.lavado_inicio || 0), 
             washingEnd: Number(r.lavado_fin || 0),
-            triturationStart: Number(r.trituracion_inicio || 0), 
-            triturationEnd: Number(r.trituration_fin || 0),
+            trituracion_inicio: Number(r.trituracion_inicio || 0), 
+            trituracion_fin: Number(r.trituracion_fin || 0),
             comments: r.comentarios
         }))
     };
