@@ -1,3 +1,4 @@
+
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, PersonalReport, CRDailyReport } from '../types';
 
 // --- MOCK DATA ---
@@ -121,15 +122,15 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 };
 
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
-    return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
+  return new Promise(resolve => setTimeout(() => resolve(SERVICE_PROVIDERS), 300));
 };
 
 export const getCPReportsByRange = async (startDate: Date, endDate: Date): Promise<CPDailyReport[]> => {
-    return [];
+    return cpReports.filter(r => r.date >= startDate && r.date <= endDate);
 };
 
 export const getCRReportsByRange = async (startDate: Date, endDate: Date): Promise<CRDailyReport[]> => {
-    return [];
+    return crReports.filter(r => r.date >= startDate && r.date <= endDate);
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => null;
