@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getSpecificCostRules, createSpecificCostRule, deleteSpecificCostRule, updateSpecificCostRule, getAllMachines, getCostCenters } from '../../services/db';
 import { SpecificCostRule, Machine, CostCenter } from '../../types';
-import { ArrowLeft, Save, Trash2, Plus, Percent, Factory, Truck, Loader2, Edit2, X } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Plus, Percent, Loader2, Edit2, X } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -101,21 +101,22 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
         loadData();
     };
 
-    const getMachineName = (id: string) => {
+    const getMachineDisplay = (id: string) => {
         const m = machines.find(m => m.id === id);
-        return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : id;
+        if (!m) return id;
+        return m.companyCode ? `[${m.companyCode}] ${m.name}` : m.name;
     };
 
     const getCenterName = (id: string) => centers.find(c => c.id === id)?.name || id;
 
-    if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin" /></div>;
+    if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <button onClick={onBack} className="text-slate-500 hover:text-slate-800 transition-colors"><ArrowLeft /></button>
                 <div>
-                    <h3 className="text-xl font-bold text-slate-800">Costes Específicos</h3>
+                    <h3 className="text-xl font-bold text-slate-800">Reglas de Costes Específicos</h3>
                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Maquinaria sin partes de trabajo</p>
                 </div>
             </div>
@@ -179,13 +180,13 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
                     <div key={rule.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group hover:border-indigo-100 transition-all">
                         <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                                <span className="font-black text-slate-800 text-xs uppercase">{getMachineName(rule.machineOriginId)}</span>
+                                <span className="font-black text-slate-800 text-xs uppercase">{getMachineDisplay(rule.machineOriginId)}</span>
                                 <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-black text-[9px]">{rule.percentage}%</span>
                             </div>
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold uppercase tracking-tight">
                                 <span className="text-blue-500">Imputa a:</span> {getCenterName(rule.targetCenterId)} 
                                 <span className="text-slate-300">/</span>
-                                {rule.targetMachineId ? getMachineName(rule.targetMachineId) : <span className="italic text-slate-300">Auto (Código Origen)</span>}
+                                {rule.targetMachineId ? getMachineDisplay(rule.targetMachineId) : <span className="italic text-slate-300">Auto (Código Origen)</span>}
                             </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -198,9 +199,10 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
                         </div>
                     </div>
                 ))}
-                {rules.length === 0 && (
+                {!loading && rules.length === 0 && (
                     <div className="p-10 text-center text-slate-400 italic text-sm">No hay reglas configuradas.</div>
                 )}
             </div>
         </div>
     );
+};
