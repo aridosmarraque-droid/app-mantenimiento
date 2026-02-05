@@ -1,14 +1,18 @@
-
 import { CostCenter, Machine, ServiceProvider, Worker, OperationLog, MaintenanceDefinition, OperationType, CPDailyReport, CPWeeklyPlan, PersonalReport, CRDailyReport } from '../types';
 
 // --- MOCK DATA ---
 
 export const WORKERS: Worker[] = [
-  { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin', active: true },
-  { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker', active: true },
-  { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker', active: true },
-  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp', active: true },
-  { id: '5', name: 'Carlos Lavador', dni: '55554444R', phone: '611222333', positionIds: ['p4'], role: 'cr', active: true }, // Nuevo worker CR
+  // Fix: changed 'active' to 'activo' to match Worker type
+  { id: '1', name: 'Juan Pérez (Admin)', dni: '12345678X', phone: '600111222', positionIds: ['p1'], role: 'admin', activo: true },
+  // Fix: changed 'active' to 'activo'
+  { id: '2', name: 'Antonio Garcia', dni: '43215678Y', phone: '600333444', positionIds: ['p2'], role: 'worker', activo: true },
+  // Fix: changed 'active' to 'activo'
+  { id: '3', name: 'Maria Rodriguez', dni: '98765432Z', phone: '600555666', positionIds: ['p1', 'p2'], role: 'worker', activo: true },
+  // Fix: changed 'active' to 'activo'
+  { id: '4', name: 'Pedro Plantista', dni: '11112222C', phone: '600999888', positionIds: ['p3'], role: 'cp', activo: true },
+  // Fix: changed 'active' to 'activo'
+  { id: '5', name: 'Carlos Lavador', dni: '55554444R', phone: '611222333', positionIds: ['p4'], role: 'cr', activo: true }, // Nuevo worker CR
 ];
 
 export const COST_CENTERS: CostCenter[] = [
@@ -92,6 +96,12 @@ export const createMachine = async (machine: Omit<Machine, 'id'>): Promise<Machi
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {
     const idx = MACHINES.findIndex(m => m.id === id);
     if (idx !== -1) MACHINES[idx] = { ...MACHINES[idx], ...updates };
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const deleteMachine = async (id: string): Promise<void> => {
+    const idx = MACHINES.findIndex(m => m.id === id);
+    if (idx !== -1) MACHINES.splice(idx, 1);
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
