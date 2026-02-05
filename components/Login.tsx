@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Worker } from '../types';
 import { getWorkers } from '../services/db';
@@ -23,10 +22,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setLoading(true);
     getWorkers()
       .then(data => {
-        console.log("Trabajadores cargados:", data);
-        if (data.length > 0) {
-            console.log("Ejemplo trabajador:", data[0]);
-        }
         setWorkers(data);
       })
       .catch(err => {
@@ -56,11 +51,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
+  const getRoleLabel = (role: string) => {
+    switch(role.toLowerCase()) {
+      case 'admin': return 'Admin';
+      case 'cp': return 'Cantera';
+      case 'cr': return 'Rodado';
+      default: return 'Operario';
+    }
+  };
+
   if (loading) {
     return <div className="flex h-screen items-center justify-center bg-slate-100"><Loader2 className="animate-spin h-10 w-10 text-blue-600" /></div>;
   }
 
-  // Si no hay trabajadores cargados, mostrar pantalla de diagnóstico
   if (workers.length === 0) {
       return (
         <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
@@ -70,7 +73,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
                 <h2 className="text-xl font-bold text-slate-800 mb-2">No se encontraron trabajadores</h2>
                 <p className="text-slate-600 mb-6 text-sm">
-                    La lista de trabajadores está vacía. Verifica la consola para más detalles.
+                    La lista de trabajadores está vacía o no se pudo conectar con la base de datos.
                 </p>
                 <button 
                     onClick={loadWorkers}
@@ -91,13 +94,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <UserCircle className="w-12 h-12 text-red-600" />
           </div>
           <h1 className="text-3xl font-bold text-red-600 mb-1">Aridos Marraque</h1>
-          <p className="text-slate-500 font-medium">Gestión de Mantenimiento</p>
+          <p className="text-slate-500 font-medium">Gestión Integral</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Trabajador
+              Seleccione su nombre
             </label>
             <div className="relative">
                 <select
@@ -108,11 +111,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <option value="" className="text-slate-500">-- Seleccionar Trabajador --</option>
                 {workers.map(w => (
                     <option key={w.id} value={w.id} className="text-slate-900 font-medium py-2">
-                        {w.name} ({w.role === 'admin' ? 'Admin' : w.role === 'cp' ? 'Cantera' : 'Operario'})
+                        {w.name} ({getRoleLabel(w.role)})
                     </option>
                 ))}
                 </select>
-                {/* Custom arrow to ensure visibility */}
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
                     <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
                 </div>
@@ -144,7 +146,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             type="submit"
             className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 shadow-md active:transform active:scale-95"
           >
-            Entrar
+            Entrar al Sistema
           </button>
         </form>
       </div>
