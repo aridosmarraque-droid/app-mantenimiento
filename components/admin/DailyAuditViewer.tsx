@@ -16,7 +16,7 @@ import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvi
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, AlertCircle, Mountain, Waves, 
-    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp
+    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp, Droplets
 } from 'lucide-react';
 
 interface Props {
@@ -287,8 +287,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.triturationStart.toFixed(1)} → {report.triturationEnd.toFixed(1)}</p>
-                                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.triturationEnd - report.triturationStart).toFixed(1)}h</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{report.trituracion_inicio.toFixed(1)} → {report.trituracion_fin.toFixed(1)}</p>
+                                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.trituracion_fin - report.trituracion_inicio).toFixed(1)}h</p>
                                         </div>
                                     </div>
                                 </div>
@@ -395,7 +395,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* MODAL DE EDICIÓN TÉCNICA (EXPANDIDO) */}
+            {/* MODAL DE EDICIÓN TÉCNICA */}
             {editingOp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
@@ -496,7 +496,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* MODAL DE EDICIÓN PERSONAL (EXPANDIDO) */}
+            {/* MODAL DE EDICIÓN PERSONAL */}
             {editingPersonal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
