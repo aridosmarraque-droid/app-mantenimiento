@@ -40,7 +40,7 @@ const mapWorker = (w: any): Worker => ({
     dni: w.dni || '',
     phone: w.telefono || '',
     positionIds: [], 
-    role: w.role || 'worker',
+    role: w.rol || 'worker', // Corrección: la columna en DB es 'rol'
     activo: w.activo !== undefined ? w.activo : true,
     expectedHours: Number(w.horas_programadas || 0),
     requiresReport: w.requiere_parte !== undefined ? w.requiere_parte : true,
@@ -285,15 +285,11 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         nombre: m.name,
         codigo_empresa: m.companyCode,
         centro_id: m.costCenterId,
-        // FIX: subcentro_id mapping corrected to subCenterId
         subcentro_id: m.subCenterId,
         responsable_id: m.responsibleWorkerId,
         horas_actuales: m.currentHours,
-        // FIX: requiere_horas mapping corrected to requiresHours
         requiere_horas: m.requiresHours,
-        // FIX: gastos_admin mapping corrected to adminExpenses
         gastos_admin: m.adminExpenses,
-        // FIX: gastos_transporte mapping corrected to transportExpenses
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
         activo: m.activo,
@@ -580,7 +576,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
         triturationStart: Number(r.trituracion_inicio || 0),
-        triturationEnd: Number(r.trituracion_fin || 0),
+        triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
     };
 };
@@ -596,7 +592,7 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
         trituracion_inicio: r.triturationStart,
-        trituracion_fin: r.triturationEnd,
+        trituration_fin: r.triturationEnd,
         comentarios: r.comments
     });
     if (error) throw error;
@@ -612,8 +608,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituracion_inicio || 0),
-        triturationEnd: Number(r.trituracion_fin || 0),
+        triturationStart: Number(r.trituration_inicio || 0),
+        triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -629,19 +625,9 @@ const queryReports = async (table: string, start: Date, end: Date) => {
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    console.log(`[DB] Consultando plan semanal en 'cp_planificacion' para: ${mondayDate}`);
-    const { data, error, status } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
-    
-    if (error) {
-        console.error(`[DB] Error en getCPWeeklyPlan (Status: ${status}):`, error);
-        return null;
-    }
-    
-    if (!data) {
-        console.log(`[DB] No se encontró planificación para la semana ${mondayDate}`);
-        return null;
-    }
-    
+    const { data, error } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
+    if (error) return null;
+    if (!data) return null;
     return {
         id: data.id,
         mondayDate: data.fecha_lunes,
@@ -655,8 +641,7 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return;
-    console.log(`[DB] Intentando guardar en 'cp_planificacion':`, plan);
-    const { error, status } = await supabase.from('cp_planificacion').upsert({
+    const { error } = await supabase.from('cp_planificacion').upsert({
         fecha_lunes: plan.mondayDate,
         horas_lunes: plan.hoursMon,
         horas_martes: plan.hoursTue,
@@ -664,11 +649,7 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
         horas_jueves: plan.hoursThu,
         horas_viernes: plan.hoursFri
     }, { onConflict: 'fecha_lunes' });
-    
-    if (error) {
-        console.error(`[DB] Error al guardar plan (Status: ${status}):`, error);
-        throw error;
-    }
+    if (error) throw error;
 };
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
@@ -785,7 +766,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             washingStart: Number(r.lavado_inicio || 0), 
             washingEnd: Number(r.lavado_fin || 0),
             triturationStart: Number(r.trituracion_inicio || 0), 
-            triturationEnd: Number(r.trituracion_fin || 0),
+            triturationEnd: Number(r.trituration_fin || 0),
             comments: r.comentarios
         }))
     };
