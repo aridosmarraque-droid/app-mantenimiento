@@ -612,8 +612,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituration_inicio || 0),
-        triturationEnd: Number(r.trituration_fin || 0),
+        triturationStart: Number(r.trituracion_inicio || 0),
+        triturationEnd: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     }));
 };
@@ -869,6 +869,18 @@ export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>)
         maquina_destino_id: rule.targetMachineId,
         porcentaje: rule.percentage
     });
+    if (error) throw error;
+};
+
+export const updateSpecificCostRule = async (id: string, rule: Partial<SpecificCostRule>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (rule.machineOriginId) p.maquina_origen_id = rule.machineOriginId;
+    if (rule.targetCenterId) p.centro_destino_id = rule.targetCenterId;
+    if (rule.targetMachineId !== undefined) p.maquina_destino_id = rule.targetMachineId;
+    if (rule.percentage !== undefined) p.porcentaje = rule.percentage;
+    
+    const { error } = await supabase.from('mant_costes_especificos').update(p).eq('id', id);
     if (error) throw error;
 };
 
