@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getAllMachines, getCostCenters, getAllOperationLogsByRange, getAllPersonalReportsByRange, getSpecificCostRules } from '../../services/db';
 import { Machine, CostCenter, OperationLog, PersonalReport, SpecificCostRule } from '../../types';
@@ -68,7 +67,8 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
         // 2. Procesar cada máquina que consumió gasoil
         Object.entries(machineLiters).forEach(([machineId, totalLiters]) => {
             const machine = machines.find(m => m.id === machineId);
-            const machineName = machine ? machine.name : 'Desconocida';
+            // Prioridad para el código interno, si no nombre
+            const sourceMachineCode = machine?.companyCode || machine?.name || 'Desconocida';
 
             // PRIORIDAD 0: GASTOS DIRECTOS A ADMON O TTE (FICHA MÁQUINA)
             if (machine?.adminExpenses) {
@@ -96,12 +96,16 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const center = centers.find(c => c.id === rule.targetCenterId);
                     const cCode = center?.companyCode || 'N/A';
                     const cName = center?.name || 'N/A';
-                    const targetMachine = machines.find(m => m.id === rule.targetMachineId);
-                    const tMachineName = targetMachine ? targetMachine.name : 'General';
                     
-                    const key = `${cCode}-${tMachineName}`;
+                    // Lógica solicitada: Si no hay máquina destino, adopta el propio código de la máquina de origen
+                    const targetMachine = machines.find(m => m.id === rule.targetMachineId);
+                    const tMachineLabel = targetMachine 
+                        ? (targetMachine.companyCode || targetMachine.name) 
+                        : sourceMachineCode;
+                    
+                    const key = `${cCode}-${tMachineLabel}`;
                     if (!units[key]) {
-                        units[key] = { centerCode: cCode, centerName: cName, machineName: tMachineName, liters: 0 };
+                        units[key] = { centerCode: cCode, centerName: cName, machineName: tMachineLabel, liters: 0 };
                     }
                     units[key].liters += totalLiters * (rule.percentage / 100);
                 });
@@ -123,9 +127,9 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         const cCode = center?.companyCode || 'N/A';
                         const cName = center?.name || 'N/A';
                         
-                        const key = `${cCode}-${machineName}`;
+                        const key = `${cCode}-${sourceMachineCode}`;
                         if (!units[key]) {
-                            units[key] = { centerCode: cCode, centerName: cName, machineName: machineName, liters: 0 };
+                            units[key] = { centerCode: cCode, centerName: cName, machineName: sourceMachineCode, liters: 0 };
                         }
                         units[key].liters += totalLiters * ratio;
                     });
@@ -135,10 +139,10 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const center = centers.find(c => c.id === cId);
                     const cCode = center?.companyCode || 'N/A';
                     const cName = center?.name || 'N/A';
-                    const key = `${cCode}-${machineName}`;
+                    const key = `${cCode}-${sourceMachineCode}`;
                     
                     if (!units[key]) {
-                        units[key] = { centerCode: cCode, centerName: cName, machineName: machineName, liters: 0 };
+                        units[key] = { centerCode: cCode, centerName: cName, machineName: sourceMachineCode, liters: 0 };
                     }
                     units[key].liters += totalLiters;
                 }
@@ -154,7 +158,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
         const data = distribution.map(r => ({
             "Centro Cod.": r.centerCode,
             "Centro": r.centerName,
-            "Máquina": r.machineName,
+            "Unidad (Código)": r.machineName,
             "Litros Gasoil": r.liters.toFixed(2)
         }));
         const ws = XLSX.utils.json_to_sheet(data);
@@ -206,7 +210,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     <thead>
                         <tr className="bg-slate-900 text-white text-[10px] font-black uppercase">
                             <th className="p-3 border border-slate-700 text-left">Centro de Coste (Cod)</th>
-                            <th className="p-3 border border-slate-700 text-left">Unidad de Trabajo</th>
+                            <th className="p-3 border border-slate-700 text-left">Unidad (Código Interno)</th>
                             <th className="p-3 border border-slate-700 text-center bg-slate-800 w-32">Litros (L)</th>
                         </tr>
                     </thead>
@@ -237,7 +241,8 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-3 no-print">
                     <AlertCircle className="text-blue-600 flex-shrink-0" size={20}/>
                     <p className="text-[10px] text-blue-800 leading-relaxed italic">
-                        <b>Lógica de Reparto:</b> Las unidades con casillas de gastos "Admon" o "Transp" se asignan directamente a ADMON o TTE. Para el resto, primero se aplican las reglas fijas (Costes Específicos) y luego el reparto proporcional por horas en partes de trabajo mensuales.
+                        <b>Lógica de Reparto:</b> Las unidades con casillas de gastos "Admon" o "Transp" se asignan directamente a ADMON o TTE. Para el resto, primero se aplican las reglas fijas (Costes Específicos) y luego el reparto proporcional por horas en partes de trabajo mensuales. 
+                        <b> Nota:</b> Si una regla de coste específico no tiene máquina de destino, se utiliza el código de la máquina de origen.
                     </p>
                 </div>
             </div>
