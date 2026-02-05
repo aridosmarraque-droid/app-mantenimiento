@@ -367,7 +367,10 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentHours
 };
 
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        await mock.updateMaintenanceDef(def);
+        return;
+    }
     const p: any = {
         nombre: def.name,
         tipo_programacion: def.maintenanceType,
@@ -605,8 +608,8 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituracion_inicio || 0),
-        triturationEnd: Number(r.trituracion_fin || 0),
+        triturationStart: Number(r.trituration_inicio || 0),
+        triturationEnd: Number(r.trituration_fin || 0),
         comments: r.comentarios
     }));
 };
