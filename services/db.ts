@@ -40,7 +40,7 @@ const mapWorker = (w: any): Worker => ({
     dni: w.dni || '',
     phone: w.telefono || '',
     positionIds: [], 
-    role: w.rol || 'worker',
+    role: w.role || 'worker',
     activo: w.activo !== undefined ? w.activo : true,
     expectedHours: Number(w.horas_programadas || 0),
     requiresReport: w.requiere_parte !== undefined ? w.requiere_parte : true,
@@ -866,7 +866,7 @@ export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>)
     const { error } = await supabase.from('mant_costes_especificos').insert({
         maquina_origen_id: rule.machineOriginId,
         centro_destino_id: rule.targetCenterId,
-        maquina_destino_id: rule.targetMachineId,
+        maquina_destino_id: rule.targetMachineId || null,
         porcentaje: rule.percentage
     });
     if (error) throw error;
