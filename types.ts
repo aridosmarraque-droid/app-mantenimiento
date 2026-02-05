@@ -202,8 +202,8 @@ export interface CRDailyReport {
     workerId: string;
     washingStart: number;
     washingEnd: number;
-    triturationStart: number;
-    triturationEnd: number;
+    trituracion_inicio: number;
+    trituracion_fin: number;
     comments?: string;
     aiAnalysis?: string;
 }
