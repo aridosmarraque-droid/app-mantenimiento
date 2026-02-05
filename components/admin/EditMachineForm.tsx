@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, getSubCentersByCenter, calculateAndSyncMachineStatus, getWorkers, deleteMachine, getMachineDependencyCount } from '../../services/db';
 import { CostCenter, SubCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock, User } from 'lucide-react';
 
 interface Props {
     machine: Machine;
@@ -43,7 +43,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
 
     useEffect(() => {
         getCostCenters().then(setCenters);
-        getWorkers().then(setWorkers);
+        getWorkers(false).then(setWorkers); // Cargar todos los trabajadores (activos e inactivos para historial)
         calculateAndSyncMachineStatus(initialMachine).then(setMachine);
     }, [initialMachine]);
 
@@ -227,9 +227,26 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
-                    <input type="number" step="0.01" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} className="w-full p-3 border border-slate-300 rounded-lg font-bold text-blue-600" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Horas Actuales</label>
+                        <input type="number" step="0.01" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} className="w-full p-3 border border-slate-300 rounded-lg font-bold text-blue-600" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                            <User size={14} className="text-slate-400"/> Operario Responsable
+                        </label>
+                        <select 
+                            value={responsibleId} 
+                            onChange={e => setResponsibleId(e.target.value)} 
+                            className="w-full p-3 border border-slate-300 rounded-lg bg-white"
+                        >
+                            <option value="">-- Sin Responsable --</option>
+                            {workers.map(w => (
+                                <option key={w.id} value={w.id}>{w.name} {!w.activo ? '(Baja)' : ''}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pt-2">
