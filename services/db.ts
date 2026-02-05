@@ -64,7 +64,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.descripcion || dbLog.description, // Soporte para ambos nombres de columna
+        description: dbLog.descripcion || dbLog.description, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -113,7 +113,7 @@ const mapMachine = (m: any): Machine => {
         }),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.active !== undefined ? m.active : true,
+        active: m.activo !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -237,13 +237,13 @@ export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean 
     if (!isConfigured) return [];
     try {
         let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subId);
-        if (onlyActive) query = query.eq('active', true);
+        if (onlyActive) query = query.eq('activo', true);
         const { data, error } = await query;
         if (error) throw error;
         return (data || []).map(mapMachine);
     } catch (e) {
         let fallback = supabase.from('mant_maquinas').select('*').eq('subcentro_id', subId);
-        if (onlyActive) fallback = fallback.eq('active', true);
+        if (onlyActive) fallback = fallback.eq('activo', true);
         const { data } = await fallback;
         return (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
     }
@@ -253,13 +253,13 @@ export const getMachinesByCenter = async (centerId: string, onlyActive: boolean 
     if (!isConfigured) return mock.getMachinesByCenter(centerId);
     try {
         let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
-        if (onlyActive) query = query.eq('active', true);
+        if (onlyActive) query = query.eq('activo', true);
         const { data, error } = await query;
         if (error) throw error;
         return (data || []).map(mapMachine);
     } catch (e) {
         let fallback = supabase.from('mant_maquinas').select('*').eq('centro_id', centerId);
-        if (onlyActive) fallback = fallback.eq('active', true);
+        if (onlyActive) fallback = fallback.eq('activo', true);
         const { data } = await fallback;
         return (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
     }
@@ -292,7 +292,7 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
-        active: m.active,
+        activo: m.active,
         vinculada_produccion: m.vinculadaProduccion
     }).select().single();
 
@@ -328,7 +328,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) p.gastos_transporte = updates.transportExpenses;
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
-    if (updates.active !== undefined) p.active = updates.active;
+    if (updates.active !== undefined) p.activo = updates.active;
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
 
     const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
