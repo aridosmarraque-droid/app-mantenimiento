@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getWorkers, getAllPersonalReportsByRange, getAllMachines, getCostCenters } from '../../services/db';
 import { Worker, PersonalReport, Machine, CostCenter } from '../../types';
@@ -50,7 +49,8 @@ interface GroupedData {
 
 interface SummaryUnit {
     centerCode: string;
-    machineCode: string;
+    centerName: string;
+    machineName: string;
     totalSalary: number;
     totalSS: number;
 }
@@ -198,8 +198,11 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             const workerGroup = grouped[r.workerId];
             workerGroup.totalWorkerHours += r.hours;
 
+            // RESOLUCIÓN DE NOMBRES PARA CENTRO
             const centerId = r.costCenterId || 'none';
-            const centerName = r.costCenterName || 'Sin Centro';
+            const dbCenter = allCenters.find(c => c.id === centerId);
+            const centerName = dbCenter?.name || r.costCenterName || 'Sin Centro';
+            
             let centerGroup = workerGroup.centers.find(c => c.centerId === centerId);
 
             if (!centerGroup) {
@@ -207,8 +210,13 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                 workerGroup.centers.push(centerGroup);
             }
 
+            // RESOLUCIÓN DE NOMBRES PARA MÁQUINA
             const machineId = r.machineId || 'none';
-            const machineName = r.machineName || 'General';
+            const dbMachine = allMachines.find(m => m.id === machineId);
+            const machineName = dbMachine 
+                ? (dbMachine.companyCode ? `[${dbMachine.companyCode}] ${dbMachine.name}` : dbMachine.name) 
+                : (r.machineName || 'General');
+
             let machineEntry = centerGroup.machines.find(m => m.machineId === machineId);
 
             if (!machineEntry) {
@@ -252,7 +260,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             });
         });
         return finalData;
-    }, [reports, workers, excelCosts]);
+    }, [reports, workers, excelCosts, allMachines, allCenters]);
 
     const summaryByUnit = useMemo(() => {
         const unitsMap: Record<string, SummaryUnit> = {};
@@ -271,20 +279,24 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     if (!unitsMap[aggKey]) {
                         let mCode = "GENERAL";
                         let cCode = "N/A";
+                        let cName = "N/A";
 
                         if (isActuallyAdmon) {
                             mCode = "ADMON";
                             cCode = "ADMON";
+                            cName = "ADMINISTRACIÓN";
                         } else if (isActuallyTransport) {
                             mCode = "TTE";
                             cCode = "TTE";
+                            cName = "TRANSPORTE";
                         } else {
                             if (dbMachine) mCode = dbMachine.companyCode || dbMachine.name;
                             const dbCenter = allCenters.find(c => c.id === center.centerId);
                             cCode = dbCenter ? (dbCenter.companyCode || dbCenter.name.substring(0, 10).toUpperCase()) : "N/A";
+                            cName = dbCenter ? dbCenter.name : "N/A";
                         }
 
-                        unitsMap[aggKey] = { centerCode: cCode, machineCode: mCode, totalSalary: 0, totalSS: 0 };
+                        unitsMap[aggKey] = { centerCode: cCode, centerName: cName, machineName: mCode, totalSalary: 0, totalSS: 0 };
                     }
                     unitsMap[aggKey].totalSalary += machine.lineSalary;
                     unitsMap[aggKey].totalSS += machine.lineSS;
@@ -292,23 +304,20 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
             });
         });
 
-        const unitsList = Object.values(unitsMap).sort((a, b) => a.centerCode.localeCompare(b.centerCode) || a.machineCode.localeCompare(b.machineCode));
+        const unitsList = Object.values(unitsMap).sort((a, b) => a.centerCode.localeCompare(b.centerCode) || a.machineName.localeCompare(b.machineName));
 
         // --- AJUSTE DE PRECISIÓN CONTRA TOTALES DEL EXCEL ---
         if (excelTotals && unitsList.length > 0) {
-            // 1. Ajuste Nóminas 640 (Contra Columna D del Excel)
             const sumCalculatedSalary = unitsList.reduce((acc, u) => acc + u.totalSalary, 0);
             const deltaSalary = Number((excelTotals.nominaD - sumCalculatedSalary).toFixed(2));
             
             if (deltaSalary !== 0) {
-                // Aplicamos el ajuste a la unidad con mayor sueldo para minimizar impacto relativo
                 const topSalaryUnit = [...unitsList].sort((a, b) => b.totalSalary - a.totalSalary)[0];
                 if (topSalaryUnit) {
                     topSalaryUnit.totalSalary = Number((topSalaryUnit.totalSalary + deltaSalary).toFixed(2));
                 }
             }
 
-            // 2. Ajuste SS 642 (Contra I - L - N del Excel)
             const sumCalculatedSS = unitsList.reduce((acc, u) => acc + u.totalSS, 0);
             const deltaSS = Number((excelTotals.ss642Neto - sumCalculatedSS).toFixed(2));
             
@@ -352,48 +361,36 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         const monthNames = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
         const monthYearStr = `${monthNames[month - 1]} ${year}`;
 
-        // 1. JOURNALENTRIES.TXT
         let entriesContent = "RecordKey\tJdtNum\tAutoVAT\tDueDate\tMemo\tReferenceDate\tTaxDate\r\n";
         entriesContent += "RecordKey\tJdtNum\tAutoVAT\tDueDate\tMemo\tReferenceDate\tTaxDate\r\n";
         entriesContent += `1\t\ttNO\t${dateStr}\tNOMINAS ${monthYearStr}\t${dateStr}\t${dateStr}`;
 
-        // 2. JOURNALENTRIES_LINES.TXT
         let linesContent = "RecordKey\tLineNum\tAccountCode\tNombre\tDebit\tCredit\tLineMemo\tTaxGroup\tRef1\tRef2\tCostingCode\r\n";
         linesContent += "RecordKey\tLineNum\tAccountCode\tNombre\tDebit\tCredit\tLineMemo\tTaxGroup\tRef1\tRef2\tCostingCode\r\n";
 
-        // 640000 - Sueldos (Debe) - Ya ajustados pro-rata
         summaryByUnit.forEach(unit => {
             let costingCode = "";
             if (unit.centerCode === "ADMON") costingCode = "ADMON";
             else if (unit.centerCode === "TTE") costingCode = "TTE";
-            else costingCode = `${unit.centerCode}-${unit.machineCode}`;
+            else costingCode = `${unit.centerCode}-${unit.machineName}`;
             
             linesContent += `1\t\t640000\t\t${unit.totalSalary.toFixed(2)}\t0.00\tNOMINA ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
         });
 
-        // 475101 - Retenciones (Haber)
         linesContent += `1\t\t475101\t\t0.00\t${excelTotals.retencionesK.toFixed(2)}\tRETENCIONES ${monthYearStr}\t\t\t\t\r\n`;
-
-        // 476000 - SS Trabajador (Haber)
         linesContent += `1\t\t476000\t\t0.00\t${excelTotals.ssTrabajadorJ.toFixed(2)}\tSEG. SOCIAL. TRABAJADOR ${monthYearStr}\t\t\t\t\r\n`;
-
-        // 465000 - Remuneraciones (Haber)
         linesContent += `1\t\t465000\t\t0.00\t${excelTotals.remuneracionesE.toFixed(2)}\tREMUNERACIONES ${monthYearStr}\t\t\t\t\r\n`;
 
-        // 642000 - SS Empresa (Debe) - Ya ajustados pro-rata
         summaryByUnit.forEach(unit => {
             let costingCode = "";
             if (unit.centerCode === "ADMON") costingCode = "ADMON";
             else if (unit.centerCode === "TTE") costingCode = "TTE";
-            else costingCode = `${unit.centerCode}-${unit.machineCode}`;
+            else costingCode = `${unit.centerCode}-${unit.machineName}`;
             
             linesContent += `1\t\t642000\t\t${unit.totalSS.toFixed(2)}\t0.00\tSEG. SOCIAL ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
         });
 
-        // 476000 - SS Empresa Global (Haber)
         linesContent += `1\t\t476000\t\t0.00\t${excelTotals.ss642Neto.toFixed(2)}\tSEG. SOC. ${monthYearStr}\t\t\t\t\r\n`;
-
-        // 466000 - Plan Pensiones (Haber)
         linesContent += `1\t\t466000\t\t0.00\t${excelTotals.planPensionesF.toFixed(2)}\tPLAN PENSIONES ${monthYearStr}\t\t\t\t\r\n`;
 
         downloadFile("JOURNALENTRIES.TXT", entriesContent);
@@ -538,7 +535,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                                 {summaryByUnit.map((unit, idx) => (
                                     <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                         <td className="p-3 border border-slate-200 font-bold text-slate-700 text-xs">{unit.centerCode}</td>
-                                        <td className="p-3 border border-slate-200 font-black text-slate-900 text-xs">{unit.machineCode}</td>
+                                        <td className="p-3 border border-slate-200 font-black text-slate-900 text-xs">{unit.machineName}</td>
                                         <td className="p-3 border border-slate-200 text-center font-mono font-black text-green-700 text-xs">{unit.totalSalary.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
                                         <td className="p-3 border border-slate-200 text-center font-mono font-black text-indigo-700 text-xs">{unit.totalSS.toLocaleString('de-DE', { minimumFractionDigits: 2 })} €</td>
                                     </tr>
