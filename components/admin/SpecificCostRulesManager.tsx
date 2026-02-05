@@ -64,10 +64,10 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
         }
 
         try {
-            const payload = {
+            const payload: Omit<SpecificCostRule, 'id'> = {
                 machineOriginId: sourceMachineId,
                 targetCenterId,
-                targetMachineId: targetMachineId || undefined,
+                targetMachineId: targetMachineId || null,
                 percentage: Number(percentage)
             };
 
