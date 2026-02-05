@@ -19,7 +19,7 @@ export interface CostCenter {
   companyCode?: string;
   selectableForReports?: boolean;
   location?: string;
-  active?: boolean;
+  activo?: boolean;
 }
 
 export interface SubCenter {
@@ -42,9 +42,9 @@ export interface Worker {
   email?: string;
   positionIds: string[];
   role: WorkerRole;
-  active?: boolean;
-  expectedHours?: number; // Horas de jornada programadas
-  requiresReport?: boolean; // Si debe rellenar parte diario
+  activo?: boolean;
+  expectedHours?: number; 
+  requiresReport?: boolean; 
   
   // Datos de Prevención
   lastMedicalExam?: Date;
@@ -64,7 +64,7 @@ export interface PPEDelivery {
     quantity: number;
     expiryDate?: Date;
   }>;
-  signatureUrl?: string; // Para firma digital en tablet
+  signatureUrl?: string; 
 }
 
 export interface TrainingSession {
@@ -141,8 +141,8 @@ export interface Machine {
   transportExpenses: boolean;
   selectableForReports?: boolean;
   responsibleWorkerId?: string;
-  active?: boolean;
-  vinculadaProduccion?: boolean; // Si hereda horas de partes de planta
+  activo?: boolean;
+  vinculadaProduccion?: boolean; 
   
   maintenanceDefs: MaintenanceDefinition[];
 }
@@ -175,7 +175,7 @@ export interface OperationLog {
   breakdownCause?: string;
   breakdownSolution?: string;
   repairerId?: string;
-  maintenanceType?: string; // 'CLEANING', 'GREASING', 'OTHER'
+  maintenanceType?: string; 
   description?: string;
   materials?: string;
   maintenanceDefId?: string;
@@ -237,6 +237,6 @@ export interface SpecificCostRule {
     id: string;
     machineOriginId: string;
     targetCenterId: string;
-    targetMachineId?: string;
+    targetMachineId?: string | null;
     percentage: number;
 }
