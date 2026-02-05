@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getAllMachines, getCostCenters, getAllOperationLogsByRange, getAllPersonalReportsByRange, getSpecificCostRules } from '../../services/db';
 import { Machine, CostCenter, OperationLog, PersonalReport, SpecificCostRule } from '../../types';
-import { ArrowLeft, Loader2, Calendar, Printer, Fuel, Sigma, TableProperties, Download, AlertCircle, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Loader2, TableProperties, Download, AlertCircle, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 interface SummaryRow {
     centerCode: string;
     centerName: string;
-    machineName: string;
+    machineName: string; // Aquí guardaremos el Código Interno (companyCode)
     liters: number;
 }
 
@@ -74,7 +74,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
             if (machine?.adminExpenses) {
                 const key = `ADMON-ADMON`;
                 if (!units[key]) {
-                    units[key] = { centerCode: 'ADMON', centerName: 'ADMINISTRACIÓN', machineName: 'ADMINISTRACIÓN', liters: 0 };
+                    units[key] = { centerCode: 'ADMON', centerName: 'ADMINISTRACIÓN', machineName: 'ADMON', liters: 0 };
                 }
                 units[key].liters += totalLiters;
                 return;
@@ -83,7 +83,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
             if (machine?.transportExpenses) {
                 const key = `TTE-TTE`;
                 if (!units[key]) {
-                    units[key] = { centerCode: 'TTE', centerName: 'TRANSPORTE', machineName: 'TRANSPORTE', liters: 0 };
+                    units[key] = { centerCode: 'TTE', centerName: 'TRANSPORTE', machineName: 'TTE', liters: 0 };
                 }
                 units[key].liters += totalLiters;
                 return;
@@ -97,7 +97,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const cCode = center?.companyCode || 'N/A';
                     const cName = center?.name || 'N/A';
                     
-                    // Lógica solicitada: Si no hay máquina destino, adopta el propio código de la máquina de origen
+                    // Lógica: Si no hay máquina destino, adopta el código de la máquina de origen
                     const targetMachine = machines.find(m => m.id === rule.targetMachineId);
                     const tMachineLabel = targetMachine 
                         ? (targetMachine.companyCode || targetMachine.name) 
@@ -158,7 +158,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
         const data = distribution.map(r => ({
             "Centro Cod.": r.centerCode,
             "Centro": r.centerName,
-            "Unidad (Código)": r.machineName,
+            "Unidad (Código Interno)": r.machineName,
             "Litros Gasoil": r.liters.toFixed(2)
         }));
         const ws = XLSX.utils.json_to_sheet(data);
@@ -183,8 +183,8 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     <div className="flex items-center gap-2">
                         <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700"><ArrowLeft size={24} /></button>
                         <div>
-                            <h3 className="text-xl font-black text-slate-800 uppercase leading-none">Reparto Consumo Gasoil</h3>
-                            <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Cálculo por Ratios y Reglas Específicas</p>
+                            <h3 className="text-xl font-black text-slate-800 uppercase leading-none">Reparto Gasoil</h3>
+                            <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Lógica por Ratios y Reglas Fijas</p>
                         </div>
                     </div>
                     <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="p-2 border rounded-xl font-bold bg-slate-50" />
@@ -192,10 +192,10 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 
                 <div className="flex gap-2">
                     <button onClick={handleExport} className="flex-1 py-3 px-4 bg-green-100 text-green-700 border border-green-200 rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 hover:bg-green-200">
-                        <Download size={16}/> Exportar Excel
+                        <Download size={16}/> Excel
                     </button>
                     <button onClick={() => window.print()} className="flex-1 py-3 px-4 bg-slate-900 text-white rounded-xl font-black uppercase text-xs flex items-center justify-center gap-2 hover:bg-black">
-                        <Printer size={16}/> Imprimir PDF
+                        <Printer size={16}/> Imprimir
                     </button>
                 </div>
             </div>
@@ -203,7 +203,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
             <div className="bg-white p-2 sm:p-6 rounded-2xl shadow-md border border-slate-100 mx-auto max-w-4xl">
                 <div className="mb-6 flex items-center gap-2 border-b pb-4">
                     <TableProperties className="text-indigo-600" size={24} />
-                    <h4 className="font-black text-slate-800 uppercase tracking-tight">Consolidado Mensual de Litros</h4>
+                    <h4 className="font-black text-slate-800 uppercase tracking-tight">Consolidado Mensual de Consumo</h4>
                 </div>
 
                 <table className="w-full border-collapse printable-table">
@@ -220,7 +220,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                                 <td className="p-3 border border-slate-200 font-bold text-slate-700 text-xs">
                                     <div className="flex flex-col">
                                         <span>{row.centerCode}</span>
-                                        <span className="text-[8px] text-slate-400 font-normal">{row.centerName}</span>
+                                        <span className="text-[8px] text-slate-400 font-normal uppercase">{row.centerName}</span>
                                     </div>
                                 </td>
                                 <td className="p-3 border border-slate-200 font-black text-slate-900 text-xs uppercase">{row.machineName}</td>
@@ -229,6 +229,11 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                                 </td>
                             </tr>
                         ))}
+                        {distribution.length === 0 && (
+                            <tr>
+                                <td colSpan={3} className="p-10 text-center text-slate-400 italic">No hay datos de consumo para este mes.</td>
+                            </tr>
+                        )}
                     </tbody>
                     <tfoot className="bg-slate-900 text-white font-black uppercase text-xs">
                         <tr>
@@ -241,8 +246,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-3 no-print">
                     <AlertCircle className="text-blue-600 flex-shrink-0" size={20}/>
                     <p className="text-[10px] text-blue-800 leading-relaxed italic">
-                        <b>Lógica de Reparto:</b> Las unidades con casillas de gastos "Admon" o "Transp" se asignan directamente a ADMON o TTE. Para el resto, primero se aplican las reglas fijas (Costes Específicos) y luego el reparto proporcional por horas en partes de trabajo mensuales. 
-                        <b> Nota:</b> Si una regla de coste específico no tiene máquina de destino, se utiliza el código de la máquina de origen.
+                        <b>Lógica aplicada:</b> Las unidades se identifican por su <b>Código Interno</b>. Si una regla de coste específico no tiene máquina de destino, el sistema imputa el coste bajo el código de la unidad de origen.
                     </p>
                 </div>
             </div>
