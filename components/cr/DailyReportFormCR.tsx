@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { getLastCRReport, getWorkers } from '../../services/db';
 import { CRDailyReport } from '../../types';
@@ -19,8 +18,8 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
     const [washingStart, setWashingStart] = useState<number>(0);
     const [washingEnd, setWashingEnd] = useState<number | ''>('');
     
-    const [triturationStart, setTriturationStart] = useState<number>(0);
-    const [triturationEnd, setTriturationEnd] = useState<number | ''>('');
+    const [trituracion_inicio, setTrituracionInicio] = useState<number>(0);
+    const [trituracion_fin, setTrituracionFin] = useState<number | ''>('');
 
     const [comments, setComments] = useState('');
 
@@ -35,12 +34,12 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
             if (lastReport) {
                 // Se cargan las horas finales del último registro como horas iniciales del actual
                 const wStart = Number(lastReport.washingEnd || 0);
-                const tStart = Number(lastReport.triturationEnd || 0);
+                const tStart = Number(lastReport.trituracion_fin || 0);
                 
                 console.log(`[CR] Cargando contadores anteriores: Lavado ${wStart}, Trituración ${tStart}`);
                 
                 setWashingStart(wStart);
-                setTriturationStart(tStart);
+                setTrituracionInicio(tStart);
             }
         } catch (e) {
             console.error("Error al cargar último parte de CR:", e);
@@ -54,7 +53,7 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
             alert("Las horas finales de Lavado no pueden ser menores a las iniciales.");
             return false;
         }
-        if (triturationEnd !== '' && Number(triturationEnd) < triturationStart) {
+        if (trituracion_fin !== '' && Number(trituracion_fin) < trituracion_inicio) {
             alert("Las horas finales de Trituración no pueden ser menores a las iniciales.");
             return false;
         }
@@ -63,7 +62,7 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validate() || washingEnd === '' || triturationEnd === '') {
+        if (!validate() || washingEnd === '' || trituracion_fin === '') {
             alert("Por favor rellena todos los campos obligatorios.");
             return;
         }
@@ -74,8 +73,8 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
             workerId,
             washingStart,
             washingEnd: Number(washingEnd),
-            triturationStart,
-            triturationEnd: Number(triturationEnd),
+            trituracion_inicio,
+            trituracion_fin: Number(trituracion_fin),
             comments
         });
     };
@@ -142,7 +141,7 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Inicio (Anterior)</label>
                             <div className="p-3 bg-slate-100 rounded-lg text-slate-600 font-mono font-semibold border border-slate-200">
-                                {(triturationStart || 0).toFixed(2)}
+                                {(trituracion_inicio || 0).toFixed(2)}
                             </div>
                         </div>
                         <div>
@@ -150,11 +149,11 @@ export const DailyReportFormCR: React.FC<Props> = ({ workerId, onSubmit, onBack 
                             <input 
                                 type="number" 
                                 required
-                                min={triturationStart}
+                                min={trituracion_inicio}
                                 step="0.01"
                                 placeholder="0.00"
-                                value={triturationEnd}
-                                onChange={e => setTriturationEnd(e.target.value === '' ? '' : Number(e.target.value))}
+                                value={trituracion_fin}
+                                onChange={e => setTrituracionFin(e.target.value === '' ? '' : Number(e.target.value))}
                                 className="w-full p-3 bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono font-bold text-lg"
                             />
                         </div>
