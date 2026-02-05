@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { getSchemaInfo } from '../../services/db';
-import { ArrowLeft, Search, CheckCircle, XCircle, Terminal, Clipboard, AlertTriangle, Trash2, Loader2 } from 'lucide-center';
+import { ArrowLeft, Search, CheckCircle, XCircle, Terminal, Clipboard, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
