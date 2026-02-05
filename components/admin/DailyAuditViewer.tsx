@@ -14,9 +14,8 @@ import {
 import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvider, CPDailyReport, CRDailyReport } from '../../types';
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
-    Fuel, CalendarClock, Loader2, ClipboardList, Info, AlertCircle, 
-    Mountain, Waves, Droplets, Factory, Edit2, Save, X, UserX, Clock,
-    CheckCircle2, Trash2, TrendingUp
+    Fuel, CalendarClock, Loader2, AlertCircle, Mountain, Waves, 
+    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp
 } from 'lucide-react';
 
 interface Props {
@@ -38,12 +37,10 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     const [centers, setCenters] = useState<CostCenter[]>([]);
     const [providers, setProviders] = useState<ServiceProvider[]>([]);
 
-    // Edit Modal State
     const [editingOp, setEditingOp] = useState<OperationLog | null>(null);
     const [editingPersonal, setEditingPersonal] = useState<PersonalReport | null>(null);
     const [savingEdit, setSavingEdit] = useState(false);
 
-    // Carga inicial de datos maestros
     useEffect(() => {
         const loadMasters = async () => {
             try {
@@ -64,7 +61,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         loadMasters();
     }, []);
 
-    // Función de carga de datos de auditoría
     const fetchAudit = useCallback(async () => {
         setLoading(true);
         try {
@@ -94,27 +90,42 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         fetchAudit();
     }, [fetchAudit]);
 
-    // --- LÓGICA DE AGRUPACIÓN POR TRABAJADOR ---
+    // --- LÓGICA DE AGRUPACIÓN POR TRABAJADOR (RESTAURADA) ---
     const workerReports = useMemo(() => {
         const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
         
+        // 1. Inicializar con trabajadores que DEBERÍAN presentar parte
         workers
-            // Fix: changed w.active to w.activo
             .filter(w => w.activo && w.role !== 'admin' && w.requiresReport !== false)
             .forEach(w => {
                 grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
             });
 
+        // 2. Añadir los partes reales y contemplar trabajadores que no estaban en la lista inicial
         auditData.personal.forEach(p => {
-            if (grouped.has(p.workerId)) {
-                const entry = grouped.get(p.workerId)!;
+            if (!grouped.has(p.workerId)) {
+                const w = workers.find(work => work.id === p.workerId);
+                if (w) {
+                    grouped.set(p.workerId, { worker: w, reports: [], totalHours: 0 });
+                }
+            }
+            
+            const entry = grouped.get(p.workerId);
+            if (entry) {
                 entry.reports.push(p);
                 entry.totalHours += p.hours;
             }
         });
 
-        return Array.from(grouped.values()).sort((a, b) => b.totalHours - a.totalHours);
+        return Array.from(grouped.values()).sort((a, b) => a.worker.name.localeCompare(b.worker.name));
     }, [workers, auditData.personal]);
+
+    const getWorkerStatusConfig = (total: number, expected: number) => {
+        if (total === 0) return { color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle, label: 'No Presentado' };
+        if (total < expected) return { color: 'text-orange-600', bg: 'bg-orange-50', icon: AlertCircle, label: 'Incompleto' };
+        if (total === expected) return { color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle2, label: 'Jornada Completa' };
+        return { color: 'text-blue-600', bg: 'bg-blue-50', icon: TrendingUp, label: 'Horas Extras' };
+    };
 
     const handleSaveOpEdit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -133,11 +144,10 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         if (!editingPersonal) return;
         setSavingEdit(true);
         try {
-            const reportToSave = {
+            await updatePersonalReport(editingPersonal.id, {
                 ...editingPersonal,
                 date: new Date(editingPersonal.date)
-            };
-            await updatePersonalReport(reportToSave.id, reportToSave);
+            });
             setEditingPersonal(null);
             fetchAudit();
         } catch (e) { alert("Error al guardar"); }
@@ -145,27 +155,17 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     };
 
     const handleDeletePersonal = async (id: string) => {
-        if (!confirm("¿Está seguro de eliminar este parte de trabajo personal de forma permanente?")) return;
-        setSavingEdit(true);
-        try {
-            await deletePersonalReport(id);
-            setEditingPersonal(null);
-            fetchAudit();
-        } catch (e) {
-            alert("Error al eliminar el registro.");
-        } finally {
-            setSavingEdit(false);
-        }
+        if (!confirm("¿Eliminar este registro?")) return;
+        await deletePersonalReport(id);
+        fetchAudit();
     };
 
     const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
     
     const getMachineName = (id: string) => {
         const m = machines.find(m => m.id === id);
-        return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Planta";
+        return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Sin Asignar";
     };
-
-    const getProviderName = (id: string) => providers.find(p => p.id === id)?.name || "Propio";
 
     const typeConfig: any = {
         'LEVELS': { label: 'Niveles', icon: Droplet, color: 'text-blue-600 bg-blue-50' },
@@ -173,48 +173,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         'MAINTENANCE': { label: 'Mantenimiento', icon: Hammer, color: 'text-amber-600 bg-amber-50' },
         'REFUELING': { label: 'Repostaje', icon: Fuel, color: 'text-green-600 bg-green-50' },
         'SCHEDULED': { label: 'Programado', icon: CalendarClock, color: 'text-purple-600 bg-purple-50' }
-    };
-
-    const renderLogDetails = (log: OperationLog) => {
-        switch (log.type) {
-            case 'LEVELS':
-                return (
-                    <div className="flex gap-4 text-xs font-bold text-blue-700">
-                        {log.motorOil ? <span>Motor: {log.motorOil}L</span> : null}
-                        {log.hydraulicOil ? <span>Hidr.: {log.hydraulicOil}L</span> : null}
-                        {log.coolant ? <span>Refrig.: {log.coolant}L</span> : null}
-                    </div>
-                );
-            case 'REFUELING':
-                return <span className="text-sm font-black text-green-700">+{log.fuelLitres} L</span>;
-            case 'BREAKDOWN':
-                return (
-                    <div className="space-y-1">
-                        <p className="text-xs text-red-700 font-bold"><span className="uppercase text-[10px] opacity-60">Causa:</span> {log.breakdownCause}</p>
-                        <p className="text-xs text-slate-600 italic"><span className="uppercase text-[10px] opacity-60">Solución:</span> {log.breakdownSolution}</p>
-                    </div>
-                );
-            case 'SCHEDULED':
-            case 'MAINTENANCE':
-                return (
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
-                            <CheckCircle2 size={12} className="text-green-500" />
-                            <p className="text-xs text-slate-800 font-black">{log.description || 'Intervención Técnica'}</p>
-                        </div>
-                        {log.materials && <p className="text-[10px] text-slate-400 font-medium italic pl-4">Materiales: {log.materials}</p>}
-                    </div>
-                );
-            default:
-                return null;
-        }
-    };
-
-    // Helper para determinar el estado semafórico de las horas del trabajador
-    const getWorkerStatusConfig = (total: number, expected: number) => {
-        if (total === 0 || total < expected) return { color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle, label: 'Incompleto' };
-        if (total === expected) return { color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle2, label: 'Correcto' };
-        return { color: 'text-blue-600', bg: 'bg-blue-50', icon: TrendingUp, label: 'Superiores' };
     };
 
     return (
@@ -226,7 +184,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 <h3 className="text-xl font-bold text-slate-800 tracking-tight">Auditoría Diaria Integral</h3>
             </div>
 
-            {/* Selector de Fecha */}
             <div className="bg-white p-6 rounded-xl shadow-md border border-slate-100 mx-1">
                 <div className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="flex-1 w-full">
@@ -260,13 +217,18 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             ) : (
                 <div className="space-y-8 px-1">
                     
-                    {/* BLOQUE 1: PRODUCCIÓN DE PLANTAS */}
+                    {/* BLOQUE 1: PLANTAS */}
                     <div className="space-y-4">
                         <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
                             <span className="bg-amber-500 w-2 h-6 rounded-full"></span>
                             1. Producción y Plantas
                         </h4>
                         <div className="grid gap-3">
+                            {auditData.cp.length === 0 && auditData.cr.length === 0 && (
+                                <div className="p-8 text-center text-slate-300 border-2 border-dashed rounded-2xl">
+                                    <p className="text-[10px] font-black uppercase tracking-widest">Sin partes de planta para hoy</p>
+                                </div>
+                            )}
                             {auditData.cp.map(report => (
                                 <div key={`cp-${report.id}`} className="bg-white border border-amber-100 rounded-2xl p-5 shadow-sm">
                                     <div className="flex justify-between items-start mb-3">
@@ -282,22 +244,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
                                             <p className="font-mono font-bold text-sm text-slate-700">{report.crusherStart} → {report.crusherEnd}</p>
-                                            <p className="text-amber-700 font-black text-xs mt-1">{report.crusherEnd - report.crusherStart}h</p>
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos / Planta</p>
+                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
                                             <p className="font-mono font-bold text-sm text-slate-700">{report.millsStart} → {report.millsEnd}</p>
-                                            <p className="text-amber-700 font-black text-xs mt-1">{report.millsEnd - report.millsStart}h</p>
                                         </div>
                                     </div>
-                                    {report.comments && (
-                                        <div className="mt-3 p-3 bg-amber-50/50 rounded-xl border border-amber-100 text-xs text-amber-900 italic">
-                                            "{report.comments}"
-                                        </div>
-                                    )}
                                 </div>
                             ))}
-
                             {auditData.cr.map(report => (
                                 <div key={`cr-${report.id}`} className="bg-white border border-teal-100 rounded-2xl p-5 shadow-sm">
                                     <div className="flex justify-between items-start mb-3">
@@ -312,82 +266,59 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.washingStart.toFixed(2)} → {report.washingEnd.toFixed(2)}</p>
-                                            <p className="text-teal-700 font-black text-xs mt-1">{(report.washingEnd - report.washingStart).toFixed(2)}h</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{report.washingStart.toFixed(1)} → {report.washingEnd.toFixed(1)}</p>
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.triturationStart.toFixed(2)} → {report.triturationEnd.toFixed(2)}</p>
-                                            <p className="text-teal-700 font-black text-xs mt-1">{(report.triturationEnd - report.triturationStart).toFixed(2)}h</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{report.triturationStart.toFixed(1)} → {report.triturationEnd.toFixed(1)}</p>
                                         </div>
                                     </div>
-                                    {report.comments && (
-                                        <div className="mt-3 p-3 bg-teal-50/50 rounded-xl border border-teal-100 text-xs text-teal-900 italic">
-                                            "{report.comments}"
-                                        </div>
-                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    {/* BLOQUE 2: MANTENIMIENTO Y TÉCNICO */}
+                    {/* BLOQUE 2: MANTENIMIENTO */}
                     <div className="space-y-4">
                         <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
                             <span className="bg-indigo-600 w-2 h-6 rounded-full"></span>
-                            2. Mantenimiento y Registros Técnicos
+                            2. Registros de Maquinaria
                         </h4>
                         <div className="space-y-3">
                             {auditData.ops.map(log => {
                                 const conf = typeConfig[log.type] || typeConfig['LEVELS'];
                                 const Icon = conf.icon;
                                 return (
-                                    <div key={log.id} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm group hover:border-indigo-200 transition-all">
+                                    <div key={log.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm group">
                                         <div className="flex justify-between items-start">
-                                            <div className="flex gap-4">
-                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-sm ${conf.color}`}>
-                                                    <Icon size={24} />
+                                            <div className="flex gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${conf.color}`}>
+                                                    <Icon size={20} />
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${conf.color} bg-opacity-20`}>{conf.label}</span>
-                                                        <span className="font-black text-slate-800 text-sm truncate">{getMachineName(log.machineId)}</span>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-black text-slate-800 text-xs">{getMachineName(log.machineId)}</span>
+                                                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${conf.color} bg-opacity-20`}>{conf.label}</span>
                                                     </div>
-                                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase mb-3">
-                                                        <User size={10}/> {getWorkerName(log.workerId)}
-                                                        <Clock size={10} className="ml-1"/> {log.hoursAtExecution}h registro
-                                                    </div>
-                                                    
-                                                    {/* Detalle específico mejorado */}
-                                                    <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                                                        {renderLogDetails(log)}
-                                                    </div>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(log.workerId)} • {log.hoursAtExecution}h</p>
                                                 </div>
                                             </div>
-                                            <button onClick={() => setEditingOp(log)} className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => setEditingOp(log)} className="p-2 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all">
                                                 <Edit2 size={16}/>
                                             </button>
                                         </div>
                                     </div>
                                 );
                             })}
-                            {auditData.ops.length === 0 && (
-                                <div className="p-10 text-center text-slate-300 border-2 border-dashed rounded-2xl">
-                                    <Wrench size={32} className="mx-auto mb-2 opacity-20"/>
-                                    <p className="text-[10px] font-black uppercase tracking-widest">Sin actividad técnica registrada</p>
-                                </div>
-                            )}
                         </div>
                     </div>
 
-                    {/* BLOQUE 3: PARTES DE PERSONAL */}
+                    {/* BLOQUE 3: PARTES DE PERSONAL (RESTAURADO CON COMPARATIVA) */}
                     <div className="space-y-4">
-                        <div className="flex justify-between items-end px-1">
-                            <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
-                                <span className="bg-green-600 w-2 h-6 rounded-full"></span>
-                                3. Partes de Trabajo Personal
-                            </h4>
-                        </div>
+                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                            <span className="bg-green-600 w-2 h-6 rounded-full"></span>
+                            3. Partes de Trabajo Personal
+                        </h4>
                         
                         <div className="space-y-4">
                             {workerReports.map(entry => {
@@ -396,42 +327,36 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
 
                                 return (
                                     <div key={entry.worker.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                                        <div className={`p-4 flex justify-between items-center border-b transition-colors duration-300 ${status.bg}`}>
+                                        <div className={`p-4 flex justify-between items-center border-b transition-colors ${status.bg}`}>
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${entry.totalHours > 0 ? 'bg-slate-800 text-white shadow-lg' : 'bg-slate-200 text-slate-400'}`}>
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${entry.totalHours > 0 ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-200 text-slate-400'}`}>
                                                     {entry.worker.name.charAt(0)}
                                                 </div>
                                                 <div>
                                                     <p className="font-black text-slate-800 text-sm uppercase leading-none">{entry.worker.name}</p>
-                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest">Jornada Plan: {entry.worker.expectedHours}h</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Plan: {entry.worker.expectedHours || 8}h</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-right">
-                                                    <div className="flex items-center gap-2 justify-end">
-                                                        <StatusIcon size={20} className={status.color} />
-                                                        <p className={`text-xl font-black ${status.color}`}>
-                                                            {entry.totalHours}h
-                                                        </p>
-                                                    </div>
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{status.label}</p>
+                                            <div className="text-right">
+                                                <div className={`flex items-center gap-1.5 justify-end font-black ${status.color}`}>
+                                                    <StatusIcon size={16} />
+                                                    <span className="text-lg">{entry.totalHours.toFixed(1)}h</span>
                                                 </div>
+                                                <p className={`text-[8px] font-black uppercase tracking-widest ${status.color} opacity-70`}>{status.label}</p>
                                             </div>
                                         </div>
+                                        
                                         <div className="divide-y divide-slate-50">
                                             {entry.reports.map(rep => (
                                                 <div key={rep.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                                            <span className="font-bold text-slate-700 text-xs truncate">{getMachineName(rep.machineId!)}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
+                                                    <div className="flex-1">
+                                                        <p className="font-bold text-slate-700 text-xs">{getMachineName(rep.machineId!)}</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase flex items-center gap-1">
                                                             <Factory size={10}/> {centers.find(c => c.id === rep.costCenterId)?.name || 'Sin Centro'}
-                                                        </div>
+                                                        </p>
                                                     </div>
-                                                    <div className="flex items-center gap-4">
-                                                        <span className="text-sm font-black text-slate-800">{rep.hours}h</span>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-sm font-black text-slate-800">{rep.hours.toFixed(1)}h</span>
                                                         <button onClick={() => setEditingPersonal(rep)} className="p-2 text-slate-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all">
                                                             <Edit2 size={16}/>
                                                         </button>
@@ -439,9 +364,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                 </div>
                                             ))}
                                             {entry.reports.length === 0 && (
-                                                <div className="p-6 text-center text-slate-300 bg-red-50/10">
-                                                    <UserX size={24} className="mx-auto mb-2 opacity-20"/>
-                                                    <p className="text-[9px] font-black uppercase tracking-widest italic text-red-400">Parte no presentado</p>
+                                                <div className="p-6 text-center text-red-400 bg-red-50/10 italic text-[10px] font-bold uppercase tracking-widest">
+                                                    <UserX size={20} className="mx-auto mb-1 opacity-20"/> Parte no presentado
                                                 </div>
                                             )}
                                         </div>
@@ -453,67 +377,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* MODAL EDICIÓN TÉCNICA */}
-            {editingOp && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
-                        <div className="bg-indigo-600 text-white p-5 flex justify-between items-center">
-                            <h4 className="font-bold flex items-center gap-2"><Wrench size={20}/> Corregir Registro</h4>
-                            <button onClick={() => setEditingOp(null)} className="p-1 hover:bg-indigo-500 rounded-lg"><X size={24}/></button>
-                        </div>
-                        <form onSubmit={handleSaveOpEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Registro</label>
-                                <input 
-                                    type="number" step="0.01" 
-                                    value={editingOp.hoursAtExecution}
-                                    onChange={e => setEditingOp({...editingOp, hoursAtExecution: Number(e.target.value)})}
-                                    className="w-full p-4 border rounded-2xl font-black text-lg bg-slate-50 focus:bg-white transition-all outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            {(editingOp.type === 'SCHEDULED' || editingOp.type === 'MAINTENANCE') && (
-                                <>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Título / Descripción</label>
-                                        <textarea rows={2} value={editingOp.description || ''} onChange={e => setEditingOp({...editingOp, description: e.target.value})} className="w-full p-4 border rounded-2xl text-sm font-bold bg-slate-50" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Materiales Utilizados</label>
-                                        <textarea rows={2} value={editingOp.materials || ''} onChange={e => setEditingOp({...editingOp, materials: e.target.value})} className="w-full p-4 border rounded-2xl text-sm font-bold bg-slate-50" />
-                                    </div>
-                                </>
-                            )}
-
-                            {editingOp.type === 'BREAKDOWN' && (
-                                <>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Causa</label>
-                                        <textarea rows={2} value={editingOp.breakdownCause || ''} onChange={e => setEditingOp({...editingOp, breakdownCause: e.target.value})} className="w-full p-4 border rounded-2xl text-sm font-bold bg-slate-50" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Solución</label>
-                                        <textarea rows={2} value={editingOp.breakdownSolution || ''} onChange={e => setEditingOp({...editingOp, breakdownSolution: e.target.value})} className="w-full p-4 border rounded-2xl text-sm font-bold bg-slate-50" />
-                                    </div>
-                                </>
-                            )}
-
-                            <button type="submit" disabled={savingEdit} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all mt-4">
-                                {savingEdit ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
-                                Guardar Cambios
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* MODAL EDICIÓN PERSONAL */}
+            {/* MODALES DE EDICIÓN */}
             {editingPersonal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden">
                         <div className="bg-blue-600 text-white p-5 flex justify-between items-center">
-                            <h4 className="font-bold flex items-center gap-2"><Clock size={20}/> Editar Horas Personal</h4>
-                            <button onClick={() => setEditingPersonal(null)} className="p-1 hover:bg-blue-500 rounded-lg"><X size={24}/></button>
+                            <h4 className="font-bold flex items-center gap-2"><Clock size={20}/> Corregir Horas</h4>
+                            <button onClick={() => setEditingPersonal(null)}><X size={24}/></button>
                         </div>
                         <form onSubmit={handleSavePersonalEdit} className="p-6 space-y-5">
                             <div>
@@ -522,16 +392,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     type="number" step="0.5" 
                                     value={editingPersonal.hours}
                                     onChange={e => setEditingPersonal({...editingPersonal, hours: Number(e.target.value)})}
-                                    className="w-full p-4 border rounded-2xl font-black text-2xl text-center bg-slate-50 focus:bg-white transition-all outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-4 border rounded-2xl font-black text-2xl text-center bg-slate-50"
                                 />
                             </div>
-
-                            <div className="flex gap-2 pt-2">
-                                <button type="button" onClick={() => handleDeletePersonal(editingPersonal.id)} disabled={savingEdit} className="flex-1 py-4 bg-red-50 text-red-600 border-2 border-red-100 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2">
-                                    <Trash2 size={16}/> Borrar
-                                </button>
-                                <button type="submit" disabled={savingEdit} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-blue-700 transition-all">
-                                    {savingEdit ? <Loader2 className="animate-spin" size={20}/> : <Save size={16}/>} Guardar
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => handleDeletePersonal(editingPersonal.id)} className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs">Borrar</button>
+                                <button type="submit" disabled={savingEdit} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
+                                    {savingEdit ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Guardar
                                 </button>
                             </div>
                         </form>
