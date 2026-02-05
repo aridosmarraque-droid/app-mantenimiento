@@ -8,6 +8,7 @@ import {
     getCPReportsByRange, 
     getCRReportsByRange,
     updateOperationLog,
+    deleteOperationLog,
     updatePersonalReport,
     deletePersonalReport
 } from '../../services/db';
@@ -90,18 +91,15 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         fetchAudit();
     }, [fetchAudit]);
 
-    // --- LÓGICA DE AGRUPACIÓN POR TRABAJADOR (RESTAURADA) ---
     const workerReports = useMemo(() => {
         const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
         
-        // 1. Inicializar con trabajadores que DEBERÍAN presentar parte
         workers
             .filter(w => w.activo && w.role !== 'admin' && w.requiresReport !== false)
             .forEach(w => {
                 grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
             });
 
-        // 2. Añadir los partes reales y contemplar trabajadores que no estaban en la lista inicial
         auditData.personal.forEach(p => {
             if (!grouped.has(p.workerId)) {
                 const w = workers.find(work => work.id === p.workerId);
@@ -135,7 +133,18 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             await updateOperationLog(editingOp.id, editingOp);
             setEditingOp(null);
             fetchAudit();
-        } catch (e) { alert("Error al guardar"); }
+        } catch (e) { alert("Error al guardar cambios técnicos."); }
+        finally { setSavingEdit(false); }
+    };
+
+    const handleDeleteOp = async (id: string) => {
+        if (!confirm("¿Desea eliminar permanentemente este registro de maquinaria?")) return;
+        setSavingEdit(true);
+        try {
+            await deleteOperationLog(id);
+            setEditingOp(null);
+            fetchAudit();
+        } catch (e) { alert("Error al eliminar registro técnico."); }
         finally { setSavingEdit(false); }
     };
 
@@ -150,14 +159,19 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             });
             setEditingPersonal(null);
             fetchAudit();
-        } catch (e) { alert("Error al guardar"); }
+        } catch (e) { alert("Error al guardar cambios del operario."); }
         finally { setSavingEdit(false); }
     };
 
     const handleDeletePersonal = async (id: string) => {
-        if (!confirm("¿Eliminar este registro?")) return;
-        await deletePersonalReport(id);
-        fetchAudit();
+        if (!confirm("¿Desea borrar permanentemente este parte de trabajo personal?")) return;
+        setSavingEdit(true);
+        try {
+            await deletePersonalReport(id);
+            setEditingPersonal(null);
+            fetchAudit();
+        } catch (e) { alert("Error al eliminar el parte."); }
+        finally { setSavingEdit(false); }
     };
 
     const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
@@ -244,10 +258,12 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
                                             <p className="font-mono font-bold text-sm text-slate-700">{report.crusherStart} → {report.crusherEnd}</p>
+                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {report.crusherEnd - report.crusherStart}h</p>
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
                                             <p className="font-mono font-bold text-sm text-slate-700">{report.millsStart} → {report.millsEnd}</p>
+                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {report.millsEnd - report.millsStart}h</p>
                                         </div>
                                     </div>
                                 </div>
@@ -267,10 +283,12 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
                                             <p className="font-mono font-bold text-sm text-slate-700">{report.washingStart.toFixed(1)} → {report.washingEnd.toFixed(1)}</p>
+                                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.washingEnd - report.washingStart).toFixed(1)}h</p>
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
                                             <p className="font-mono font-bold text-sm text-slate-700">{report.triturationStart.toFixed(1)} → {report.triturationEnd.toFixed(1)}</p>
+                                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.triturationEnd - report.triturationStart).toFixed(1)}h</p>
                                         </div>
                                     </div>
                                 </div>
@@ -313,7 +331,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    {/* BLOQUE 3: PARTES DE PERSONAL (RESTAURADO CON COMPARATIVA) */}
+                    {/* BLOQUE 3: PARTES DE PERSONAL */}
                     <div className="space-y-4">
                         <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
                             <span className="bg-green-600 w-2 h-6 rounded-full"></span>
@@ -377,28 +395,158 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* MODALES DE EDICIÓN */}
-            {editingPersonal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden">
-                        <div className="bg-blue-600 text-white p-5 flex justify-between items-center">
-                            <h4 className="font-bold flex items-center gap-2"><Clock size={20}/> Corregir Horas</h4>
-                            <button onClick={() => setEditingPersonal(null)}><X size={24}/></button>
+            {/* MODAL DE EDICIÓN TÉCNICA (EXPANDIDO) */}
+            {editingOp && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+                        <div className="bg-indigo-600 text-white p-5 flex justify-between items-center shrink-0">
+                            <h4 className="font-bold flex items-center gap-2"><Wrench size={20}/> Corregir Registro Técnico</h4>
+                            <button onClick={() => setEditingOp(null)} className="p-1 hover:bg-indigo-500 rounded-lg transition-colors"><X size={24}/></button>
                         </div>
-                        <form onSubmit={handleSavePersonalEdit} className="p-6 space-y-5">
+                        <form onSubmit={handleSaveOpEdit} className="p-6 space-y-4 overflow-y-auto flex-1">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha</label>
+                                    <input 
+                                        type="date" 
+                                        value={new Date(editingOp.date).toISOString().split('T')[0]}
+                                        onChange={e => setEditingOp({...editingOp, date: new Date(e.target.value)})}
+                                        className="w-full p-3 border rounded-xl font-bold bg-slate-50"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Registro</label>
+                                    <input 
+                                        type="number" step="0.01" 
+                                        value={editingOp.hoursAtExecution}
+                                        onChange={e => setEditingOp({...editingOp, hoursAtExecution: Number(e.target.value)})}
+                                        className="w-full p-3 border rounded-xl font-black text-indigo-600 bg-slate-50"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Unidad / Máquina</label>
+                                <select 
+                                    value={editingOp.machineId}
+                                    onChange={e => setEditingOp({...editingOp, machineId: e.target.value})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-slate-50"
+                                >
+                                    {machines.map(m => (
+                                        <option key={m.id} value={m.id}>{m.companyCode ? `[${m.companyCode}] ` : ''}{m.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Operario Responsable</label>
+                                <select 
+                                    value={editingOp.workerId}
+                                    onChange={e => setEditingOp({...editingOp, workerId: e.target.value})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-slate-50"
+                                >
+                                    {workers.map(w => (
+                                        <option key={w.id} value={w.id}>{w.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {editingOp.type === 'REFUELING' && (
+                                <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+                                    <label className="block text-[10px] font-black text-green-600 uppercase mb-1">Litros Suministrados</label>
+                                    <input 
+                                        type="number" step="0.1" 
+                                        value={editingOp.fuelLitres || 0}
+                                        onChange={e => setEditingOp({...editingOp, fuelLitres: Number(e.target.value)})}
+                                        className="w-full p-3 border rounded-lg bg-white font-black text-lg"
+                                    />
+                                </div>
+                            )}
+
+                            {editingOp.type === 'BREAKDOWN' && (
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Causa</label>
+                                        <textarea rows={2} value={editingOp.breakdownCause || ''} onChange={e => setEditingOp({...editingOp, breakdownCause: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Solución</label>
+                                        <textarea rows={2} value={editingOp.breakdownSolution || ''} onChange={e => setEditingOp({...editingOp, breakdownSolution: e.target.value})} className="w-full p-3 border rounded-xl text-sm" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {(editingOp.type === 'MAINTENANCE' || editingOp.type === 'SCHEDULED') && (
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Materiales</label>
+                                    <textarea rows={3} value={editingOp.materials || ''} onChange={e => setEditingOp({...editingOp, materials: e.target.value})} className="w-full p-3 border rounded-xl text-sm" placeholder="Filtros, aceites, etc..." />
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-2 pt-4 shrink-0">
+                                <button type="submit" disabled={savingEdit} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all">
+                                    {savingEdit ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>} Guardar Cambios
+                                </button>
+                                <button type="button" onClick={() => handleDeleteOp(editingOp.id)} disabled={savingEdit} className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 hover:bg-red-100 transition-all">
+                                    <Trash2 size={16}/> Borrar Registro
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE EDICIÓN PERSONAL (EXPANDIDO) */}
+            {editingPersonal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+                        <div className="bg-green-600 text-white p-5 flex justify-between items-center">
+                            <h4 className="font-bold flex items-center gap-2"><Clock size={20}/> Corregir Parte de Trabajo</h4>
+                            <button onClick={() => setEditingPersonal(null)} className="p-1 hover:bg-green-500 rounded-lg transition-colors"><X size={24}/></button>
+                        </div>
+                        <form onSubmit={handleSavePersonalEdit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Centro de Trabajo</label>
+                                <select 
+                                    value={editingPersonal.costCenterId || ''}
+                                    onChange={e => setEditingPersonal({...editingPersonal, costCenterId: e.target.value})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-slate-50"
+                                >
+                                    <option value="">-- Seleccionar Centro --</option>
+                                    {centers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Máquina / Tajo</label>
+                                <select 
+                                    value={editingPersonal.machineId || ''}
+                                    onChange={e => setEditingPersonal({...editingPersonal, machineId: e.target.value})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-slate-50"
+                                >
+                                    <option value="">-- General / Sin asignar --</option>
+                                    {machines.map(m => (
+                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Horas Trabajadas</label>
                                 <input 
                                     type="number" step="0.5" 
                                     value={editingPersonal.hours}
                                     onChange={e => setEditingPersonal({...editingPersonal, hours: Number(e.target.value)})}
-                                    className="w-full p-4 border rounded-2xl font-black text-2xl text-center bg-slate-50"
+                                    className="w-full p-4 border rounded-2xl font-black text-2xl text-center bg-slate-50 focus:bg-white focus:ring-2 focus:ring-green-500 transition-all outline-none"
                                 />
                             </div>
-                            <div className="flex gap-2">
-                                <button type="button" onClick={() => handleDeletePersonal(editingPersonal.id)} className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs">Borrar</button>
-                                <button type="submit" disabled={savingEdit} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
-                                    {savingEdit ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Guardar
+
+                            <div className="flex gap-2 pt-2">
+                                <button type="button" onClick={() => handleDeletePersonal(editingPersonal.id)} disabled={savingEdit} className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-red-100 transition-all">
+                                    <Trash2 size={16}/> Borrar
+                                </button>
+                                <button type="submit" disabled={savingEdit} className="flex-[2] py-4 bg-green-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-green-700 transition-all">
+                                    {savingEdit ? <Loader2 className="animate-spin" size={20}/> : <Save size={16}/>} Guardar
                                 </button>
                             </div>
                         </form>
