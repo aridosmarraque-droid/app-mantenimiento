@@ -1,4 +1,3 @@
-
 import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs } from './db';
 import { CPDailyReport, CPWeeklyPlan, OperationLog } from '../types';
 
@@ -196,6 +195,7 @@ export const getMachineFluidStats = async (machineId: string) => {
     const sorted = [...logs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const evolution: any[] = [];
     let mTotal = 0, hTotal = 0, cTotal = 0, tHours = 0;
+    
     for (let i = 1; i < sorted.length; i++) {
         const diff = sorted[i].hoursAtExecution - sorted[i - 1].hoursAtExecution;
         if (diff > 0) {
@@ -224,11 +224,31 @@ export const getMachineFluidStats = async (machineId: string) => {
     const bM = tHours > 0 ? (mTotal / tHours * 100) : 0;
     const bH = tHours > 0 ? (hTotal / tHours * 100) : 0;
     const bC = tHours > 0 ? (cTotal / tHours * 100) : 0;
+    
     const recent = evolution[0] || { motorRate: 0, hydRate: 0, coolRate: 0, motorAmount: 0, hydAmount: 0, coolAmount: 0 };
+    
     return {
-        motor: { recentRate: recent.motorRate, baselineRate: bM, deviation: bM > 0 ? ((recent.motorRate - bM) / bM * 100) : 0, logsCount: logs.length },
-        hydraulic: { recentRate: recent.hydRate, baselineRate: bH, deviation: bH > 0 ? ((recent.hydRate - bH) / bH * 100) : 0, logsCount: logs.length },
-        coolant: { recentRate: recent.coolRate, baselineRate: bC, deviation: bC > 0 ? ((recent.coolRate - bC) / bC * 100) : 0, logsCount: logs.length },
+        motor: { 
+            recentRate: recent.motorRate, 
+            baselineRate: bM, 
+            deviation: bM > 0 ? ((recent.motorRate - bM) / bM * 100) : 0, 
+            recentAmount: recent.motorAmount,
+            logsCount: logs.length 
+        },
+        hydraulic: { 
+            recentRate: recent.hydRate, 
+            baselineRate: bH, 
+            deviation: bH > 0 ? ((recent.hydRate - bH) / bH * 100) : 0, 
+            recentAmount: recent.hydAmount,
+            logsCount: logs.length 
+        },
+        coolant: { 
+            recentRate: recent.coolRate, 
+            baselineRate: bC, 
+            deviation: bC > 0 ? ((recent.coolRate - bC) / bC * 100) : 0, 
+            recentAmount: recent.coolAmount,
+            logsCount: logs.length 
+        },
         evolution
     };
 };
