@@ -64,6 +64,18 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<O
   return new Promise(resolve => setTimeout(() => resolve(newLog), 500));
 };
 
+export const updateOperationLog = async (id: string, updates: Partial<OperationLog>): Promise<void> => {
+    const idx = logs.findIndex(l => l.id === id);
+    if (idx !== -1) logs[idx] = { ...logs[idx], ...updates };
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const deleteOperationLog = async (id: string): Promise<void> => {
+    const idx = logs.findIndex(l => l.id === id);
+    if (idx !== -1) logs.splice(idx, 1);
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
 export const saveCPReport = async (report: Omit<CPDailyReport, 'id'>): Promise<void> => {
     const newReport = { ...report, id: Math.random().toString(36).substr(2, 9) };
     cpReports.push(newReport);
@@ -82,6 +94,18 @@ export const savePersonalReport = async (report: Omit<PersonalReport, 'id'>): Pr
     return new Promise(resolve => setTimeout(resolve, 300));
 };
 
+export const updatePersonalReport = async (id: string, updates: Partial<PersonalReport>): Promise<void> => {
+    const idx = personalReports.findIndex(r => r.id === id);
+    if (idx !== -1) personalReports[idx] = { ...personalReports[idx], ...updates };
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
+export const deletePersonalReport = async (id: string): Promise<void> => {
+    const idx = personalReports.findIndex(r => r.id === id);
+    if (idx !== -1) personalReports.splice(idx, 1);
+    return new Promise(resolve => setTimeout(resolve, 300));
+};
+
 export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[], cp: CPDailyReport[], cr: CRDailyReport[] }> => {
     const dateStr = date.toISOString().split('T')[0];
     return { 
@@ -90,6 +114,10 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
         cp: cpReports.filter(r => r.date.toISOString().split('T')[0] === dateStr),
         cr: crReports.filter(r => r.date.toISOString().split('T')[0] === dateStr)
     };
+};
+
+export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
+    return new Promise(resolve => resolve(personalReports.filter(r => r.workerId === workerId)));
 };
 
 export const getServiceProviders = async (): Promise<ServiceProvider[]> => {
@@ -109,13 +137,8 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {};
 export const updateMachineAttributes = async (id: string, updates: Partial<Machine>): Promise<void> => {};
 export const deleteMachine = async (id: string): Promise<void> => {};
 export const createMachine = async (machine: any): Promise<void> => {};
-export const getMachinesByCenter = async (id: string): Promise<Machine[]> => [];
+export const getMachinesByCenter = async (id: string, activeOnly: boolean = true): Promise<Machine[]> => [];
 export const getSubCentersByCenter = async (id: string): Promise<any[]> => [];
-export const deletePersonalReport = async (id: string): Promise<void> => {};
-export const updatePersonalReport = async (id: string, updates: any): Promise<void> => {};
-export const updateOperationLog = async (id: string, updates: any): Promise<void> => {};
-export const deleteOperationLog = async (id: string): Promise<void> => {};
-export const getPersonalReports = async (id: string): Promise<PersonalReport[]> => [];
 export const getLastCPReport = async (): Promise<CPDailyReport | null> => null;
 export const getLastCRReport = async (): Promise<CRDailyReport | null> => null;
 export const calculateAndSyncMachineStatus = async (m: Machine): Promise<Machine> => m;
