@@ -62,24 +62,25 @@ export const generateFluidReportPDF = (
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(100, 100, 100);
-    doc.text("El % de desvío se basa en la tasa de consumo del último intervalo vs. la media histórica (Baseline) de la unidad.", 20, 55);
+    doc.text("CRITERIO: Desvío >10% vs Baseline Y consumo activo (>0L) en último registro. (0L = Reparado/Estable).", 20, 55);
 
+    // Filtrar máquinas con alertas activas (desvío alto Y consumo reciente > 0)
     const alertedMachines = machinesData.filter(m => 
-        m.stats.motor.deviation > 10 || 
-        m.stats.hydraulic.deviation > 10 || 
-        m.stats.coolant.deviation > 10
+        (m.stats.motor.deviation > 10 && m.stats.motor.recentAmount > 0) || 
+        (m.stats.hydraulic.deviation > 10 && m.stats.hydraulic.recentAmount > 0) || 
+        (m.stats.coolant.deviation > 10 && m.stats.coolant.recentAmount > 0)
     );
 
     if (alertedMachines.length === 0) {
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text("No se detectan incrementos anómalos de consumo en el periodo actual.", 20, 65);
+        doc.text("No se detectan averías activas por consumo de fluidos en este periodo.", 20, 65);
     } else {
         const alertRows = alertedMachines.map(m => {
             const issues = [];
-            if (m.stats.motor.deviation > 10) issues.push(`ACEITE MOTOR: +${m.stats.motor.deviation.toFixed(1)}%`);
-            if (m.stats.hydraulic.deviation > 10) issues.push(`HIDRÁULICO: +${m.stats.hydraulic.deviation.toFixed(1)}%`);
-            if (m.stats.coolant.deviation > 10) issues.push(`REFRIGERANTE: +${m.stats.coolant.deviation.toFixed(1)}%`);
+            if (m.stats.motor.deviation > 10 && m.stats.motor.recentAmount > 0) issues.push(`ACEITE MOTOR: +${m.stats.motor.deviation.toFixed(1)}%`);
+            if (m.stats.hydraulic.deviation > 10 && m.stats.hydraulic.recentAmount > 0) issues.push(`HIDRÁULICO: +${m.stats.hydraulic.deviation.toFixed(1)}%`);
+            if (m.stats.coolant.deviation > 10 && m.stats.coolant.recentAmount > 0) issues.push(`REFRIGERANTE: +${m.stats.coolant.deviation.toFixed(1)}%`);
             
             return [
                 m.machine.companyCode ? `[${m.machine.companyCode}] ${m.machine.name}` : m.machine.name,
@@ -89,7 +90,7 @@ export const generateFluidReportPDF = (
 
         doc.autoTable({
             startY: 60,
-            head: [['Unidad', 'Desvíos Detectados (%)']],
+            head: [['Unidad en Avería', 'Desvíos Activos (%)']],
             body: alertRows,
             theme: 'grid',
             headStyles: { fillColor: [185, 28, 28] },
@@ -101,10 +102,11 @@ export const generateFluidReportPDF = (
     let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 80;
 
     machinesData.forEach(({ machine, stats }) => {
+        // Un fluido es "problemático" solo si tiene desvío Y no ha sido "reparado" (consumo 0)
         const problematicFluids = [];
-        if (stats.motor.deviation > 10) problematicFluids.push('ACEITE MOTOR');
-        if (stats.hydraulic.deviation > 10) problematicFluids.push('HIDRÁULICO');
-        if (stats.coolant.deviation > 10) problematicFluids.push('REFRIGERANTE');
+        if (stats.motor.deviation > 10 && stats.motor.recentAmount > 0) problematicFluids.push('ACEITE MOTOR');
+        if (stats.hydraulic.deviation > 10 && stats.hydraulic.recentAmount > 0) problematicFluids.push('HIDRÁULICO');
+        if (stats.coolant.deviation > 10 && stats.coolant.recentAmount > 0) problematicFluids.push('REFRIGERANTE');
 
         if (problematicFluids.length === 0) return; 
 
@@ -113,21 +115,18 @@ export const generateFluidReportPDF = (
         doc.setFillColor(241, 245, 249);
         doc.rect(15, currentY, 180, 10, 'F');
         
-        // CORRECCIÓN SOLAPAMIENTO: Posicionar textos secuencialmente
         doc.setTextColor(15, 23, 42);
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
         const machineTitle = machine.companyCode ? `[${machine.companyCode}] ${machine.name.toUpperCase()}` : machine.name.toUpperCase();
         doc.text(machineTitle, 20, currentY + 6.5);
         
-        // Medir ancho para el siguiente texto
         const titleWidth = doc.getTextWidth(machineTitle);
         
         doc.setFontSize(8);
         doc.setTextColor(185, 28, 28);
         doc.setFont("helvetica", "normal");
-        // Escribimos el detalle justo después del nombre (con un pequeño margen de 5px)
-        doc.text(` | Detalle de componentes afectados: ${problematicFluids.join(', ')}`, 20 + titleWidth + 5, currentY + 6.5);
+        doc.text(` | Avería en componentes: ${problematicFluids.join(', ')}`, 20 + titleWidth + 5, currentY + 6.5);
         
         currentY += 14;
 
@@ -139,33 +138,43 @@ export const generateFluidReportPDF = (
             doc.setFontSize(8);
             doc.setTextColor(100, 100, 100);
             doc.setFont("helvetica", "bold");
-            doc.text(`Histórico: ${fluidName}`, 20, currentY);
+            doc.text(`Histórico de Rellenos: ${fluidName}`, 20, currentY);
             currentY += 4;
 
-            const evolutionRows = stats.evolution.slice(0, 10).map((p: any) => [
-                p.date,
-                `${p.hours}h`,
-                `${p[fieldPrefix + 'Amount'].toFixed(1)} L`,
-                `${p[fieldPrefix + 'Rate'].toFixed(3)} L/100h`
-            ]);
+            // FILTRADO CRÍTICO: Solo mostrar filas donde se añadió líquido (> 0)
+            const evolutionRows = stats.evolution
+                .filter((p: any) => p[fieldPrefix + 'Amount'] > 0)
+                .slice(0, 15)
+                .map((p: any) => [
+                    p.date,
+                    `${p.hours}h`,
+                    `${p[fieldPrefix + 'Amount'].toFixed(1)} L`,
+                    `${p[fieldPrefix + 'Rate'].toFixed(3)} L/100h`
+                ]);
 
-            doc.autoTable({
-                startY: currentY,
-                head: [['Fecha', 'Horas', 'Cantidad añadida (L)', 'Tasa L/100h']],
-                body: evolutionRows,
-                theme: 'grid',
-                headStyles: { fillColor: [71, 85, 105] },
-                styles: { fontSize: 7, halign: 'center' },
-                columnStyles: { 2: { fontStyle: 'bold' }, 3: { fontStyle: 'bold' } }
-            });
-
-            currentY = doc.lastAutoTable.finalY + 10;
+            if (evolutionRows.length > 0) {
+                doc.autoTable({
+                    startY: currentY,
+                    head: [['Fecha Relleno', 'Horas Máquina', 'Cantidad Añadida (L)', 'Tasa L/100h']],
+                    body: evolutionRows,
+                    theme: 'grid',
+                    headStyles: { fillColor: [71, 85, 105] },
+                    styles: { fontSize: 7, halign: 'center' },
+                    columnStyles: { 2: { fontStyle: 'bold' }, 3: { fontStyle: 'bold' } }
+                });
+                currentY = doc.lastAutoTable.finalY + 10;
+            } else {
+                doc.setFontSize(7);
+                doc.setFont("helvetica", "italic");
+                doc.text("Sin registros de consumo activo para este componente.", 25, currentY + 5);
+                currentY += 15;
+            }
         });
     });
 
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Informe automatizado. Aridos Marraque SL. Los desvíos negativos (reducción de consumo) no generan alerta.", 105, 290, { align: 'center' });
+    doc.text("Informe de Auditoría Técnica. Aridos Marraque SL. Si el último consumo es 0.0L, la unidad sale automáticamente de avería.", 105, 290, { align: 'center' });
 
     return doc.output('datauristring').split(',')[1];
 };
