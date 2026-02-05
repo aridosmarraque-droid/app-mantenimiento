@@ -77,7 +77,6 @@ export const generateFluidReportPDF = (
     } else {
         const alertRows = alertedMachines.map(m => {
             const issues = [];
-            // Mostramos desvíos cortados a 1 decimal
             if (m.stats.motor.deviation > 10) issues.push(`ACEITE MOTOR: +${m.stats.motor.deviation.toFixed(1)}%`);
             if (m.stats.hydraulic.deviation > 10) issues.push(`HIDRÁULICO: +${m.stats.hydraulic.deviation.toFixed(1)}%`);
             if (m.stats.coolant.deviation > 10) issues.push(`REFRIGERANTE: +${m.stats.coolant.deviation.toFixed(1)}%`);
@@ -107,24 +106,31 @@ export const generateFluidReportPDF = (
         if (stats.hydraulic.deviation > 10) problematicFluids.push('HIDRÁULICO');
         if (stats.coolant.deviation > 10) problematicFluids.push('REFRIGERANTE');
 
-        if (problematicFluids.length === 0) return; // Omitir si no hay desvío positivo relevante
+        if (problematicFluids.length === 0) return; 
 
         if (currentY > 230) { doc.addPage(); currentY = 20; }
         
         doc.setFillColor(241, 245, 249);
         doc.rect(15, currentY, 180, 10, 'F');
+        
+        // CORRECCIÓN SOLAPAMIENTO: Posicionar textos secuencialmente
         doc.setTextColor(15, 23, 42);
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.text(`${machine.name.toUpperCase()}`, 20, currentY + 6.5);
+        const machineTitle = machine.companyCode ? `[${machine.companyCode}] ${machine.name.toUpperCase()}` : machine.name.toUpperCase();
+        doc.text(machineTitle, 20, currentY + 6.5);
+        
+        // Medir ancho para el siguiente texto
+        const titleWidth = doc.getTextWidth(machineTitle);
         
         doc.setFontSize(8);
         doc.setTextColor(185, 28, 28);
-        doc.text(`Detalle de componentes afectados: ${problematicFluids.join(', ')}`, 100, currentY + 6.5, { align: 'right' });
+        doc.setFont("helvetica", "normal");
+        // Escribimos el detalle justo después del nombre (con un pequeño margen de 5px)
+        doc.text(` | Detalle de componentes afectados: ${problematicFluids.join(', ')}`, 20 + titleWidth + 5, currentY + 6.5);
         
         currentY += 14;
 
-        // Construir tabla detallada por cada fluido afectado
         problematicFluids.forEach(fluidName => {
             if (currentY > 250) { doc.addPage(); currentY = 20; }
             
@@ -132,6 +138,7 @@ export const generateFluidReportPDF = (
             
             doc.setFontSize(8);
             doc.setTextColor(100, 100, 100);
+            doc.setFont("helvetica", "bold");
             doc.text(`Histórico: ${fluidName}`, 20, currentY);
             currentY += 4;
 
@@ -144,7 +151,7 @@ export const generateFluidReportPDF = (
 
             doc.autoTable({
                 startY: currentY,
-                head: [['Fecha', 'Horas', 'Cantidad añadida', 'Tasa L/100h']],
+                head: [['Fecha', 'Horas', 'Cantidad añadida (L)', 'Tasa L/100h']],
                 body: evolutionRows,
                 theme: 'grid',
                 headStyles: { fillColor: [71, 85, 105] },
@@ -200,12 +207,12 @@ export const generateFuelReportPDF = (
             if (data.section === 'body' && data.column.index === 4) {
                 const val = parseFloat(data.cell.raw.replace('%', '').replace('+', ''));
                 if (val >= 25) {
-                    data.cell.styles.fillColor = [254, 226, 226]; // Rojo claro
-                    data.cell.styles.textColor = [185, 28, 28]; // Rojo oscuro
+                    data.cell.styles.fillColor = [254, 226, 226]; 
+                    data.cell.styles.textColor = [185, 28, 28]; 
                     data.cell.styles.fontStyle = 'bold';
                 } else if (val >= 10) {
-                    data.cell.styles.fillColor = [255, 247, 237]; // Naranja claro
-                    data.cell.styles.textColor = [194, 65, 12]; // Naranja oscuro
+                    data.cell.styles.fillColor = [255, 247, 237]; 
+                    data.cell.styles.textColor = [194, 65, 12]; 
                     data.cell.styles.fontStyle = 'bold';
                 }
             }
@@ -225,7 +232,6 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
     now.setHours(0,0,0,0);
     const todayStr = now.toLocaleDateString();
 
-    // Header
     doc.setFillColor(15, 23, 42); 
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
@@ -235,7 +241,6 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
     doc.setFontSize(12);
     doc.text(`AUDITORÍA INTEGRAL DE MANTENIMIENTO PREVENTIVO`, 20, 30);
     
-    // Resumen Superior
     doc.setTextColor(15, 23, 42);
     doc.setFontSize(14);
     doc.text("ESTADO GENERAL DE LA FLOTA", 20, 50);
@@ -249,7 +254,6 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
         styles: { halign: 'center', fontSize: 12, fontStyle: 'bold' }
     });
 
-    // --- TABLA 1: PREVENTIVOS POR HORAS ---
     doc.setTextColor(30, 41, 59);
     doc.setFontSize(12);
     doc.text("1. MANTENIMIENTOS POR CONTADOR (HORAS)", 20, doc.lastAutoTable.finalY + 15);
@@ -289,7 +293,6 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
         }
     });
 
-    // --- TABLA 2: PREVENTIVOS POR CALENDARIO (FECHAS) ---
     if (doc.lastAutoTable.finalY > 200) doc.addPage();
     
     doc.setTextColor(30, 41, 59);
@@ -310,7 +313,7 @@ export const generateMaintenanceReportPDF = (machines: Machine[], summary: any):
             datesData.push([
                 m.companyCode ? `[${m.companyCode}] ${m.name}` : m.name,
                 d.name,
-                todayStr, // Ahora se muestra la FECHA ACTUAL como referencia de horas
+                todayStr, 
                 nextDate ? nextDate.toLocaleDateString() : 'N/A',
                 diffDays <= 0 ? 'PLAZO CUMPLIDO' : `${diffDays} días`,
                 status
