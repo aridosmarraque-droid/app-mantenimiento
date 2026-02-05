@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getAllMachines, getAllOperationLogsByRange } from '../../services/db';
 import { Machine, OperationLog } from '../../types';
@@ -114,6 +113,7 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     }
                     body {
                         background: white !important;
+                        color: black !important;
                     }
                     header, .no-print {
                         display: none !important;
@@ -130,13 +130,39 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         width: 100% !important;
                     }
                     .printable-table {
-                        font-size: 7pt !important;
+                        font-size: 10pt !important;
                         width: 100% !important;
                         border-collapse: collapse !important;
                     }
-                    .printable-table th, .printable-table td {
-                        border: 0.1pt solid #ccc !important;
-                        padding: 2px !important;
+                    .printable-table th {
+                        color: black !important;
+                        border: 0.5pt solid #000 !important;
+                        background: #f8fafc !important;
+                        font-weight: 900 !important;
+                        -webkit-print-color-adjust: exact;
+                    }
+                    .printable-table td {
+                        border: 0.5pt solid #ccc !important;
+                        padding: 4px !important;
+                        color: black !important;
+                    }
+                    /* Día y Cantidades: Doble de tamaño y negro */
+                    .day-cell {
+                        font-size: 14pt !important;
+                        font-weight: 900 !important;
+                        color: black !important;
+                        text-align: center !important;
+                    }
+                    .fuel-cell {
+                        font-size: 14pt !important;
+                        font-weight: 900 !important;
+                        color: black !important;
+                    }
+                    .total-cell {
+                        font-size: 12pt !important;
+                        font-weight: 900 !important;
+                        background: #f1f5f9 !important;
+                        -webkit-print-color-adjust: exact;
                     }
                 }
             `}} />
@@ -192,29 +218,29 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
 
                         <table className="w-full border-collapse printable-table">
                             <thead>
-                                <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-tighter">
-                                    <th className="p-2 border border-slate-700 text-left sticky left-0 bg-slate-900 z-10 w-20">Día</th>
+                                <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-tighter print:bg-slate-100 print:text-black">
+                                    <th className="p-2 border border-slate-700 text-left sticky left-0 bg-slate-900 z-10 w-20 print:bg-slate-100">Día</th>
                                     {consumedMachines.map(m => (
-                                        <th key={m.id} className="p-2 border border-slate-700 text-center min-w-[50px] leading-tight">
+                                        <th key={m.id} className="p-2 border border-slate-700 text-center min-w-[60px] leading-tight">
                                             {m.companyCode ? <div className="text-[7px] opacity-70">{m.companyCode}</div> : null}
-                                            <div className="rotate-0 sm:rotate-0">{m.name}</div>
+                                            <div className="whitespace-normal">{m.name}</div>
                                         </th>
                                     ))}
-                                    <th className="p-2 border border-slate-700 text-center bg-slate-800 w-16">Total Día</th>
+                                    <th className="p-2 border border-slate-700 text-center bg-slate-800 w-20 print:bg-slate-200">Total Día</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-[10px]">
                                 {daysInMonth.map(day => (
                                     <tr key={day} className={`hover:bg-slate-50 ${day % 2 === 0 ? 'bg-slate-50/30' : ''}`}>
-                                        <td className="p-2 border border-slate-200 font-black text-slate-500 sticky left-0 bg-inherit z-10">
+                                        <td className="p-2 border border-slate-200 font-black text-slate-500 sticky left-0 bg-inherit z-10 day-cell">
                                             {day}
                                         </td>
                                         {consumedMachines.map(m => (
-                                            <td key={m.id} className={`p-2 border border-slate-100 text-center font-mono ${grid[day][m.id] > 0 ? 'font-black text-green-700' : 'text-slate-200'}`}>
+                                            <td key={m.id} className={`p-2 border border-slate-100 text-center font-mono fuel-cell ${grid[day][m.id] > 0 ? 'font-black text-green-700' : 'text-slate-200'}`}>
                                                 {grid[day][m.id] > 0 ? grid[day][m.id].toFixed(1) : ''}
                                             </td>
                                         ))}
-                                        <td className="p-2 border border-slate-200 text-center bg-slate-100 font-black text-slate-900">
+                                        <td className="p-2 border border-slate-200 text-center bg-slate-100 font-black text-slate-900 total-cell">
                                             {dayTotals[day] > 0 ? dayTotals[day].toFixed(1) : '-'}
                                         </td>
                                     </tr>
@@ -222,13 +248,13 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                             </tbody>
                             <tfoot className="bg-slate-100 text-[10px] font-black uppercase">
                                 <tr>
-                                    <td className="p-2 border border-slate-300 bg-slate-200 sticky left-0 z-10">Total Maq.</td>
+                                    <td className="p-2 border border-slate-300 bg-slate-200 sticky left-0 z-10 day-cell">Total</td>
                                     {consumedMachines.map(m => (
-                                        <td key={m.id} className="p-2 border border-slate-300 text-center text-blue-700 bg-blue-50/30">
+                                        <td key={m.id} className="p-2 border border-slate-300 text-center text-blue-700 bg-blue-50/30 fuel-cell">
                                             {machineTotals[m.id].toFixed(1)}
                                         </td>
                                     ))}
-                                    <td className="p-2 border border-slate-400 text-center bg-slate-900 text-white text-xs">
+                                    <td className="p-2 border border-slate-400 text-center bg-slate-900 text-white text-xs print:bg-slate-800 print:text-black total-cell">
                                         {grandTotal.toFixed(1)}
                                     </td>
                                 </tr>
