@@ -109,11 +109,12 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 @media print {
                     @page {
                         size: A3 landscape;
-                        margin: 1cm;
+                        margin: 0.8cm;
                     }
                     body {
                         background: white !important;
                         color: black !important;
+                        -webkit-print-color-adjust: exact;
                     }
                     header, .no-print {
                         display: none !important;
@@ -128,41 +129,55 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         border: none !important;
                         padding: 0 !important;
                         width: 100% !important;
+                        overflow: visible !important;
                     }
                     .printable-table {
-                        font-size: 10pt !important;
+                        font-size: 8pt !important;
                         width: 100% !important;
                         border-collapse: collapse !important;
+                        table-layout: auto !important;
                     }
                     .printable-table th {
                         color: black !important;
                         border: 0.5pt solid #000 !important;
-                        background: #f8fafc !important;
-                        font-weight: 900 !important;
-                        -webkit-print-color-adjust: exact;
+                        background: #f1f5f9 !important;
+                        font-weight: 800 !important;
+                        padding: 2px !important;
                     }
                     .printable-table td {
-                        border: 0.5pt solid #ccc !important;
-                        padding: 4px !important;
+                        border: 0.5pt solid #999 !important;
+                        padding: 2px 4px !important;
                         color: black !important;
                     }
-                    /* Día y Cantidades: Doble de tamaño y negro */
+                    /* Día y Cantidades: Ajustados para A3 (menos que 14pt anterior) */
                     .day-cell {
-                        font-size: 14pt !important;
-                        font-weight: 900 !important;
+                        font-size: 11pt !important;
+                        font-weight: 800 !important;
                         color: black !important;
                         text-align: center !important;
+                        background: #f8fafc !important;
                     }
                     .fuel-cell {
-                        font-size: 14pt !important;
-                        font-weight: 900 !important;
+                        font-size: 11pt !important;
+                        font-weight: 700 !important;
                         color: black !important;
                     }
                     .total-cell {
-                        font-size: 12pt !important;
-                        font-weight: 900 !important;
+                        font-size: 10pt !important;
+                        font-weight: 800 !important;
                         background: #f1f5f9 !important;
-                        -webkit-print-color-adjust: exact;
+                        color: black !important;
+                    }
+                    .tfoot-cell {
+                        font-size: 11pt !important;
+                        font-weight: 800 !important;
+                        background: #e2e8f0 !important;
+                        border: 0.5pt solid #000 !important;
+                    }
+                    .grand-total-print {
+                        font-size: 18pt !important;
+                        font-weight: 900 !important;
+                        margin-top: 10px;
                     }
                 }
             `}} />
@@ -210,23 +225,23 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         <p className="font-black uppercase text-xs">No hay datos de consumo en este mes</p>
                     </div>
                 ) : (
-                    <div className="min-w-max">
-                        <div className="mb-4 hidden print:block border-b pb-4">
-                            <h2 className="text-2xl font-black text-slate-900 uppercase">ARIDOS MARRAQUE - Reparto Mensual de Gasoil (Litros)</h2>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Periodo: {new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
+                    <div className="min-w-max print:min-w-0">
+                        <div className="mb-4 hidden print:block border-b pb-2">
+                            <h2 className="text-xl font-black text-slate-900 uppercase">ARIDOS MARRAQUE - Reparto Mensual de Gasoil (Litros)</h2>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Periodo: {new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
                         </div>
 
                         <table className="w-full border-collapse printable-table">
                             <thead>
                                 <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-tighter print:bg-slate-100 print:text-black">
-                                    <th className="p-2 border border-slate-700 text-left sticky left-0 bg-slate-900 z-10 w-20 print:bg-slate-100">Día</th>
+                                    <th className="p-2 border border-slate-700 text-left sticky left-0 bg-slate-900 z-10 w-12 print:bg-slate-100 print:w-10">Día</th>
                                     {consumedMachines.map(m => (
-                                        <th key={m.id} className="p-2 border border-slate-700 text-center min-w-[60px] leading-tight">
+                                        <th key={m.id} className="p-1 border border-slate-700 text-center min-w-[50px] leading-tight">
                                             {m.companyCode ? <div className="text-[7px] opacity-70">{m.companyCode}</div> : null}
-                                            <div className="whitespace-normal">{m.name}</div>
+                                            <div className="whitespace-normal break-words max-w-[80px]">{m.name}</div>
                                         </th>
                                     ))}
-                                    <th className="p-2 border border-slate-700 text-center bg-slate-800 w-20 print:bg-slate-200">Total Día</th>
+                                    <th className="p-2 border border-slate-700 text-center bg-slate-800 w-16 print:bg-slate-200">TOTAL</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-[10px]">
@@ -236,7 +251,7 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                                             {day}
                                         </td>
                                         {consumedMachines.map(m => (
-                                            <td key={m.id} className={`p-2 border border-slate-100 text-center font-mono fuel-cell ${grid[day][m.id] > 0 ? 'font-black text-green-700' : 'text-slate-200'}`}>
+                                            <td key={m.id} className={`p-2 border border-slate-100 text-center font-mono fuel-cell ${grid[day][m.id] > 0 ? 'font-black text-green-700 print:text-black' : 'text-slate-200 print:text-transparent'}`}>
                                                 {grid[day][m.id] > 0 ? grid[day][m.id].toFixed(1) : ''}
                                             </td>
                                         ))}
@@ -250,21 +265,24 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                                 <tr>
                                     <td className="p-2 border border-slate-300 bg-slate-200 sticky left-0 z-10 day-cell">Total</td>
                                     {consumedMachines.map(m => (
-                                        <td key={m.id} className="p-2 border border-slate-300 text-center text-blue-700 bg-blue-50/30 fuel-cell">
+                                        <td key={m.id} className="p-2 border border-slate-300 text-center text-blue-700 bg-blue-50/30 fuel-cell tfoot-cell print:text-black">
                                             {machineTotals[m.id].toFixed(1)}
                                         </td>
                                     ))}
-                                    <td className="p-2 border border-slate-400 text-center bg-slate-900 text-white text-xs print:bg-slate-800 print:text-black total-cell">
+                                    <td className="p-2 border border-slate-400 text-center bg-slate-900 text-white text-xs print:bg-slate-800 print:text-black total-cell tfoot-cell">
                                         {grandTotal.toFixed(1)}
                                     </td>
                                 </tr>
                             </tfoot>
                         </table>
 
-                        <div className="mt-6 flex flex-col sm:flex-row justify-between items-start gap-4 print:mt-10">
+                        <div className="mt-4 flex flex-col sm:flex-row justify-between items-start gap-4">
                             <div className="text-right flex flex-col items-end w-full">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Litros Mensual</span>
-                                <span className="text-4xl font-black text-slate-900 leading-none">{grandTotal.toFixed(1)} <small className="text-sm">Litros</small></span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest no-print">Total Litros Mensual</span>
+                                <span className="text-4xl font-black text-slate-900 leading-none no-print">{grandTotal.toFixed(1)} <small className="text-sm">Litros</small></span>
+                                <div className="hidden print:block grand-total-print text-slate-900">
+                                    TOTAL MES: {grandTotal.toFixed(1)} Litros
+                                </div>
                             </div>
                         </div>
                     </div>
