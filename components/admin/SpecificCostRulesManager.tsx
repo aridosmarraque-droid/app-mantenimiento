@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
-import { getSpecificCostRules, createSpecificCostRule, deleteSpecificCostRule, getAllMachines, getCostCenters } from '../../services/db';
+import { getSpecificCostRules, createSpecificCostRule, deleteSpecificCostRule, updateSpecificCostRule, getAllMachines, getCostCenters } from '../../services/db';
 import { SpecificCostRule, Machine, CostCenter } from '../../types';
-import { ArrowLeft, Save, Trash2, Plus, Percent, Factory, Truck, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Plus, Percent, Factory, Truck, Loader2, Edit2, X } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -15,6 +14,7 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
 
     // Form State
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [sourceMachineId, setSourceMachineId] = useState('');
     const [targetCenterId, setTargetCenterId] = useState('');
     const [targetMachineId, setTargetMachineId] = useState('');
@@ -42,12 +42,20 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
         }
     };
 
-    const handleAdd = async (e: React.FormEvent) => {
+    const resetForm = () => {
+        setEditingId(null);
+        setSourceMachineId('');
+        setTargetCenterId('');
+        setTargetMachineId('');
+        setPercentage('');
+    };
+
+    const handleAddOrUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!sourceMachineId || !targetCenterId || !percentage) return;
 
         // Validar que el total para esa máquina no pase de 100
-        const machineRules = rules.filter(r => r.machineOriginId === sourceMachineId);
+        const machineRules = rules.filter(r => r.machineOriginId === sourceMachineId && r.id !== editingId);
         const currentTotal = machineRules.reduce((acc, r) => acc + r.percentage, 0);
         
         if (currentTotal + Number(percentage) > 100) {
@@ -56,17 +64,35 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
         }
 
         try {
-            await createSpecificCostRule({
+            const payload = {
                 machineOriginId: sourceMachineId,
                 targetCenterId,
                 targetMachineId: targetMachineId || undefined,
                 percentage: Number(percentage)
-            });
-            setPercentage('');
+            };
+
+            if (editingId) {
+                await updateSpecificCostRule(editingId, payload);
+                alert("Regla actualizada.");
+            } else {
+                await createSpecificCostRule(payload);
+                alert("Regla creada.");
+            }
+            
+            resetForm();
             loadData();
         } catch (e) {
             alert("Error al guardar regla.");
         }
+    };
+
+    const handleEdit = (rule: SpecificCostRule) => {
+        setEditingId(rule.id);
+        setSourceMachineId(rule.machineOriginId);
+        setTargetCenterId(rule.targetCenterId);
+        setTargetMachineId(rule.targetMachineId || '');
+        setPercentage(rule.percentage);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleDelete = async (id: string) => {
@@ -94,10 +120,18 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
                 </div>
             </div>
 
-            <form onSubmit={handleAdd} className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1 space-y-4">
-                <h4 className="font-black text-slate-700 uppercase text-xs tracking-widest mb-2 flex items-center gap-2">
-                    <Plus size={16} className="text-green-600"/> Crear Nueva Regla
-                </h4>
+            <form onSubmit={handleAddOrUpdate} className={`p-6 rounded-2xl shadow-md border-2 mx-1 space-y-4 transition-all ${editingId ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100'}`}>
+                <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-black text-slate-700 uppercase text-xs tracking-widest flex items-center gap-2">
+                        {editingId ? <Edit2 size={16} className="text-indigo-600"/> : <Plus size={16} className="text-green-600"/>}
+                        {editingId ? 'Modificando Regla' : 'Crear Nueva Regla'}
+                    </h4>
+                    {editingId && (
+                        <button type="button" onClick={resetForm} className="text-[10px] font-black text-slate-400 hover:text-slate-600 flex items-center gap-1 uppercase">
+                            <X size={14}/> Cancelar
+                        </button>
+                    )}
+                </div>
                 
                 <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">1. Máquina que consume (Origen)</label>
@@ -118,7 +152,7 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">3. Máquina Destino (Opcional)</label>
                         <select value={targetMachineId} onChange={e => setTargetMachineId(e.target.value)} className="w-full p-3 border rounded-xl font-bold bg-slate-50">
-                            <option value="">-- General / Sin asignar --</option>
+                            <option value="">-- Por defecto: Código Origen --</option>
                             {machines.filter(m => m.costCenterId === targetCenterId).map(m => (
                                 <option key={m.id} value={m.id}>{m.name}</option>
                             ))}
@@ -134,15 +168,15 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
                     </div>
                 </div>
 
-                <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all">
-                    <Save size={18}/> Guardar Regla
+                <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg">
+                    <Save size={18}/> {editingId ? 'Guardar Cambios' : 'Registrar Regla'}
                 </button>
             </form>
 
             <div className="space-y-3 px-1">
                 <h4 className="font-black text-slate-400 uppercase text-[10px] tracking-widest px-2">Configuraciones Existentes</h4>
                 {rules.map(rule => (
-                    <div key={rule.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group">
+                    <div key={rule.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group hover:border-indigo-100 transition-all">
                         <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                                 <span className="font-black text-slate-800 text-xs uppercase">{getMachineName(rule.machineOriginId)}</span>
@@ -150,13 +184,18 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
                             </div>
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold uppercase tracking-tight">
                                 <span className="text-blue-500">Imputa a:</span> {getCenterName(rule.targetCenterId)} 
-                                {rule.targetMachineId && <span className="text-slate-300">/</span>}
-                                {rule.targetMachineId && getMachineName(rule.targetMachineId)}
+                                <span className="text-slate-300">/</span>
+                                {rule.targetMachineId ? getMachineName(rule.targetMachineId) : <span className="italic text-slate-300">Auto (Código Origen)</span>}
                             </div>
                         </div>
-                        <button onClick={() => handleDelete(rule.id)} className="p-3 text-red-400 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100">
-                            <Trash2 size={20}/>
-                        </button>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={() => handleEdit(rule)} className="p-3 text-blue-600 hover:bg-blue-50 rounded-xl">
+                                <Edit2 size={20}/>
+                            </button>
+                            <button onClick={() => handleDelete(rule.id)} className="p-3 text-red-400 hover:bg-red-50 rounded-xl">
+                                <Trash2 size={20}/>
+                            </button>
+                        </div>
                     </div>
                 ))}
                 {rules.length === 0 && (
@@ -165,4 +204,3 @@ export const SpecificCostRulesManager: React.FC<Props> = ({ onBack }) => {
             </div>
         </div>
     );
-};
