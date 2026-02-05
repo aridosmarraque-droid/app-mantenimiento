@@ -285,11 +285,15 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         nombre: m.name,
         codigo_empresa: m.companyCode,
         centro_id: m.costCenterId,
+        // FIX: subcentro_id mapping corrected to subCenterId
         subcentro_id: m.subCenterId,
         responsable_id: m.responsibleWorkerId,
         horas_actuales: m.currentHours,
+        // FIX: requiere_horas mapping corrected to requiresHours
         requiere_horas: m.requiresHours,
+        // FIX: gastos_admin mapping corrected to adminExpenses
         gastos_admin: m.adminExpenses,
+        // FIX: gastos_transporte mapping corrected to transportExpenses
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
         activo: m.activo,
@@ -846,7 +850,7 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
 
 export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('mant_reglas_costes').select('*');
+    const { data, error } = await supabase.from('mant_costes_especificos').select('*');
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -859,7 +863,7 @@ export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
 
 export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('mant_reglas_costes').insert({
+    const { error } = await supabase.from('mant_costes_especificos').insert({
         maquina_origen_id: rule.machineOriginId,
         centro_destino_id: rule.targetCenterId,
         maquina_destino_id: rule.targetMachineId,
@@ -870,7 +874,7 @@ export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>)
 
 export const deleteSpecificCostRule = async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('mant_reglas_costes').delete().eq('id', id);
+    const { error } = await supabase.from('mant_costes_especificos').delete().eq('id', id);
     if (error) throw error;
 };
 
