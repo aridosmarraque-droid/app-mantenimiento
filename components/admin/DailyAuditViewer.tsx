@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     getDailyAuditLogs, 
@@ -12,11 +13,14 @@ import {
     updatePersonalReport,
     deletePersonalReport
 } from '../../services/db';
+import { sendWhatsAppMessage } from '../../services/whatsapp';
 import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvider, CPDailyReport, CRDailyReport } from '../../types';
+// Import missing 'Info' icon
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, AlertCircle, Mountain, Waves, 
-    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp, Droplets
+    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp, Droplets,
+    MessageSquare, Info
 } from 'lucide-react';
 
 interface Props {
@@ -41,6 +45,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
     const [editingOp, setEditingOp] = useState<OperationLog | null>(null);
     const [editingPersonal, setEditingPersonal] = useState<PersonalReport | null>(null);
     const [savingEdit, setSavingEdit] = useState(false);
+    const [sendingWhatsappWorkerId, setSendingWhatsappWorkerId] = useState<string | null>(null);
 
     useEffect(() => {
         const loadMasters = async () => {
@@ -172,6 +177,24 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             fetchAudit();
         } catch (e) { alert("Error al eliminar el parte."); }
         finally { setSavingEdit(false); }
+    };
+
+    const handleWhatsAppReminder = async (worker: Worker) => {
+        if (!worker.phone) {
+            alert("Este trabajador no tiene teléfono registrado.");
+            return;
+        }
+        setSendingWhatsappWorkerId(worker.id);
+        const message = `${worker.name} no ha llegado el parte de trabajo personal, revisalo por favor.`;
+        try {
+            const res = await sendWhatsAppMessage(worker.phone, message);
+            if (res.success) alert(`Recordatorio enviado a ${worker.name}`);
+            else alert("Error al enviar WhatsApp: " + res.error);
+        } catch (e) {
+            alert("Error de conexión al enviar recordatorio.");
+        } finally {
+            setSendingWhatsappWorkerId(null);
+        }
     };
 
     const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
@@ -309,16 +332,52 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 return (
                                     <div key={log.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm group">
                                         <div className="flex justify-between items-start">
-                                            <div className="flex gap-3">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${conf.color}`}>
+                                            <div className="flex gap-3 w-full">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${conf.color}`}>
                                                     <Icon size={20} />
                                                 </div>
-                                                <div>
+                                                <div className="flex-1">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-black text-slate-800 text-xs">{getMachineName(log.machineId)}</span>
                                                         <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${conf.color} bg-opacity-20`}>{conf.label}</span>
                                                     </div>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(log.workerId)} • {log.hoursAtExecution}h</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">{getWorkerName(log.workerId)} • {log.hoursAtExecution}h</p>
+                                                    
+                                                    {/* DETALLES DINÁMICOS POR TIPO */}
+                                                    {log.type === 'REFUELING' && log.fuelLitres && (
+                                                        <div className="flex items-center gap-1.5 text-green-700 font-black text-xs bg-green-50 px-2 py-1 rounded-lg w-fit">
+                                                            <Fuel size={12}/> {log.fuelLitres} Litros
+                                                        </div>
+                                                    )}
+                                                    {log.type === 'BREAKDOWN' && (
+                                                        <div className="p-2 bg-red-50 border border-red-100 rounded-xl text-[10px] space-y-1.5">
+                                                            <div>
+                                                                <span className="font-black text-red-800 uppercase tracking-tighter block">Avería Detectada</span>
+                                                                <p className="text-slate-700 font-medium">{log.breakdownCause}</p>
+                                                            </div>
+                                                            <div className="border-t border-red-100 pt-1">
+                                                                <span className="font-black text-slate-800 uppercase tracking-tighter block">Solución Aplicada</span>
+                                                                <p className="text-slate-600 italic">{log.breakdownSolution}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {(log.type === 'MAINTENANCE' || log.type === 'SCHEDULED') && (
+                                                        <div className="p-2 bg-amber-50 border border-amber-100 rounded-xl text-[10px]">
+                                                            <p className="font-bold text-slate-800 mb-1">{log.description || 'Sin descripción'}</p>
+                                                            {log.materials && (
+                                                                <p className="text-slate-500 italic mt-1 pt-1 border-t border-amber-100/50 flex items-start gap-1">
+                                                                    <Info size={10} className="shrink-0 mt-0.5"/> {log.materials}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {log.type === 'LEVELS' && (
+                                                        <div className="grid grid-cols-3 gap-1 text-[9px] font-bold">
+                                                            {log.motorOil !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Motor: {log.motorOil}L</span>}
+                                                            {log.hydraulicOil !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Hidr: {log.hydraulicOil}L</span>}
+                                                            {log.coolant !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Refrig: {log.coolant}L</span>}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             <button onClick={() => setEditingOp(log)} className="p-2 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all">
@@ -355,12 +414,31 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                                     <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Plan: {entry.worker.expectedHours || 8}h</p>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <div className={`flex items-center gap-1.5 justify-end font-black ${status.color}`}>
-                                                    <StatusIcon size={16} />
-                                                    <span className="text-lg">{entry.totalHours.toFixed(1)}h</span>
+                                            
+                                            <div className="text-right flex items-center gap-3">
+                                                {/* BOTÓN WHATSAPP PARA RECORDATORIO */}
+                                                {entry.totalHours === 0 && entry.worker.phone && (
+                                                    <button 
+                                                        onClick={() => handleWhatsAppReminder(entry.worker)}
+                                                        disabled={sendingWhatsappWorkerId === entry.worker.id}
+                                                        className="p-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all shadow-md shadow-green-100 disabled:opacity-50 active:scale-90"
+                                                        title="Enviar recordatorio WhatsApp"
+                                                    >
+                                                        {sendingWhatsappWorkerId === entry.worker.id ? (
+                                                            <Loader2 size={16} className="animate-spin" />
+                                                        ) : (
+                                                            <MessageSquare size={16} fill="currentColor" />
+                                                        )}
+                                                    </button>
+                                                )}
+                                                
+                                                <div>
+                                                    <div className={`flex items-center gap-1.5 justify-end font-black ${status.color}`}>
+                                                        <StatusIcon size={16} />
+                                                        <span className="text-lg">{entry.totalHours.toFixed(1)}h</span>
+                                                    </div>
+                                                    <p className={`text-[8px] font-black uppercase tracking-widest ${status.color} opacity-70`}>{status.label}</p>
                                                 </div>
-                                                <p className={`text-[8px] font-black uppercase tracking-widest ${status.color} opacity-70`}>{status.label}</p>
                                             </div>
                                         </div>
                                         
@@ -394,7 +472,8 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                     </div>
                 </div>
             )}
-
+            
+            {/* ... modales existentes sin cambios ... */}
             {/* MODAL DE EDICIÓN TÉCNICA */}
             {editingOp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -499,7 +578,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
             {/* MODAL DE EDICIÓN PERSONAL */}
             {editingPersonal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+                    <div className="bg-white w-full max-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
                         <div className="bg-green-600 text-white p-5 flex justify-between items-center">
                             <h4 className="font-bold flex items-center gap-2"><Clock size={20}/> Corregir Parte de Trabajo</h4>
                             <button onClick={() => setEditingPersonal(null)} className="p-1 hover:bg-green-500 rounded-lg transition-colors"><X size={24}/></button>
