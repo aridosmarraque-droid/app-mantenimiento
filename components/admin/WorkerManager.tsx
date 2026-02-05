@@ -18,7 +18,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
     const [dni, setDni] = useState('');
     const [phone, setPhone] = useState('');
     const [role, setRole] = useState<'worker' | 'admin' | 'cp' | 'cr'>('worker');
-    const [active, setActive] = useState(true);
+    // Fix: state renamed to 'activo' to match Worker interface
+    const [activo, setActivo] = useState(true);
     const [expectedHours, setExpectedHours] = useState<number>(8);
     const [requiresReport, setRequiresReport] = useState<boolean>(true);
 
@@ -44,7 +45,7 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         setDni('');
         setPhone('');
         setRole('worker');
-        setActive(true);
+        setActivo(true);
         setExpectedHours(8);
         setRequiresReport(true);
     };
@@ -55,7 +56,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
         setDni(w.dni);
         setPhone(w.phone || '');
         setRole(w.role as any);
-        setActive(w.active ?? true);
+        // Fix: using w.activo instead of w.active
+        setActivo(w.activo ?? true);
         setExpectedHours(w.expectedHours || 0);
         setRequiresReport(w.requiresReport ?? true);
     };
@@ -69,7 +71,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                 dni,
                 phone,
                 role,
-                active,
+                // Fix: property named 'activo' to match Omit<Worker, 'id'>
+                activo,
                 expectedHours,
                 requiresReport,
                 positionIds: []
@@ -145,8 +148,9 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-6 pt-2 border-t mt-4 pt-4">
-                        <button type="button" onClick={() => setActive(!active)} className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                            {active ? <ToggleRight className="text-green-600 w-8 h-8" /> : <ToggleLeft className="text-slate-400 w-8 h-8" />}
+                        <button type="button" onClick={() => setActivo(!activo)} className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                            {/* Fix: using 'activo' state */}
+                            {activo ? <ToggleRight className="text-green-600 w-8 h-8" /> : <ToggleLeft className="text-slate-400 w-8 h-8" />}
                             Trabajador en Activo
                         </button>
 
@@ -171,7 +175,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                 </div>
                 <div className="divide-y max-h-[60vh] overflow-y-auto">
                     {workers.map(w => (
-                        <div key={w.id} className={`p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-colors ${w.active ? 'bg-white' : 'bg-red-50 opacity-60'}`}>
+                        // Fix: changed w.active to w.activo
+                        <div key={w.id} className={`p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-colors ${w.activo ? 'bg-white' : 'bg-red-50 opacity-60'}`}>
                             <div className="flex items-center gap-3 flex-1">
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm border ${
                                     w.role === 'admin' ? 'bg-red-100 text-red-600 border-red-200' : 
@@ -184,8 +189,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                 <div className="min-w-0">
                                     <div className="font-black text-slate-800 flex items-center gap-2 truncate">
                                         {w.name}
-                                        {!w.active && <span className="text-[9px] bg-red-600 text-white px-1.5 rounded uppercase font-black">Baja</span>}
-                                        {/* Fix: Wrap FileText in a span because Lucide icons do not support the title prop directly for tooltips. */}
+                                        {/* Fix: changed w.active to w.activo */}
+                                        {!w.activo && <span className="text-[9px] bg-red-600 text-white px-1.5 rounded uppercase font-black">Baja</span>}
                                         {w.requiresReport && <span title="Requiere Parte"><FileText size={12} className="text-blue-500" /></span>}
                                     </div>
                                     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
