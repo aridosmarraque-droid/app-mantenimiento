@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Worker, Machine, CostCenter, OperationType, OperationLog, 
+  CPimport React, { useState, useEffect } from 'react';
+import { 
+  Worker, Machine, CostCenter, OperationType, OperationLog, 
   CPDailyReport, PersonalReport, CRDailyReport 
 } from './types';
 
@@ -76,7 +79,6 @@ enum ViewState {
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
-  // Admin Views
   ADMIN_CREATE_CENTER,
   ADMIN_MANAGE_SUBCENTERS,
   ADMIN_CREATE_MACHINE,
@@ -159,8 +161,6 @@ const App: React.FC = () => {
   };
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
-
-  // --- HANDLERS DE PERSISTENCIA ---
 
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
     if (isSubmitting) return;
