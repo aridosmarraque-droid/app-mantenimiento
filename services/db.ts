@@ -64,7 +64,7 @@ const mapLogFromDb = (dbLog: any): OperationLog => {
         breakdownSolution: dbLog.solucion_averia,
         repairerId: dbLog.reparador_id,
         maintenanceType: dbLog.tipo_mantenimiento,
-        description: dbLog.descripcion || dbLog.description, // Soporte para ambos nombres de columna
+        description: dbLog.descripcion || dbLog.description, 
         materials: dbLog.materiales,
         maintenanceDefId: dbLog.mantenimiento_def_id,
         fuelLitres: dbLog.litros_combustible != null ? Number(dbLog.litros_combustible) : undefined
@@ -658,8 +658,14 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
+    
+    // Optimizamos la lectura realizando un JOIN SQL con máquinas y centros para evitar IDs desconocidos
     const { data, error } = await supabase.from('partes_trabajo')
-        .select('*')
+        .select(`
+            *,
+            mant_maquinas(nombre, codigo_empresa),
+            mant_centros(nombre)
+        `)
         .eq('trabajador_id', workerId)
         .order('fecha', { ascending: false })
         .limit(20);
@@ -675,7 +681,10 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         workerId: r.trabajador_id,
         hours: Number(r.horas || 0),
         costCenterId: r.centro_id,
-        machineId: r.maquina_id
+        machineId: r.maquina_id,
+        // Construimos el nombre enriquecido directamente desde el join de la base de datos
+        machineName: r.mant_maquinas ? `${r.mant_maquinas.codigo_empresa ? `[${r.mant_maquinas.codigo_empresa}] ` : ''}${r.mant_maquinas.nombre}` : 'Máquina desconocida',
+        costCenterName: r.mant_centros ? r.mant_centros.nombre : 'Centro desconocido'
     }));
 };
 
