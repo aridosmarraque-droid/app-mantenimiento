@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
+  Woimport React, { useState, useEffect } from 'react';
+import { 
   Worker, Machine, CostCenter, OperationType, OperationLog, 
   CPDailyReport, PersonalReport, CRDailyReport 
 } from './types';
@@ -21,7 +23,7 @@ import {
   SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, 
   Database, Users, Wrench, Droplet, MessageSquare, Loader2, 
   FileText, BarChart3, CalendarClock, Coins, Clock, Calculator, 
-  Plus, Search, ArrowLeft, Printer, Play
+  Plus, Search, ArrowLeft, Printer, Play, ShieldAlert
 } from 'lucide-react';
 
 // Componentes Admin
@@ -44,16 +46,22 @@ import { CostDistributionReport } from './components/admin/CostDistributionRepor
 import { WorkerHoursDistributionReport } from './components/admin/WorkerHoursDistributionReport';
 import { SpecificCostRulesManager } from './components/admin/SpecificCostRulesManager';
 import { FuelCostDistributionReport } from './components/admin/FuelCostDistributionReport';
+import { DocumentManager } from './components/admin/DocumentManager';
 
-// Componentes Operario / Especialistas
+// --- ADDED MISSING IMPORTS ---
+// Componentes Generales
 import { Login } from './components/Login';
 import { MachineSelector } from './components/MachineSelector';
 import { MainMenu } from './components/MainMenu';
+
+// Formularios de Mantenimiento
 import { LevelsForm } from './components/forms/LevelsForm';
 import { BreakdownForm } from './components/forms/BreakdownForm';
 import { MaintenanceForm } from './components/forms/MaintenanceForm';
-import { RefuelingForm } from './components/forms/RefuelingForm';
 import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
+import { RefuelingForm } from './components/forms/RefuelingForm';
+
+// Componentes por Rol
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { CRSelection } from './components/cr/CRSelection';
@@ -92,7 +100,8 @@ enum ViewState {
   ADMIN_COST_DISTRIBUTION,
   ADMIN_WORKER_HOURS_DISTRIBUTION,
   ADMIN_SPECIFIC_COSTS,
-  ADMIN_FUEL_RATIO_DISTRIBUTION
+  ADMIN_FUEL_RATIO_DISTRIBUTION,
+  ADMIN_DOCUMENTS
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'costes' | 'informes' | 'config' | null;
@@ -348,6 +357,7 @@ const App: React.FC = () => {
               </button>
               {openCategory === 'informes' && (
                 <div className="bg-slate-50 divide-y divide-slate-100">
+                  <button onClick={() => { setViewState(ViewState.ADMIN_DOCUMENTS); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-blue-700 hover:bg-white flex items-center gap-2"><ShieldAlert size={14} /> Gestión Documental PRL</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_MAINTENANCE_REPORT); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Mantenimientos Programados</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_PRODUCTION_DASHBOARD); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Dashboards Rendimiento</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_DAILY_AUDIT); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría de Partes</button>
@@ -472,6 +482,7 @@ const App: React.FC = () => {
         {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => setViewState(ViewState.CONTEXT_SELECTION)}/>}
         
         {/* Auditorías e Informes */}
+        {viewState === ViewState.ADMIN_DOCUMENTS && <DocumentManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
