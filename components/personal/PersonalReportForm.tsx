@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { PersonalReport, CostCenter, Machine } from '../../types';
 import { getCostCenters, getAllMachines, getPersonalReports } from '../../services/db';
@@ -34,18 +33,33 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
     const loadInitialData = async () => {
         setLoadingData(true);
         try {
+            // Traemos TODAS las máquinas (incluidas inactivas) para resolver nombres en el historial
             const [centersData, historyData, machinesData] = await Promise.all([
                 getCostCenters(),
                 getPersonalReports(workerId),
-                getAllMachines(true) // Solo máquinas activas
+                getAllMachines(false) 
             ]);
             
-            // FILTRO: Solo mostrar centros marcados como seleccionables para partes
+            console.log("[PersonalReport] Datos maestros cargados:", { centers: centersData.length, machines: machinesData.length });
+            console.log("[PersonalReport] Historial crudo:", historyData);
+
+            // FILTRO: Solo mostrar centros marcados como seleccionables para nuevos partes
             setCenters(centersData.filter(c => c.selectableForReports !== false));
-            setHistory(historyData);
             
-            // Filtrar y Ordenar máquinas seleccionables
-            const selectable = machinesData.filter(m => m.selectableForReports === true);
+            // ENRIQUECIMIENTO: Cruzamos el historial con los maestros para obtener nombres
+            const enrichedHistory = historyData.map(h => {
+                const machine = machinesData.find(m => m.id === h.machineId);
+                const center = centersData.find(c => c.id === h.costCenterId);
+                return {
+                    ...h,
+                    machineName: machine ? `${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}` : undefined,
+                    costCenterName: center ? center.name : undefined
+                };
+            });
+            setHistory(enrichedHistory);
+            
+            // Filtrar máquinas para el selector (solo activas y marcadas como seleccionables)
+            const selectable = machinesData.filter(m => m.active !== false && m.selectableForReports === true);
             selectable.sort((a, b) => {
                  const codeA = a.companyCode || '';
                  const codeB = b.companyCode || '';
@@ -57,7 +71,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             setAllSelectableMachines(selectable);
             
         } catch (error) {
-            console.error(error);
+            console.error("[PersonalReport] Error al cargar datos:", error);
         } finally {
             setLoadingData(false);
         }
@@ -65,14 +79,14 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isSaving) return; // Evitar re-entrada
+        if (isSaving) return; 
         
         if (!selectedCenterId || !selectedMachineId || !hours) {
             alert("Por favor rellena todos los campos.");
             return;
         }
 
-        setIsSaving(true); // Bloqueo de UI inmediato
+        setIsSaving(true);
         onSubmit({
             date: new Date(date),
             workerId,
@@ -181,10 +195,13 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                                     <span className="font-bold text-slate-700">{item.date.toLocaleDateString()}</span>
                                     <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">{item.hours}h</span>
                                 </div>
-                                <div className="text-slate-600">{item.machineName || 'Máquina desconocida'}</div>
-                                <div className="text-xs text-slate-400">{item.costCenterName}</div>
+                                <div className="text-slate-600 font-bold">{item.machineName || 'Máquina desconocida'}</div>
+                                <div className="text-xs text-slate-400 uppercase font-bold">{item.costCenterName || 'Centro desconocido'}</div>
                             </div>
                         ))}
+                        {history.length === 0 && (
+                            <p className="text-center py-4 text-slate-400 text-xs italic">No hay registros recientes.</p>
+                        )}
                     </div>
                 </div>
             </div>
