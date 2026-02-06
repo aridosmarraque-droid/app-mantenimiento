@@ -432,6 +432,8 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
 
     // --- REINICIO DE CICLO PARA MANTENIMIENTOS PROGRAMADOS ---
     if (log.maintenanceDefId) {
+        console.log(`[DEBUG] Iniciando actualización de mantenimiento programado ID: ${log.maintenanceDefId}`);
+        
         const updateData: any = {
             ultimas_horas_realizadas: log.hoursAtExecution,
             pendiente: false,
@@ -440,20 +442,34 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
             ultima_fecha: toLocalDateString(log.date)
         };
 
+        console.log(`[DEBUG] Datos de actualización preparados:`, updateData);
+
         // Si es por fecha, calcular el próximo vencimiento aproximado si hay intervalo de meses
-        const { data: defData } = await supabase
+        const { data: defData, error: fetchError } = await supabase
             .from('mant_mantenimientos_def')
             .select('tipo_programacion, intervalo_meses')
             .eq('id', log.maintenanceDefId)
             .single();
         
-        if (defData && defData.tipo_programacion === 'DATE' && defData.intervalo_meses) {
+        if (fetchError) {
+            console.error(`[DEBUG] Error al recuperar definición de mantenimiento:`, fetchError);
+        } else if (defData && defData.tipo_programacion === 'DATE' && defData.intervalo_meses) {
             const nextDate = new Date(log.date);
             nextDate.setMonth(nextDate.getMonth() + defData.intervalo_meses);
             updateData.proxima_fecha = toLocalDateString(nextDate);
+            console.log(`[DEBUG] Recalculada próxima fecha: ${updateData.proxima_fecha}`);
         }
 
-        await supabase.from('mant_mantenimientos_def').update(updateData).eq('id', log.maintenanceDefId);
+        const { error: updateError } = await supabase
+            .from('mant_mantenimientos_def')
+            .update(updateData)
+            .eq('id', log.maintenanceDefId);
+
+        if (updateError) {
+            console.error(`[DEBUG] ERROR AL ACTUALIZAR mant_mantenimientos_def:`, updateError);
+        } else {
+            console.log(`[DEBUG] Tabla mant_mantenimientos_def actualizada correctamente para ID: ${log.maintenanceDefId}`);
+        }
     }
 
     if (log.hoursAtExecution) {
