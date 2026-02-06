@@ -566,7 +566,7 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         washingEnd: Number(r.lavado_fin || 0),
         triturationStart: Number(r.trituration_inicio || 0),
         triturationEnd: Number(r.trituration_fin || 0),
-        comments: r.comentarios
+        comments: r.comments
     };
 };
 
@@ -589,7 +589,11 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
 
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await queryReports('cr_partes_diarios', start, end);
+    const { data, error } = await supabase.from('cr_partes_diarios')
+        .select('*')
+        .gte('fecha', toLocalDateString(start))
+        .lte('fecha', toLocalDateString(end))
+        .order('fecha');
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -603,30 +607,11 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
     }));
 };
 
-// Helper genérico para evitar duplicación
-const queryReports = async (table: string, start: Date, end: Date) => {
-    return supabase.from(table)
-        .select('*')
-        .gte('fecha', toLocalDateString(start))
-        .lte('fecha', toLocalDateString(end))
-        .order('fecha');
-};
-
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
     if (!isConfigured) return mock.getCPWeeklyPlan(mondayDate);
-    console.log(`[DB] Consultando plan semanal en 'cp_planificacion' para: ${mondayDate}`);
-    const { data, error, status } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
-    
-    if (error) {
-        console.error(`[DB] Error en getCPWeeklyPlan (Status: ${status}):`, error);
-        return null;
-    }
-    
-    if (!data) {
-        console.log(`[DB] No se encontró planificación para la semana ${mondayDate}`);
-        return null;
-    }
-    
+    const { data, error } = await supabase.from('cp_planificacion').select('*').eq('fecha_lunes', mondayDate).maybeSingle();
+    if (error) return null;
+    if (!data) return null;
     return {
         id: data.id,
         mondayDate: data.fecha_lunes,
@@ -640,8 +625,7 @@ export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan 
 
 export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
     if (!isConfigured) return;
-    console.log(`[DB] Intentando guardar en 'cp_planificacion':`, plan);
-    const { error, status } = await supabase.from('cp_planificacion').upsert({
+    const { error } = await supabase.from('cp_planificacion').upsert({
         fecha_lunes: plan.mondayDate,
         horas_lunes: plan.hoursMon,
         horas_martes: plan.hoursTue,
@@ -649,27 +633,17 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
         horas_jueves: plan.hoursThu,
         horas_viernes: plan.hoursFri
     }, { onConflict: 'fecha_lunes' });
-    
-    if (error) {
-        console.error(`[DB] Error al guardar plan (Status: ${status}):`, error);
-        throw error;
-    }
+    if (error) throw error;
 };
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
-    
     const { data, error } = await supabase.from('partes_trabajo')
         .select('*')
         .eq('trabajador_id', workerId)
         .order('fecha', { ascending: false })
         .limit(20);
-        
-    if (error) {
-        console.error("[DB] Error en getPersonalReports:", error);
-        return [];
-    }
-
+    if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
         date: new Date(r.fecha),
@@ -687,7 +661,6 @@ export const getAllPersonalReportsByRange = async (start: Date, end: Date): Prom
         .gte('fecha', toLocalDateString(start))
         .lte('fecha', toLocalDateString(end))
         .order('fecha');
-    
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -721,7 +694,6 @@ export const updatePersonalReport = async (id: string, r: Partial<PersonalReport
     if (r.hours !== undefined) p.horas = r.hours;
     if (r.costCenterId !== undefined) p.centro_id = r.costCenterId;
     if (r.machineId !== undefined) p.maquina_id = r.machineId;
-
     const { error } = await supabase.from('partes_trabajo').update(p).eq('id', id);
     if (error) throw error;
 };
@@ -735,14 +707,12 @@ export const deletePersonalReport = async (id: string): Promise<void> => {
 export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[], cp: CPDailyReport[], cr: CRDailyReport[] }> => {
     if (!isConfigured) return { ops: [], personal: [], cp: [], cr: [] };
     const dateStr = toLocalDateString(date);
-    
     const [opsRes, personalRes, cpRes, crRes] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
         supabase.from('partes_trabajo').select('*').eq('fecha', dateStr),
         supabase.from('cp_partes_diarios').select('*').eq('fecha', dateStr),
         supabase.from('cr_partes_diarios').select('*').eq('fecha', dateStr)
     ]);
-
     return {
         ops: (opsRes.data || []).map(mapLogFromDb),
         personal: (personalRes.data || []).map(r => ({
@@ -868,9 +838,7 @@ export const getAllOperationLogsByRange = async (start: Date, end: Date, types?:
     let query = supabase.from('mant_registros').select('*')
         .gte('fecha', toLocalDateString(start))
         .lte('fecha', toLocalDateString(end));
-    
     if (types && types.length > 0) query = query.in('tipo_operacion', types);
-    
     const { data, error } = await query;
     if (error) return [];
     return (data || []).map(mapLogFromDb);
