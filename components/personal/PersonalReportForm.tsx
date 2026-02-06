@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PersonalReport, CostCenter, Machine } from '../../types';
 import { getCostCenters, getAllMachines, getPersonalReports } from '../../services/db';
 import { Save, ArrowLeft, Loader2, Calendar, Clock, Factory, Truck, ClipboardList } from 'lucide-react';
@@ -18,13 +18,13 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
     const [centers, setCenters] = useState<CostCenter[]>([]);
     const [selectedCenterId, setSelectedCenterId] = useState('');
     
-    const [allSelectableMachines, setAllSelectableMachines] = useState<Machine[]>([]);
+    const [allMachines, setAllMachines] = useState<Machine[]>([]);
     const [selectedMachineId, setSelectedMachineId] = useState('');
     
     const [hours, setHours] = useState<number | ''>('');
 
-    // History
-    const [history, setHistory] = useState<PersonalReport[]>([]);
+    // Raw History from DB
+    const [rawHistory, setRawHistory] = useState<PersonalReport[]>([]);
 
     useEffect(() => {
         loadInitialData();
@@ -33,28 +33,19 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
     const loadInitialData = async () => {
         setLoadingData(true);
         try {
-            // Cargamos centros, historial y máquinas en paralelo
+            // Cargamos centros, historial y TODAS las máquinas (incluidas inactivas) para resolver nombres antiguos
             const [centersData, historyData, machinesData] = await Promise.all([
                 getCostCenters(),
                 getPersonalReports(workerId),
-                getAllMachines(true) 
+                getAllMachines(false) 
             ]);
             
-            setCenters(centersData.filter(c => c.selectableForReports !== false));
-            
-            // El historial ya viene con nombres desde db.ts mediante un Join de Supabase
-            setHistory(historyData);
-            
-            const selectable = machinesData.filter(m => m.selectableForReports === true);
-            selectable.sort((a, b) => {
-                 const codeA = a.companyCode || '';
-                 const codeB = b.companyCode || '';
-                 if (codeA && codeB) return codeA.localeCompare(codeB);
-                 if (codeA) return -1; 
-                 if (codeB) return 1;  
-                 return a.name.localeCompare(b.name);
-            });
-            setAllSelectableMachines(selectable);
+            console.log("[PersonalReport] Maestros cargados para resolución:", { machines: machinesData.length, centers: centersData.length });
+            console.log("[PersonalReport] Historial crudo:", historyData);
+
+            setCenters(centersData);
+            setRawHistory(historyData);
+            setAllMachines(machinesData);
             
         } catch (error) {
             console.error("[PersonalReport] Error al cargar datos:", error);
@@ -62,6 +53,38 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             setLoadingData(false);
         }
     };
+
+    // ENRIQUECIMIENTO: Cruce de datos en caliente para el historial
+    const enrichedHistory = useMemo(() => {
+        return rawHistory.map(item => {
+            const machine = allMachines.find(m => m.id === item.machineId);
+            const center = centers.find(c => c.id === item.costCenterId);
+            
+            return {
+                ...item,
+                machineName: machine ? `${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}` : 'Máquina desconocida',
+                costCenterName: center ? center.name : 'Centro desconocido'
+            };
+        });
+    }, [rawHistory, allMachines, centers]);
+
+    // Máquinas seleccionables para el formulario (Solo activas y marcadas para reporte)
+    const selectableMachines = useMemo(() => {
+        const filtered = allMachines.filter(m => m.active !== false && m.selectableForReports === true);
+        return filtered.sort((a, b) => {
+             const codeA = a.companyCode || '';
+             const codeB = b.companyCode || '';
+             if (codeA && codeB) return codeA.localeCompare(codeB);
+             if (codeA) return -1; 
+             if (codeB) return 1;  
+             return a.name.localeCompare(b.name);
+        });
+    }, [allMachines]);
+
+    // Centros seleccionables para el formulario
+    const selectableCenters = useMemo(() => {
+        return centers.filter(c => c.selectableForReports !== false);
+    }, [centers]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -114,10 +137,10 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     <select
                         value={selectedCenterId}
                         onChange={(e) => setSelectedCenterId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 font-bold"
                     >
                         <option value="">-- Seleccionar Centro --</option>
-                        {centers.map(c => (
+                        {selectableCenters.map(c => (
                             <option key={c.id} value={c.id}>
                                 {c.companyCode ? `[${c.companyCode}] ` : ''}{c.name}
                             </option>
@@ -132,10 +155,10 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     <select
                         value={selectedMachineId}
                         onChange={e => setSelectedMachineId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 font-bold"
                     >
                         <option value="">-- Seleccionar Máquina --</option>
-                        {allSelectableMachines.map(m => {
+                        {selectableMachines.map(m => {
                              const defaultCenterName = centers.find(c => c.id === m.costCenterId)?.name || '';
                              return (
                                 <option key={m.id} value={m.id}>
@@ -175,7 +198,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                         <ClipboardList size={16}/> Últimos Registros
                     </h3>
                     <div className="space-y-3">
-                        {history.map(item => (
+                        {enrichedHistory.map(item => (
                             <div key={item.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-sm">
                                 <div className="flex justify-between items-start mb-1">
                                     <span className="font-bold text-slate-700">{item.date.toLocaleDateString()}</span>
@@ -185,7 +208,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                                 <div className="text-xs text-slate-400 uppercase font-bold">{item.costCenterName}</div>
                             </div>
                         ))}
-                        {history.length === 0 && (
+                        {enrichedHistory.length === 0 && (
                             <p className="text-center py-4 text-slate-400 text-xs italic">No hay registros recientes.</p>
                         )}
                     </div>
@@ -193,4 +216,5 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
             </div>
         </form>
     );
+};
 };
