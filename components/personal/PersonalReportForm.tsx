@@ -33,33 +33,19 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
     const loadInitialData = async () => {
         setLoadingData(true);
         try {
-            // Traemos TODAS las máquinas (incluidas inactivas) para resolver nombres en el historial
+            // Cargamos centros, historial y máquinas en paralelo
             const [centersData, historyData, machinesData] = await Promise.all([
                 getCostCenters(),
                 getPersonalReports(workerId),
-                getAllMachines(false) 
+                getAllMachines(true) 
             ]);
             
-            console.log("[PersonalReport] Datos maestros cargados:", { centers: centersData.length, machines: machinesData.length });
-            console.log("[PersonalReport] Historial crudo:", historyData);
-
-            // FILTRO: Solo mostrar centros marcados como seleccionables para nuevos partes
             setCenters(centersData.filter(c => c.selectableForReports !== false));
             
-            // ENRIQUECIMIENTO: Cruzamos el historial con los maestros para obtener nombres
-            const enrichedHistory = historyData.map(h => {
-                const machine = machinesData.find(m => m.id === h.machineId);
-                const center = centersData.find(c => c.id === h.costCenterId);
-                return {
-                    ...h,
-                    machineName: machine ? `${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}` : undefined,
-                    costCenterName: center ? center.name : undefined
-                };
-            });
-            setHistory(enrichedHistory);
+            // El historial ya viene con nombres desde db.ts mediante un Join de Supabase
+            setHistory(historyData);
             
-            // Filtrar máquinas para el selector (solo activas y marcadas como seleccionables)
-            const selectable = machinesData.filter(m => m.active !== false && m.selectableForReports === true);
+            const selectable = machinesData.filter(m => m.selectableForReports === true);
             selectable.sort((a, b) => {
                  const codeA = a.companyCode || '';
                  const codeB = b.companyCode || '';
@@ -195,8 +181,8 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                                     <span className="font-bold text-slate-700">{item.date.toLocaleDateString()}</span>
                                     <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">{item.hours}h</span>
                                 </div>
-                                <div className="text-slate-600 font-bold">{item.machineName || 'Máquina desconocida'}</div>
-                                <div className="text-xs text-slate-400 uppercase font-bold">{item.costCenterName || 'Centro desconocido'}</div>
+                                <div className="text-slate-600 font-bold">{item.machineName}</div>
+                                <div className="text-xs text-slate-400 uppercase font-bold">{item.costCenterName}</div>
                             </div>
                         ))}
                         {history.length === 0 && (
