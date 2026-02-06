@@ -1,15 +1,24 @@
-
 import { Machine, MaintenanceDefinition, Worker } from '../types';
 import { sendWhatsAppMessage, formatMaintenanceAlert } from './whatsapp';
 import { sendEmail } from './api';
 import { supabase } from './client';
-import { getWorkers } from './db';
 
 const COMPANY_EMAIL = 'aridos@marraque.es';
 
 export const checkMaintenanceThresholds = async (machine: Machine, newHours: number) => {
-    const workers = await getWorkers(false);
-    const responsible = workers.find(w => w.id === machine.responsibleWorkerId);
+    // Evitamos importar de ./db para prevenir dependencias circulares que rompen el build
+    const { data: workersData } = await supabase.from('mant_trabajadores').select('*');
+    const responsibleRaw = workersData?.find(w => w.id === machine.responsibleWorkerId);
+    
+    // Mapeo mínimo para que funcione el servicio de alertas
+    const responsible: Worker | undefined = responsibleRaw ? {
+        id: responsibleRaw.id,
+        name: responsibleRaw.nombre,
+        dni: responsibleRaw.dni,
+        phone: responsibleRaw.telefono,
+        role: responsibleRaw.rol,
+        positionIds: []
+    } : undefined;
 
     for (const def of machine.maintenanceDefs) {
         if (def.maintenanceType !== 'HOURS' || !def.id) continue;
@@ -18,20 +27,14 @@ export const checkMaintenanceThresholds = async (machine: Machine, newHours: num
         const warning = def.warningHours || 0;
         const lastHours = def.lastMaintenanceHours || 0;
         
-        // El punto de vencimiento es exacto (Ej: 39000)
         const limitOverdue = lastHours + interval;
-        // El punto de preaviso es X horas antes (Ej: 38950)
         const limitWarning = limitOverdue - warning;
 
-        // 1. CHEQUEO DE VENCIMIENTO (CRÍTICO)
-        // Se dispara si ya hemos pasado las horas de vencimiento
         if (newHours >= limitOverdue && !def.notifiedOverdue) {
             console.log(`[Notif] Disparando ALERTA VENCIDA para ${machine.name} - ${def.name}`);
             await triggerNotification(machine, def, responsible, 'OVERDUE');
             await markAsNotified(def.id, 'overdue');
         } 
-        // 2. CHEQUEO DE PREAVISO
-        // Solo se dispara si estamos DENTRO de la ventana de aviso y NO hemos llegado al vencimiento
         else if (newHours >= limitWarning && newHours < limitOverdue && !def.notifiedWarning) {
             console.log(`[Notif] Disparando PREAVISO para ${machine.name} - ${def.name}`);
             await triggerNotification(machine, def, responsible, 'WARNING');
@@ -44,13 +47,11 @@ const triggerNotification = async (machine: Machine, def: MaintenanceDefinition,
     const isOverdue = type === 'OVERDUE';
     const title = isOverdue ? '🔴 MANTENIMIENTO VENCIDO' : '⚠️ PREAVISO DE MANTENIMIENTO';
     
-    // Preparar Mensaje WhatsApp
     if (responsible?.phone) {
         const wsMsg = formatMaintenanceAlert(responsible, machine, def);
         await sendWhatsAppMessage(responsible.phone, wsMsg);
     }
 
-    // Preparar Email
     const emailHtml = `
         <div style="font-family: sans-serif; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
             <h2 style="color: ${isOverdue ? '#dc2626' : '#d97706'}; border-bottom: 2px solid #eee; padding-bottom: 10px;">${title}</h2>
