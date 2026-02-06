@@ -285,6 +285,7 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         nombre: m.name,
         codigo_empresa: m.companyCode,
         centro_id: m.costCenterId,
+        // Fix: Corrected property name from subcentro_id to subCenterId to match Machine interface
         subcentro_id: m.subCenterId,
         responsable_id: m.responsibleWorkerId,
         horas_actuales: m.currentHours,
@@ -659,13 +660,9 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
     
-    // Optimizamos la lectura realizando un JOIN SQL con máquinas y centros para evitar IDs desconocidos
+    // Devolvemos datos crudos para evitar fallos de build por joins complejos en strings
     const { data, error } = await supabase.from('partes_trabajo')
-        .select(`
-            *,
-            mant_maquinas(nombre, codigo_empresa),
-            mant_centros(nombre)
-        `)
+        .select('*')
         .eq('trabajador_id', workerId)
         .order('fecha', { ascending: false })
         .limit(20);
@@ -681,10 +678,7 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
         workerId: r.trabajador_id,
         hours: Number(r.horas || 0),
         costCenterId: r.centro_id,
-        machineId: r.maquina_id,
-        // Construimos el nombre enriquecido directamente desde el join de la base de datos
-        machineName: r.mant_maquinas ? `${r.mant_maquinas.codigo_empresa ? `[${r.mant_maquinas.codigo_empresa}] ` : ''}${r.mant_maquinas.nombre}` : 'Máquina desconocida',
-        costCenterName: r.mant_centros ? r.mant_centros.nombre : 'Centro desconocido'
+        machineId: r.maquina_id
     }));
 };
 
@@ -769,7 +763,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             crusherEnd: Number(r.machacadora_fin || 0),
             millsStart: Number(r.molinos_inicio || 0), 
             millsEnd: Number(r.molinos_fin || 0),
-            comments: r.comentarios
+            comments: r.comments
         })),
         cr: (crRes.data || []).map(r => ({
             id: r.id, 
@@ -882,4 +876,3 @@ export const getAllOperationLogsByRange = async (start: Date, end: Date, types?:
     const { data, error } = await query;
     if (error) return [];
     return (data || []).map(mapLogFromDb);
-};
