@@ -659,7 +659,6 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
     
-    // Devolvemos datos crudos para evitar fallos de build por joins complejos en strings
     const { data, error } = await supabase.from('partes_trabajo')
         .select('*')
         .eq('trabajador_id', workerId)
