@@ -285,7 +285,6 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         nombre: m.name,
         codigo_empresa: m.companyCode,
         centro_id: m.costCenterId,
-        // Fix: Corrected property name from subcentro_id to subCenterId to match Machine interface
         subcentro_id: m.subCenterId,
         responsable_id: m.responsibleWorkerId,
         horas_actuales: m.currentHours,
@@ -773,7 +772,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             washingEnd: Number(r.lavado_fin || 0),
             triturationStart: Number(r.trituration_inicio || 0), 
             triturationEnd: Number(r.trituration_fin || 0),
-            comments: r.comentarios
+            comments: r.comments
         }))
     };
 };
@@ -816,7 +815,7 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         title: d.titulo,
         category: 'TRABAJADOR',
         issueDate: new Date(d.fecha_emision),
-        expiryDate: d.expiryDate ? new Date(d.expiryDate) : undefined,
+        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
         status: d.estado,
         docType: d.tipo_documento
     }));
@@ -876,3 +875,4 @@ export const getAllOperationLogsByRange = async (start: Date, end: Date, types?:
     const { data, error } = await query;
     if (error) return [];
     return (data || []).map(mapLogFromDb);
+};
