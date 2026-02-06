@@ -1,3 +1,4 @@
+
 import { supabase, isConfigured } from './client';
 import * as mock from './mockDb';
 import * as offline from './offlineQueue';
@@ -40,7 +41,7 @@ const mapWorker = (w: any): Worker => ({
     dni: w.dni || '',
     phone: w.telefono || '',
     positionIds: [], 
-    role: w.rol || 'worker', // Corrección: la columna en DB es 'rol'
+    role: w.rol || 'worker', 
     activo: w.activo !== undefined ? w.activo : true,
     expectedHours: Number(w.horas_programadas || 0),
     requiresReport: w.requiere_parte !== undefined ? w.requiere_parte : true,
@@ -428,6 +429,32 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
         litros_combustible: log.fuelLitres
     });
     if (error) throw error;
+
+    // --- REINICIO DE CICLO PARA MANTENIMIENTOS PROGRAMADOS ---
+    if (log.maintenanceDefId) {
+        const updateData: any = {
+            ultimas_horas_realizadas: log.hoursAtExecution,
+            pendiente: false,
+            notificado_preaviso: false,
+            notificado_vencido: false,
+            ultima_fecha: toLocalDateString(log.date)
+        };
+
+        // Si es por fecha, calcular el próximo vencimiento aproximado si hay intervalo de meses
+        const { data: defData } = await supabase
+            .from('mant_mantenimientos_def')
+            .select('tipo_programacion, intervalo_meses')
+            .eq('id', log.maintenanceDefId)
+            .single();
+        
+        if (defData && defData.tipo_programacion === 'DATE' && defData.intervalo_meses) {
+            const nextDate = new Date(log.date);
+            nextDate.setMonth(nextDate.getMonth() + defData.intervalo_meses);
+            updateData.proxima_fecha = toLocalDateString(nextDate);
+        }
+
+        await supabase.from('mant_mantenimientos_def').update(updateData).eq('id', log.maintenanceDefId);
+    }
 
     if (log.hoursAtExecution) {
         const machines = await getAllMachines(false);
