@@ -234,7 +234,7 @@ const App: React.FC = () => {
       }, 2000);
     } catch (e: any) { 
       setIsSubmitting(false);
-      alert(e.message); 
+      alert("Error al guardar: " + e.message); 
     }
   };
 
@@ -493,4 +493,3 @@ const App: React.FC = () => {
 }
 
 export default App;
-
