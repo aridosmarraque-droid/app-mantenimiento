@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Worker, Machine, CostCenter, OperationType, OperationLog, 
-  CPimport React, { useState, useEffect } from 'react';
-import { 
-  Worker, Machine, CostCenter, OperationType, OperationLog, 
   CPDailyReport, PersonalReport, CRDailyReport 
 } from './types';
 
@@ -23,7 +20,7 @@ import {
   SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, 
   Database, Users, Wrench, Droplet, MessageSquare, Loader2, 
   FileText, BarChart3, CalendarClock, Coins, Clock, Calculator, 
-  Plus, Search, ArrowLeft, Printer, Play, ShieldAlert
+  Plus, Search, ArrowLeft, Printer, Play
 } from 'lucide-react';
 
 // Componentes Admin
@@ -46,21 +43,16 @@ import { CostDistributionReport } from './components/admin/CostDistributionRepor
 import { WorkerHoursDistributionReport } from './components/admin/WorkerHoursDistributionReport';
 import { SpecificCostRulesManager } from './components/admin/SpecificCostRulesManager';
 import { FuelCostDistributionReport } from './components/admin/FuelCostDistributionReport';
-import { DocumentManager } from './components/admin/DocumentManager';
 
-// Componentes Generales
+// Componentes Operario / Especialistas
 import { Login } from './components/Login';
 import { MachineSelector } from './components/MachineSelector';
 import { MainMenu } from './components/MainMenu';
-
-// Formularios de Mantenimiento
 import { LevelsForm } from './components/forms/LevelsForm';
 import { BreakdownForm } from './components/forms/BreakdownForm';
 import { MaintenanceForm } from './components/forms/MaintenanceForm';
-import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { RefuelingForm } from './components/forms/RefuelingForm';
-
-// Componentes por Rol
+import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
 import { CPSelection } from './components/cp/CPSelection';
 import { DailyReportForm } from './components/cp/DailyReportForm';
 import { CRSelection } from './components/cr/CRSelection';
@@ -79,6 +71,7 @@ enum ViewState {
   CONTEXT_SELECTION,
   ACTION_MENU,
   FORM,
+  // Admin Views
   ADMIN_CREATE_CENTER,
   ADMIN_MANAGE_SUBCENTERS,
   ADMIN_CREATE_MACHINE,
@@ -98,8 +91,7 @@ enum ViewState {
   ADMIN_COST_DISTRIBUTION,
   ADMIN_WORKER_HOURS_DISTRIBUTION,
   ADMIN_SPECIFIC_COSTS,
-  ADMIN_FUEL_RATIO_DISTRIBUTION,
-  ADMIN_DOCUMENTS
+  ADMIN_FUEL_RATIO_DISTRIBUTION
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'costes' | 'informes' | 'config' | null;
@@ -162,6 +154,8 @@ const App: React.FC = () => {
 
   const isUserAdmin = currentUser?.role?.toLowerCase() === 'admin';
 
+  // --- HANDLERS DE PERSISTENCIA ---
+
   const handlePersonalReportSubmit = async (data: Omit<PersonalReport, 'id'>) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -184,6 +178,7 @@ const App: React.FC = () => {
     setIsSubmitting(true);
     try {
       await saveCPReport(data);
+      // Opcional: Generar PDF y enviar email si es online
       if (isOnline) {
           const pdf = generateCPReportPDF(data, currentUser?.name || '', 8, 100);
           await sendEmail(['aridos@marraque.es'], `Parte Cantera Pura - ${data.date.toLocaleDateString()}`, '<p>Adjunto parte diario.</p>', pdf, 'parte_cp.pdf');
@@ -298,8 +293,10 @@ const App: React.FC = () => {
           </div>
         </div>
         
+        {/* SIDEBAR / DROPDOWN MENU ADMIN */}
         {isMenuOpen && isUserAdmin && (
           <div className="absolute top-full right-0 w-80 bg-white shadow-2xl rounded-bl-3xl overflow-y-auto max-h-[85vh] border-l border-b border-slate-200 z-30">
+            {/* CATEGORÍA: DATOS MAESTROS */}
             <div className="border-b border-slate-100">
               <button onClick={() => setOpenCategory(openCategory === 'datos' ? null : 'datos')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'datos' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                 <div className="flex items-center gap-3">
@@ -320,6 +317,7 @@ const App: React.FC = () => {
               )}
             </div>
 
+            {/* CATEGORÍA: REPARTO DE COSTES */}
             <div className="border-b border-slate-100">
               <button onClick={() => setOpenCategory(openCategory === 'costes' ? null : 'costes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'costes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                 <div className="flex items-center gap-3">
@@ -338,6 +336,7 @@ const App: React.FC = () => {
               )}
             </div>
 
+            {/* CATEGORÍA: INFORMES Y AUDITORÍA */}
             <div className="border-b border-slate-100">
               <button onClick={() => setOpenCategory(openCategory === 'informes' ? null : 'informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                 <div className="flex items-center gap-3">
@@ -348,7 +347,6 @@ const App: React.FC = () => {
               </button>
               {openCategory === 'informes' && (
                 <div className="bg-slate-50 divide-y divide-slate-100">
-                  <button onClick={() => { setViewState(ViewState.ADMIN_DOCUMENTS); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-blue-700 hover:bg-white flex items-center gap-2"><ShieldAlert size={14} /> Gestión Documental PRL</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_MAINTENANCE_REPORT); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Mantenimientos Programados</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_PRODUCTION_DASHBOARD); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Dashboards Rendimiento</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_DAILY_AUDIT); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría de Partes</button>
@@ -359,6 +357,7 @@ const App: React.FC = () => {
               )}
             </div>
 
+            {/* CATEGORÍA: CONFIGURACIÓN */}
             <div className="border-b border-slate-100">
               <button onClick={() => setOpenCategory(openCategory === 'config' ? null : 'config')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'config' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                 <div className="flex items-center gap-3">
@@ -395,6 +394,7 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* --- VISTAS POR ROL --- */}
         {viewState === ViewState.WORKER_SELECTION && currentUser && (
             <WorkerSelection 
                 workerName={currentUser.name} 
@@ -422,6 +422,7 @@ const App: React.FC = () => {
             />
         )}
         
+        {/* --- FORMULARIOS ESPECIALISTAS --- */}
         {viewState === ViewState.PERSONAL_REPORT && currentUser && (
             <PersonalReportForm workerId={currentUser.id} onBack={navigateBack} onSubmit={handlePersonalReportSubmit} />
         )}
@@ -432,6 +433,7 @@ const App: React.FC = () => {
             <DailyReportFormCR workerId={currentUser.id} onBack={() => setViewState(ViewState.CR_SELECTION)} onSubmit={handleCRReportSubmit} />
         )}
 
+        {/* --- FLUJO MANTENIMIENTO --- */}
         {viewState === ViewState.CONTEXT_SELECTION && (
             <MachineSelector selectedDate={selectedDate} onChangeDate={setSelectedDate} onSelect={(m, c) => { setSelectedContext({machine: m, center: c}); setViewState(ViewState.ACTION_MENU); }} />
         )}
@@ -449,6 +451,7 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* --- VISTAS ADMINISTRACIÓN --- */}
         {viewState === ViewState.ADMIN_MANAGE_WORKERS && <WorkerManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_CREATE_CENTER && <CreateCenterForm onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} onSuccess={() => setViewState(ViewState.CONTEXT_SELECTION)}/>}
         {viewState === ViewState.ADMIN_MANAGE_SUBCENTERS && <SubCenterManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
@@ -467,7 +470,7 @@ const App: React.FC = () => {
         )}
         {viewState === ViewState.ADMIN_EDIT_MACHINE && machineToEdit && <EditMachineForm machine={machineToEdit} onBack={() => setViewState(ViewState.ADMIN_SELECT_MACHINE_TO_EDIT)} onSuccess={() => setViewState(ViewState.CONTEXT_SELECTION)}/>}
         
-        {viewState === ViewState.ADMIN_DOCUMENTS && <DocumentManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+        {/* Auditorías e Informes */}
         {viewState === ViewState.ADMIN_VIEW_LOGS && <MachineLogsViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_DAILY_AUDIT && <DailyAuditViewer onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_CP_PLANNING && <WeeklyPlanning onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
@@ -479,6 +482,7 @@ const App: React.FC = () => {
         {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_MAINTENANCE_REPORT && <ScheduledMaintenanceReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         
+        {/* Reparto de Costes */}
         {viewState === ViewState.ADMIN_SPECIFIC_COSTS && <SpecificCostRulesManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_COST_DISTRIBUTION && <CostDistributionReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_FUEL_RATIO_DISTRIBUTION && <FuelCostDistributionReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
@@ -489,3 +493,4 @@ const App: React.FC = () => {
 }
 
 export default App;
+
