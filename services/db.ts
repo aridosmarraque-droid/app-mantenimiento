@@ -410,13 +410,14 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
         return;
     }
 
-    console.log("[DEBUG] Guardando registro de operación:", log);
+    console.log("[DATABASE] Iniciando saveOperationLog para máquina:", log.machineId);
 
-    const { error } = await supabase.from('mant_registros').insert({
+    // 1. Insertar el registro técnico principal
+    const { error: insertError } = await supabase.from('mant_registros').insert({
         fecha: toLocalDateString(log.date),
         trabajador_id: log.workerId,
         maquina_id: log.machineId,
-        horas_registro: log.hoursAtExecution,
+        horas_registro: Number(log.hoursAtExecution),
         tipo_operacion: log.type,
         aceite_motor_l: log.motorOil,
         aceite_hidraulico_l: log.hydraulicOil,
@@ -431,17 +432,17 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
         litros_combustible: log.fuelLitres
     });
     
-    if (error) {
-        console.error("[DEBUG] Error al insertar en mant_registros:", error);
-        throw error;
+    if (insertError) {
+        console.error("[DATABASE] Error crítico en inserción mant_registros:", insertError);
+        throw new Error(`Error al guardar el registro: ${insertError.message}`);
     }
 
-    // --- REINICIO DE CICLO PARA MANTENIMIENTOS PROGRAMADOS ---
+    // 2. REINICIO DE CICLO (SI ES PROGRAMADO)
     if (log.maintenanceDefId) {
-        console.log(`[DEBUG] Mantenimiento Programado Detectado (Def ID: ${log.maintenanceDefId})`);
+        console.log("[DATABASE] Detectado mantenimiento programado ID:", log.maintenanceDefId);
         
         try {
-            // 1. Obtener datos actuales de la definición
+            // Obtenemos configuración para el recálculo (especialmente si es por fecha)
             const { data: defData, error: fetchError } = await supabase
                 .from('mant_mantenimientos_def')
                 .select('tipo_programacion, intervalo_meses')
@@ -450,52 +451,55 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
             
             if (fetchError) throw fetchError;
 
-            const updateData: any = {
-                ultimas_horas_realizadas: log.hoursAtExecution,
+            const updatePayload: any = {
+                ultimas_horas_realizadas: Number(log.hoursAtExecution),
                 pendiente: false,
                 notificado_preaviso: false,
                 notificado_vencido: false,
                 ultima_fecha: toLocalDateString(log.date)
             };
 
-            // 2. Si es por fecha, calcular el próximo vencimiento
+            // Recálculo de próxima fecha si aplica
             if (defData && defData.tipo_programacion === 'DATE' && defData.intervalo_meses) {
                 const nextDate = new Date(log.date);
                 nextDate.setMonth(nextDate.getMonth() + defData.intervalo_meses);
-                updateData.proxima_fecha = toLocalDateString(nextDate);
-                console.log(`[DEBUG] Recalculada próxima fecha para DATE: ${updateData.proxima_fecha}`);
+                updatePayload.proxima_fecha = toLocalDateString(nextDate);
             }
 
-            // 3. Ejecutar actualización
-            const { error: updateError } = await supabase
+            console.log("[DATABASE] Enviando actualización a mant_mantenimientos_def:", updatePayload);
+
+            const { error: updateError, count } = await supabase
                 .from('mant_mantenimientos_def')
-                .update(updateData)
+                .update(updatePayload, { count: 'exact' })
                 .eq('id', log.maintenanceDefId);
 
-            if (updateError) {
-                console.error("[DEBUG] ERROR AL ACTUALIZAR mant_mantenimientos_def:", updateError);
+            if (updateError) throw updateError;
+            
+            if (count === 0) {
+                console.warn("[DATABASE] ADVERTENCIA: No se actualizó ninguna fila. ¿El ID es correcto?");
             } else {
-                console.log("[DEBUG] Definición de mantenimiento reseteada con éxito.");
+                console.log("[DATABASE] ÉXITO: mant_mantenimientos_def actualizado.");
             }
-        } catch (e) {
-            console.error("[DEBUG] Error en el flujo de reinicio de ciclo:", e);
+        } catch (e: any) {
+            console.error("[DATABASE] Falló el reinicio de ciclo de mantenimiento:", e);
+            throw new Error(`El registro técnico se guardó, pero NO se pudo resetear la tarea programada: ${e.message}`);
         }
     }
 
-    // --- ACTUALIZACIÓN DE HORAS DE MÁQUINA ---
+    // 3. ACTUALIZACIÓN DE HORAS GLOBALES DE MÁQUINA
     if (log.hoursAtExecution) {
         try {
-            await updateMachineAttributes(log.machineId, { currentHours: log.hoursAtExecution });
-            console.log(`[DEBUG] Horas de máquina actualizadas a ${log.hoursAtExecution}h`);
+            await updateMachineAttributes(log.machineId, { currentHours: Number(log.hoursAtExecution) });
+            console.log(`[DATABASE] Horas de máquina ${log.machineId} actualizadas a ${log.hoursAtExecution}h`);
             
-            // Re-chequear umbrales para posibles nuevas alertas
-            const machines = await getAllMachines(false);
-            const machine = machines.find(mac => mac.id === log.machineId);
-            if (machine) {
-                await checkMaintenanceThresholds(machine, log.hoursAtExecution);
+            // Verificación de umbrales para el resto de tareas de esta máquina
+            const { data: mData } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', log.machineId).single();
+            if (mData) {
+                const mappedMachine = mapMachine(mData);
+                await checkMaintenanceThresholds(mappedMachine, Number(log.hoursAtExecution));
             }
         } catch (e) {
-            console.error("[DEBUG] Error al actualizar horas globales de máquina:", e);
+            console.error("[DATABASE] Error no crítico actualizando horas globales:", e);
         }
     }
 };
