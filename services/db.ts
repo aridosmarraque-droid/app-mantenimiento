@@ -40,8 +40,8 @@ const mapWorker = (w: any): Worker => ({
     dni: w.dni || '',
     phone: w.telefono || '',
     positionIds: [], 
-    role: w.rol || 'worker',
-    active: w.activo !== undefined ? w.activo : true,
+    role: w.rol || 'worker', 
+    activo: w.activo !== undefined ? w.activo : true,
     expectedHours: Number(w.horas_programadas || 0),
     requiresReport: w.requiere_parte !== undefined ? w.requiere_parte : true,
     lastMedicalExam: w.ultimo_reconocimiento ? new Date(w.ultimo_reconocimiento) : undefined,
@@ -113,7 +113,7 @@ const mapMachine = (m: any): Machine => {
         }),
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
-        active: m.active !== undefined ? m.active : true,
+        activo: m.activo !== undefined ? m.activo : true,
         vinculadaProduccion: !!m.vinculada_produccion
     };
 };
@@ -128,20 +128,20 @@ const mapCostCenter = (c: any): CostCenter => ({
 // --- FUNCIONES CORE ---
 
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
-    if (!isConfigured) return mock.getWorkers();
+    if (!isConfigured) return mock.getWorkers(onlyActive);
     const { data, error } = await supabase.from('mant_trabajadores').select('*');
     if (error) {
         console.error("Error cargando trabajadores:", error);
         return [];
     }
     const workers = (data || []).map(mapWorker).sort((a, b) => a.name.localeCompare(b.name));
-    return onlyActive ? workers.filter(w => w.active !== false) : workers;
+    return onlyActive ? workers.filter(w => w.activo !== false) : workers;
 };
 
 export const createWorker = async (w: Omit<Worker, 'id'>): Promise<void> => {
     if (!isConfigured) return;
     const { error } = await supabase.from('mant_trabajadores').insert({
-        nombre: w.name, dni: w.dni, telefono: w.phone, rol: w.role, activo: w.active,
+        nombre: w.name, dni: w.dni, telefono: w.phone, rol: w.role, activo: w.activo,
         horas_programadas: w.expectedHours, requiere_parte: w.requiresReport
     });
     if (error) throw error;
@@ -154,7 +154,7 @@ export const updateWorker = async (id: string, updates: Partial<Worker>): Promis
     if (updates.dni !== undefined) p.dni = updates.dni;
     if (updates.phone !== undefined) p.telefono = updates.phone;
     if (updates.role !== undefined) p.rol = updates.role;
-    if (updates.active !== undefined) p.activo = updates.active;
+    if (updates.activo !== undefined) p.activo = updates.activo;
     if (updates.expectedHours !== undefined) p.horas_programadas = updates.expectedHours;
     if (updates.requiresReport !== undefined) p.requiere_parte = updates.requiresReport;
     const { error } = await supabase.from('mant_trabajadores').update(p).eq('id', id);
@@ -237,29 +237,29 @@ export const getMachinesBySubCenter = async (subId: string, onlyActive: boolean 
     if (!isConfigured) return [];
     try {
         let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('subcentro_id', subId);
-        if (onlyActive) query = query.eq('active', true);
+        if (onlyActive) query = query.eq('activo', true);
         const { data, error } = await query;
         if (error) throw error;
         return (data || []).map(mapMachine);
     } catch (e) {
         let fallback = supabase.from('mant_maquinas').select('*').eq('subcentro_id', subId);
-        if (onlyActive) fallback = fallback.eq('active', true);
+        if (onlyActive) fallback = fallback.eq('activo', true);
         const { data } = await fallback;
         return (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
     }
 };
 
 export const getMachinesByCenter = async (centerId: string, onlyActive: boolean = true): Promise<Machine[]> => {
-    if (!isConfigured) return mock.getMachinesByCenter(centerId);
+    if (!isConfigured) return mock.getMachinesByCenter(centerId, onlyActive);
     try {
         let query = supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('centro_id', centerId);
-        if (onlyActive) query = query.eq('active', true);
+        if (onlyActive) query = query.eq('activo', true);
         const { data, error } = await query;
         if (error) throw error;
         return (data || []).map(mapMachine);
     } catch (e) {
         let fallback = supabase.from('mant_maquinas').select('*').eq('centro_id', centerId);
-        if (onlyActive) fallback = fallback.eq('active', true);
+        if (onlyActive) fallback = fallback.eq('activo', true);
         const { data } = await fallback;
         return (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
     }
@@ -271,11 +271,11 @@ export const getAllMachines = async (onlyActive: boolean = true): Promise<Machin
         const { data, error } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)');
         if (error) throw error;
         const machines = (data || []).map(mapMachine);
-        return onlyActive ? machines.filter(m => m.active !== false) : machines;
+        return onlyActive ? machines.filter(m => m.activo !== false) : machines;
     } catch (e) {
         const { data } = await supabase.from('mant_maquinas').select('*');
         const machines = (data || []).map(m => mapMachine({...m, mant_mantenimientos_def: []}));
-        return onlyActive ? machines.filter(m => m.active !== false) : machines;
+        return onlyActive ? machines.filter(m => m.activo !== false) : machines;
     }
 };
 
@@ -292,7 +292,7 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         gastos_admin: m.adminExpenses,
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
-        active: m.active,
+        activo: m.activo,
         vinculada_produccion: m.vinculadaProduccion
     }).select().single();
 
@@ -328,7 +328,7 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.adminExpenses !== undefined) p.gastos_admin = updates.adminExpenses;
     if (updates.transportExpenses !== undefined) p.gastos_transporte = updates.transportExpenses;
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
-    if (updates.active !== undefined) p.active = updates.active;
+    if (updates.activo !== undefined) p.activo = updates.activo;
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
 
     const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
@@ -367,7 +367,10 @@ export const addMaintenanceDef = async (def: MaintenanceDefinition, currentHours
 };
 
 export const updateMaintenanceDef = async (def: MaintenanceDefinition): Promise<void> => {
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        await mock.updateMaintenanceDef(def);
+        return;
+    }
     const p: any = {
         nombre: def.name,
         tipo_programacion: def.maintenanceType,
@@ -406,6 +409,9 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
         offline.addToQueue('LOG', log);
         return;
     }
+
+    console.log("[DEBUG] Guardando registro de operación:", log);
+
     const { error } = await supabase.from('mant_registros').insert({
         fecha: toLocalDateString(log.date),
         trabajador_id: log.workerId,
@@ -424,14 +430,72 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
         mantenimiento_def_id: log.maintenanceDefId,
         litros_combustible: log.fuelLitres
     });
-    if (error) throw error;
+    
+    if (error) {
+        console.error("[DEBUG] Error al insertar en mant_registros:", error);
+        throw error;
+    }
 
+    // --- REINICIO DE CICLO PARA MANTENIMIENTOS PROGRAMADOS ---
+    if (log.maintenanceDefId) {
+        console.log(`[DEBUG] Mantenimiento Programado Detectado (Def ID: ${log.maintenanceDefId})`);
+        
+        try {
+            // 1. Obtener datos actuales de la definición
+            const { data: defData, error: fetchError } = await supabase
+                .from('mant_mantenimientos_def')
+                .select('tipo_programacion, intervalo_meses')
+                .eq('id', log.maintenanceDefId)
+                .single();
+            
+            if (fetchError) throw fetchError;
+
+            const updateData: any = {
+                ultimas_horas_realizadas: log.hoursAtExecution,
+                pendiente: false,
+                notificado_preaviso: false,
+                notificado_vencido: false,
+                ultima_fecha: toLocalDateString(log.date)
+            };
+
+            // 2. Si es por fecha, calcular el próximo vencimiento
+            if (defData && defData.tipo_programacion === 'DATE' && defData.intervalo_meses) {
+                const nextDate = new Date(log.date);
+                nextDate.setMonth(nextDate.getMonth() + defData.intervalo_meses);
+                updateData.proxima_fecha = toLocalDateString(nextDate);
+                console.log(`[DEBUG] Recalculada próxima fecha para DATE: ${updateData.proxima_fecha}`);
+            }
+
+            // 3. Ejecutar actualización
+            const { error: updateError } = await supabase
+                .from('mant_mantenimientos_def')
+                .update(updateData)
+                .eq('id', log.maintenanceDefId);
+
+            if (updateError) {
+                console.error("[DEBUG] ERROR AL ACTUALIZAR mant_mantenimientos_def:", updateError);
+            } else {
+                console.log("[DEBUG] Definición de mantenimiento reseteada con éxito.");
+            }
+        } catch (e) {
+            console.error("[DEBUG] Error en el flujo de reinicio de ciclo:", e);
+        }
+    }
+
+    // --- ACTUALIZACIÓN DE HORAS DE MÁQUINA ---
     if (log.hoursAtExecution) {
-        const machines = await getAllMachines(false);
-        const machine = machines.find(mac => mac.id === log.machineId);
-        if (machine) {
-            await updateMachineAttributes(machine.id, { currentHours: log.hoursAtExecution });
-            await checkMaintenanceThresholds(machine, log.hoursAtExecution);
+        try {
+            await updateMachineAttributes(log.machineId, { currentHours: log.hoursAtExecution });
+            console.log(`[DEBUG] Horas de máquina actualizadas a ${log.hoursAtExecution}h`);
+            
+            // Re-chequear umbrales para posibles nuevas alertas
+            const machines = await getAllMachines(false);
+            const machine = machines.find(mac => mac.id === log.machineId);
+            if (machine) {
+                await checkMaintenanceThresholds(machine, log.hoursAtExecution);
+            }
+        } catch (e) {
+            console.error("[DEBUG] Error al actualizar horas globales de máquina:", e);
         }
     }
 };
@@ -450,9 +514,14 @@ export const getMachineLogs = async (machineId: string, start?: Date, end?: Date
 };
 
 export const updateOperationLog = async (id: string, log: Partial<OperationLog>): Promise<void> => {
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        await mock.updateOperationLog(id, log);
+        return;
+    }
     const p: any = {};
     if (log.date) p.fecha = toLocalDateString(log.date);
+    if (log.machineId) p.maquina_id = log.machineId;
+    if (log.workerId) p.trabajador_id = log.workerId;
     if (log.hoursAtExecution !== undefined) p.horas_registro = log.hoursAtExecution;
     if (log.motorOil !== undefined) p.aceite_motor_l = log.motorOil;
     if (log.hydraulicOil !== undefined) p.aceite_hidraulico_l = log.hydraulicOil;
@@ -468,7 +537,10 @@ export const updateOperationLog = async (id: string, log: Partial<OperationLog>)
 };
 
 export const deleteOperationLog = async (id: string): Promise<void> => {
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        await mock.deleteOperationLog(id);
+        return;
+    }
     const { error } = await supabase.from('mant_registros').delete().eq('id', id);
     if (error) throw error;
 };
@@ -564,9 +636,9 @@ export const getLastCRReport = async (): Promise<CRDailyReport | null> => {
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituration_inicio || 0),
-        triturationEnd: Number(r.trituration_fin || 0),
-        comments: r.comments
+        trituracion_inicio: Number(r.trituracion_inicio || 0),
+        trituracion_fin: Number(r.trituracion_fin || 0),
+        comments: r.comentarios
     };
 };
 
@@ -580,20 +652,16 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         trabajador_id: r.workerId,
         lavado_inicio: r.washingStart,
         lavado_fin: r.washingEnd,
-        trituracion_inicio: r.triturationStart,
-        trituracion_fin: r.triturationEnd,
+        trituracion_inicio: r.trituracion_inicio,
+        trituracion_fin: r.trituracion_fin,
         comentarios: r.comments
     });
     if (error) throw error;
 };
 
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
-    if (!isConfigured) return [];
-    const { data, error } = await supabase.from('cr_partes_diarios')
-        .select('*')
-        .gte('fecha', toLocalDateString(start))
-        .lte('fecha', toLocalDateString(end))
-        .order('fecha');
+    if (!isConfigured) return mock.getCRReportsByRange(start, end);
+    const { data, error } = await queryReports('cr_partes_diarios', start, end);
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -601,10 +669,19 @@ export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDai
         workerId: r.trabajador_id,
         washingStart: Number(r.lavado_inicio || 0),
         washingEnd: Number(r.lavado_fin || 0),
-        triturationStart: Number(r.trituration_inicio || 0),
-        triturationEnd: Number(r.trituration_fin || 0),
+        trituracion_inicio: Number(r.trituracion_inicio || 0),
+        trituracion_fin: Number(r.trituracion_fin || 0),
         comments: r.comentarios
     }));
+};
+
+// Helper genérico para evitar duplicación
+const queryReports = async (table: string, start: Date, end: Date) => {
+    return supabase.from(table)
+        .select('*')
+        .gte('fecha', toLocalDateString(start))
+        .lte('fecha', toLocalDateString(end))
+        .order('fecha');
 };
 
 export const getCPWeeklyPlan = async (mondayDate: string): Promise<CPWeeklyPlan | null> => {
@@ -637,7 +714,7 @@ export const saveCPWeeklyPlan = async (plan: CPWeeklyPlan): Promise<void> => {
 };
 
 export const getPersonalReports = async (workerId: string): Promise<PersonalReport[]> => {
-    if (!isConfigured) return [];
+    if (!isConfigured) return mock.getPersonalReports(workerId);
     const { data, error } = await supabase.from('partes_trabajo')
         .select('*')
         .eq('trabajador_id', workerId)
@@ -661,6 +738,7 @@ export const getAllPersonalReportsByRange = async (start: Date, end: Date): Prom
         .gte('fecha', toLocalDateString(start))
         .lte('fecha', toLocalDateString(end))
         .order('fecha');
+    
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -688,31 +766,40 @@ export const savePersonalReport = async (r: Omit<PersonalReport, 'id'>): Promise
 };
 
 export const updatePersonalReport = async (id: string, r: Partial<PersonalReport>): Promise<void> => {
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        await mock.updatePersonalReport(id, r);
+        return;
+    }
     const p: any = {};
     if (r.date) p.fecha = toLocalDateString(r.date);
     if (r.hours !== undefined) p.horas = r.hours;
     if (r.costCenterId !== undefined) p.centro_id = r.costCenterId;
     if (r.machineId !== undefined) p.maquina_id = r.machineId;
+
     const { error } = await supabase.from('partes_trabajo').update(p).eq('id', id);
     if (error) throw error;
 };
 
 export const deletePersonalReport = async (id: string): Promise<void> => {
-    if (!isConfigured) return;
+    if (!isConfigured) {
+        await mock.deletePersonalReport(id);
+        return;
+    }
     const { error } = await supabase.from('partes_trabajo').delete().eq('id', id);
     if (error) throw error;
 };
 
 export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog[], personal: PersonalReport[], cp: CPDailyReport[], cr: CRDailyReport[] }> => {
-    if (!isConfigured) return { ops: [], personal: [], cp: [], cr: [] };
+    if (!isConfigured) return mock.getDailyAuditLogs(date);
     const dateStr = toLocalDateString(date);
+    
     const [opsRes, personalRes, cpRes, crRes] = await Promise.all([
         supabase.from('mant_registros').select('*').eq('fecha', dateStr),
         supabase.from('partes_trabajo').select('*').eq('fecha', dateStr),
         supabase.from('cp_partes_diarios').select('*').eq('fecha', dateStr),
         supabase.from('cr_partes_diarios').select('*').eq('fecha', dateStr)
     ]);
+
     return {
         ops: (opsRes.data || []).map(mapLogFromDb),
         personal: (personalRes.data || []).map(r => ({
@@ -731,7 +818,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             crusherEnd: Number(r.machacadora_fin || 0),
             millsStart: Number(r.molinos_inicio || 0), 
             millsEnd: Number(r.molinos_fin || 0),
-            comments: r.comments
+            comments: r.comentarios
         })),
         cr: (crRes.data || []).map(r => ({
             id: r.id, 
@@ -739,9 +826,9 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
             workerId: r.trabajador_id, 
             washingStart: Number(r.lavado_inicio || 0), 
             washingEnd: Number(r.lavado_fin || 0),
-            triturationStart: Number(r.trituration_inicio || 0), 
-            triturationEnd: Number(r.trituration_fin || 0),
-            comments: r.comments
+            trituracion_inicio: Number(r.trituracion_inicio || 0), 
+            trituracion_fin: Number(r.trituracion_fin || 0),
+            comments: r.comentarios
         }))
     };
 };
@@ -784,7 +871,7 @@ export const getWorkerDocuments = async (workerId: string): Promise<WorkerDocume
         title: d.titulo,
         category: 'TRABAJADOR',
         issueDate: new Date(d.fecha_emision),
-        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
+        expiryDate: d.expiryDate ? new Date(d.expiryDate) : undefined,
         status: d.estado,
         docType: d.tipo_documento
     }));
@@ -805,7 +892,7 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
 
 export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('mant_reglas_costes').select('*');
+    const { data, error } = await supabase.from('mant_costes_especificos').select('*');
     if (error) return [];
     return (data || []).map(r => ({
         id: r.id,
@@ -818,18 +905,30 @@ export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
 
 export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('mant_reglas_costes').insert({
+    const { error } = await supabase.from('mant_costes_especificos').insert({
         maquina_origen_id: rule.machineOriginId,
         centro_destino_id: rule.targetCenterId,
-        maquina_destino_id: rule.targetMachineId,
+        maquina_destino_id: rule.targetMachineId || null,
         porcentaje: rule.percentage
     });
     if (error) throw error;
 };
 
+export const updateSpecificCostRule = async (id: string, rule: Partial<SpecificCostRule>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (rule.machineOriginId) p.maquina_origen_id = rule.machineOriginId;
+    if (rule.targetCenterId) p.centro_destino_id = rule.targetCenterId;
+    if (rule.targetMachineId !== undefined) p.maquina_destino_id = rule.targetMachineId;
+    if (rule.percentage !== undefined) p.porcentaje = rule.percentage;
+    
+    const { error } = await supabase.from('mant_costes_especificos').update(p).eq('id', id);
+    if (error) throw error;
+};
+
 export const deleteSpecificCostRule = async (id: string): Promise<void> => {
     if (!isConfigured) return;
-    const { error } = await supabase.from('mant_reglas_costes').delete().eq('id', id);
+    const { error } = await supabase.from('mant_costes_especificos').delete().eq('id', id);
     if (error) throw error;
 };
 
@@ -838,7 +937,9 @@ export const getAllOperationLogsByRange = async (start: Date, end: Date, types?:
     let query = supabase.from('mant_registros').select('*')
         .gte('fecha', toLocalDateString(start))
         .lte('fecha', toLocalDateString(end));
+    
     if (types && types.length > 0) query = query.in('tipo_operacion', types);
+    
     const { data, error } = await query;
     if (error) return [];
     return (data || []).map(mapLogFromDb);
