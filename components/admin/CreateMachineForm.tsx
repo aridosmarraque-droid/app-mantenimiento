@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { createMachine, getCostCenters, getSubCentersByCenter, getWorkers } from '../../services/db';
 import { CostCenter, SubCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, ToggleRight, LayoutGrid, Calculator, Truck, Clock, Calendar } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight, ToggleLeft, LayoutGrid, Calculator, Truck, Clock, Calendar, Activity } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -23,10 +22,11 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [responsibleId, setResponsibleId] = useState('');
     const [currentHours, setCurrentHours] = useState(0);
     const [requiresHours, setRequiresHours] = useState(true);
+    const [vinculadaProduccion, setVinculadaProduccion] = useState(false);
     const [adminExpenses, setAdminExpenses] = useState(false);
     const [transportExpenses, setTransportExpenses] = useState(false);
     const [selectableForReports, setSelectableForReports] = useState(true); 
-    const [active, setActive] = useState(true);
+    const [activo, setActivo] = useState(true);
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
@@ -44,11 +44,10 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
         getWorkers().then(setWorkers);
     }, []);
 
-    // Cargar subcentros cuando cambia el centro
     useEffect(() => {
         if (centerId) {
             getSubCentersByCenter(centerId).then(setSubCenters);
-            setSubId(''); // Reset subcenter when center changes
+            setSubId(''); 
         } else {
             setSubCenters([]);
         }
@@ -112,11 +111,12 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 responsibleWorkerId: responsibleId || undefined,
                 currentHours,
                 requiresHours,
+                vinculadaProduccion,
                 adminExpenses,
                 transportExpenses,
                 selectableForReports,
                 maintenanceDefs: defs,
-                active
+                activo: activo
             });
             onSuccess();
         } catch (error) {
@@ -139,25 +139,63 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
             <div className="space-y-4">
                 <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <span className="text-sm font-bold text-slate-600 uppercase">Estado inicial</span>
-                    <button type="button" onClick={() => setActive(!active)} className="flex items-center gap-2 text-green-600 font-bold">
-                        {active ? <ToggleRight size={32} className="text-green-500" /> : <ToggleRight size={32} className="text-slate-300 rotate-180" />}
-                        {active ? 'ACTIVO' : 'INACTIVO'}
+                    <button type="button" onClick={() => setActivo(!activo)} className="flex items-center gap-2 text-green-600 font-bold">
+                        {activo ? <ToggleRight size={32} className="text-green-500" /> : <ToggleRight size={32} className="text-slate-300 rotate-180" />}
+                        {activo ? 'ACTIVO' : 'INACTIVO'}
                     </button>
                 </div>
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Máquina *</label>
-                    <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-bold" />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno</label>
-                        <input type="text" value={companyCode} onChange={e => setCompanyCode(e.target.value)} placeholder="Ej. RETRO-01" className="w-full p-3 border border-slate-300 rounded-lg" />
+                        <input type="text" value={companyCode} onChange={e => setCompanyCode(e.target.value)} placeholder="Ej. RETRO-01" className="w-full p-3 border border-slate-300 rounded-lg uppercase font-bold" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Horas/Kms Iniciales</label>
-                        <input type="number" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} className="w-full p-3 border border-slate-300 rounded-lg" />
+                        <input type="number" value={currentHours} onChange={e => setCurrentHours(Number(e.target.value))} className="w-full p-3 border border-slate-300 rounded-lg font-mono font-bold" />
+                    </div>
+                </div>
+
+                {/* NUEVA SECCIÓN: CONFIGURACIÓN DE HORÓMETRO */}
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+                    <h5 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-1">
+                        <Clock size={12}/> Configuración de Horómetro
+                    </h5>
+                    <div className="grid grid-cols-1 gap-2">
+                        <button 
+                            type="button" 
+                            onClick={() => setRequiresHours(!requiresHours)}
+                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${requiresHours ? 'bg-white border-blue-300 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Clock size={18} />
+                                <div className="text-left">
+                                    <p className="text-xs font-black uppercase leading-none">Solicitar Horas</p>
+                                    <p className="text-[9px] font-bold opacity-60 mt-0.5">Obligatorio en cada registro manual</p>
+                                </div>
+                            </div>
+                            {requiresHours ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                        </button>
+
+                        <button 
+                            type="button" 
+                            onClick={() => setVinculadaProduccion(!vinculadaProduccion)}
+                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${vinculadaProduccion ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Activity size={18} />
+                                <div className="text-left">
+                                    <p className="text-xs font-black uppercase leading-none">Vinculada a Producción</p>
+                                    <p className={`text-[9px] font-bold mt-0.5 ${vinculadaProduccion ? 'text-indigo-100' : 'opacity-60'}`}>Actualiza horas vía parte de planta</p>
+                                </div>
+                            </div>
+                            {vinculadaProduccion ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                        </button>
                     </div>
                 </div>
 
@@ -204,7 +242,6 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 </div>
             </div>
 
-            {/* Gastos e Imputaciones */}
             <div className="flex flex-col gap-2 p-4 bg-slate-50 rounded-lg border border-slate-100">
                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Gastos e Imputaciones</h5>
                 
@@ -235,7 +272,6 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 </div>
             </div>
 
-            {/* Programación de Mantenimientos (Alta) */}
             <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                 <h4 className="font-bold text-slate-700 uppercase text-xs tracking-widest">Plan Preventivo Inicial</h4>
                 
