@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, getSubCentersByCenter, calculateAndSyncMachineStatus, getWorkers, deleteMachine, getMachineDependencyCount } from '../../services/db';
 import { CostCenter, SubCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock, User } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock, User, Activity } from 'lucide-react';
 
 interface Props {
     machine: Machine;
@@ -203,11 +203,49 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Nombre *</label>
-                        <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg" />
+                        <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg font-bold" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Código Interno</label>
-                        <input type="text" value={companyCode} onChange={e => setCompanyCode(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg" />
+                        <input type="text" value={companyCode} onChange={e => setCompanyCode(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg uppercase font-bold" />
+                    </div>
+                </div>
+
+                {/* NUEVA SECCIÓN: CONFIGURACIÓN DE HORÓMETRO */}
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+                    <h5 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-1">
+                        <Clock size={12}/> Configuración de Horómetro
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button 
+                            type="button" 
+                            onClick={() => setRequiresHours(!requiresHours)}
+                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${requiresHours ? 'bg-white border-blue-300 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Clock size={18} />
+                                <div className="text-left">
+                                    <p className="text-xs font-black uppercase leading-none">Solicitar Horas</p>
+                                    <p className="text-[9px] font-bold opacity-60 mt-0.5">En registros manuales</p>
+                                </div>
+                            </div>
+                            {requiresHours ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                        </button>
+
+                        <button 
+                            type="button" 
+                            onClick={() => setVinculadaProduccion(!vinculadaProduccion)}
+                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${vinculadaProduccion ? 'bg-indigo-600 border-indigo-400 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Activity size={18} />
+                                <div className="text-left">
+                                    <p className="text-xs font-black uppercase leading-none">Vinculada a Producción</p>
+                                    <p className={`text-[9px] font-bold mt-0.5 ${vinculadaProduccion ? 'text-indigo-100' : 'opacity-60'}`}>Actualiza vía partes planta</p>
+                                </div>
+                            </div>
+                            {vinculadaProduccion ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                        </button>
                     </div>
                 </div>
 
