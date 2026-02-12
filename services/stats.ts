@@ -268,8 +268,6 @@ export const getFleetFluidStats = async (selectedMonth: string) => {
             .filter(l => l.machineId === machine.id)
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
-        // Para calcular L/100h en el primer registro del mes, necesitaríamos el registro anterior (fuera del rango)
-        // Por simplicidad para el informe mensual, calculamos la tasa entre puntos dentro del mes si los hay.
         const fluidRecords: any = { motor: [], hydraulic: [], coolant: [] };
         
         for (let i = 0; i < mLogs.length; i++) {
@@ -303,7 +301,21 @@ export const getFleetFluidStats = async (selectedMonth: string) => {
             }
         }
 
-        return { machine, fluidRecords };
+        // CÁLCULO DE PROMEDIOS DE LA SERIE DEL MES
+        const calcAvg = (recs: any[]) => {
+            const rates = recs.filter(r => r.rate !== null).map(r => r.rate);
+            return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
+        };
+
+        return { 
+            machine, 
+            fluidRecords,
+            averages: {
+                motor: calcAvg(fluidRecords.motor),
+                hydraulic: calcAvg(fluidRecords.hydraulic),
+                coolant: calcAvg(fluidRecords.coolant)
+            }
+        };
     }).filter(d => d.fluidRecords.motor.length > 0 || d.fluidRecords.hydraulic.length > 0 || d.fluidRecords.coolant.length > 0);
 
     return fleetData;
