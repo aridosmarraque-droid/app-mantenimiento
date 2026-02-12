@@ -1,5 +1,5 @@
-import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs } from './db';
-import { CPDailyReport, CPWeeklyPlan, OperationLog } from '../types';
+import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs, getAllOperationLogsByRange, getAllMachines } from './db';
+import { CPDailyReport, CPWeeklyPlan, OperationLog, Machine } from '../types';
 
 export interface ProductionStat {
     period: string;
@@ -251,4 +251,60 @@ export const getMachineFluidStats = async (machineId: string) => {
         },
         evolution
     };
+};
+
+export const getFleetFluidStats = async (selectedMonth: string) => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0);
+
+    const [allM, allLogs] = await Promise.all([
+        getAllMachines(false),
+        getAllOperationLogsByRange(start, end, ['LEVELS'])
+    ]);
+
+    const fleetData = allM.map(machine => {
+        const mLogs = allLogs
+            .filter(l => l.machineId === machine.id)
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        // Para calcular L/100h en el primer registro del mes, necesitaríamos el registro anterior (fuera del rango)
+        // Por simplicidad para el informe mensual, calculamos la tasa entre puntos dentro del mes si los hay.
+        const fluidRecords: any = { motor: [], hydraulic: [], coolant: [] };
+        
+        for (let i = 0; i < mLogs.length; i++) {
+            const current = mLogs[i];
+            const prev = i > 0 ? mLogs[i-1] : null;
+            const diff = prev ? (current.hoursAtExecution - prev.hoursAtExecution) : 0;
+
+            if (current.motorOil && current.motorOil > 0) {
+                fluidRecords.motor.push({
+                    date: new Date(current.date).toLocaleDateString(),
+                    hours: current.hoursAtExecution,
+                    amount: current.motorOil,
+                    rate: diff > 0 ? (current.motorOil / diff * 100) : null
+                });
+            }
+            if (current.hydraulicOil && current.hydraulicOil > 0) {
+                fluidRecords.hydraulic.push({
+                    date: new Date(current.date).toLocaleDateString(),
+                    hours: current.hoursAtExecution,
+                    amount: current.hydraulicOil,
+                    rate: diff > 0 ? (current.hydraulicOil / diff * 100) : null
+                });
+            }
+            if (current.coolant && current.coolant > 0) {
+                fluidRecords.coolant.push({
+                    date: new Date(current.date).toLocaleDateString(),
+                    hours: current.hoursAtExecution,
+                    amount: current.coolant,
+                    rate: diff > 0 ? (current.coolant / diff * 100) : null
+                });
+            }
+        }
+
+        return { machine, fluidRecords };
+    }).filter(d => d.fluidRecords.motor.length > 0 || d.fluidRecords.hydraulic.length > 0 || d.fluidRecords.coolant.length > 0);
+
+    return fleetData;
 };
