@@ -55,7 +55,7 @@ export const generateFluidReportPDF = (
 
     let currentY = 50;
 
-    fleetData.forEach(({ machine, fluidRecords }) => {
+    fleetData.forEach(({ machine, fluidRecords, averages }) => {
         if (currentY > 250) { doc.addPage(); currentY = 20; }
         
         doc.setFillColor(241, 245, 249);
@@ -70,9 +70,9 @@ export const generateFluidReportPDF = (
 
         // TABLAS POR FLUIDO
         const fluids = [
-            { label: 'ACEITE MOTOR', data: fluidRecords.motor, color: [59, 130, 246] },
-            { label: 'ACEITE HIDRÁULICO', data: fluidRecords.hydraulic, color: [20, 184, 166] },
-            { label: 'REFRIGERANTE', data: fluidRecords.coolant, color: [239, 68, 68] }
+            { label: 'ACEITE MOTOR', data: fluidRecords.motor, avg: averages.motor, color: [59, 130, 246] },
+            { label: 'ACEITE HIDRÁULICO', data: fluidRecords.hydraulic, avg: averages.hydraulic, color: [20, 184, 166] },
+            { label: 'REFRIGERANTE', data: fluidRecords.coolant, avg: averages.coolant, color: [239, 68, 68] }
         ];
 
         fluids.forEach(f => {
@@ -83,7 +83,9 @@ export const generateFluidReportPDF = (
             doc.setFontSize(9);
             doc.setTextColor(f.color[0], f.color[1], f.color[2]);
             doc.setFont("helvetica", "bold");
-            doc.text(f.label, 20, currentY);
+            
+            const avgText = f.avg !== null ? ` (MEDIA SERIE: ${f.avg.toFixed(2)} L/100h)` : '';
+            doc.text(`${f.label}${avgText}`, 20, currentY);
             currentY += 4;
 
             doc.autoTable({
