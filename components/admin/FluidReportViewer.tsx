@@ -1,114 +1,60 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { getAllMachines, getCostCenters, getSubCentersByCenter } from '../../services/db';
-import { getMachineFluidStats, formatDecimal } from '../../services/stats';
+import { getFleetFluidStats, formatDecimal } from '../../services/stats';
 import { generateFluidReportPDF } from '../../services/pdf';
 import { sendEmail } from '../../services/api';
-import { Machine, SubCenter } from '../../types';
 import { 
-    ArrowLeft, Loader2, AlertTriangle, Truck, Activity,
-    Thermometer, ShieldCheck, Waves, TrendingUp, TrendingDown,
-    History, Table, Send, LayoutGrid
+    ArrowLeft, Loader2, Truck, Activity,
+    Thermometer, Waves, Table, Send, Calendar,
+    Droplets, Info, Printer
 } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
 }
 
-const getDeviationStatus = (dev: number) => {
-    if (dev <= 10 && dev >= -10) return { color: 'text-green-600', bg: 'bg-green-50', label: 'Estable', icon: ShieldCheck };
-    if (dev > 10 && dev <= 25) return { color: 'text-amber-600', bg: 'bg-amber-50', label: 'Incremento Ligero', icon: TrendingUp };
-    if (dev > 25) return { color: 'text-red-600', bg: 'bg-red-50', label: 'ALERTA / AVERÍA', icon: AlertTriangle };
-    return { color: 'text-blue-600', bg: 'bg-blue-50', label: 'Reducción', icon: TrendingDown };
-};
-
 export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
-    const [subCenters, setSubCenters] = useState<SubCenter[]>([]);
-    const [selectedSubId, setSelectedSubId] = useState('');
-    const [allMachines, setAllMachines] = useState<Machine[]>([]);
-    const [filteredMachines, setFilteredMachines] = useState<Machine[]>([]);
-    const [selectedMachineId, setSelectedMachineId] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().substring(0, 7));
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
-    const [stats, setStats] = useState<any>(null);
+    const [fleetData, setFleetData] = useState<any[]>([]);
 
-    useEffect(() => {
-        const loadInitialData = async () => {
-            const [centers, machines] = await Promise.all([
-                getCostCenters(),
-                getAllMachines(false)
-            ]);
-            
-            const mobileCenter = centers.find(c => c.name.toLowerCase().includes('móvil') || c.name.toLowerCase().includes('movil'));
-            if (mobileCenter) {
-                const subs = await getSubCentersByCenter(mobileCenter.id);
-                setSubCenters(subs);
-            }
-            setAllMachines(machines);
-        };
-        loadInitialData();
-    }, []);
-
-    useEffect(() => {
-        if (selectedSubId) {
-            setFilteredMachines(allMachines.filter(m => m.subCenterId === selectedSubId));
-            setSelectedMachineId('');
-            setStats(null);
-        } else {
-            setFilteredMachines([]);
-        }
-    }, [selectedSubId, allMachines]);
-
-    const loadStats = useCallback(async () => {
-        if (!selectedMachineId) return;
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await getMachineFluidStats(selectedMachineId);
-            setStats(data);
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    }, [selectedMachineId]);
+            const data = await getFleetFluidStats(selectedMonth);
+            setFleetData(data);
+        } catch (e) {
+            console.error("Error cargando informe de fluidos:", e);
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedMonth]);
 
     useEffect(() => {
-        loadStats();
-    }, [loadStats]);
+        loadData();
+    }, [loadData]);
 
     const handleSendReport = async () => {
         if (sending) return;
-        if (!confirm(`¿Enviar informe integral de fluidos de TODA la flota a aridos@marraque.es?`)) return;
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, 1);
+        const periodName = dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+
+        if (!confirm(`¿Enviar informe de fluidos del mes de ${periodName} a aridos@marraque.es?`)) return;
 
         setSending(true);
         try {
-            const period = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
-            
-            const mobileMachines = allMachines.filter(m => m.companyCode); 
-            const consolidatedData = [];
-
-            for (const m of mobileMachines) {
-                const mStats = await getMachineFluidStats(m.id);
-                if (mStats.motor.logsCount > 1 || mStats.hydraulic.logsCount > 1) {
-                    consolidatedData.push({ machine: m, stats: mStats });
-                }
-            }
-
-            if (consolidatedData.length === 0) {
-                alert("Sin datos suficientes.");
-                setSending(false);
-                return;
-            }
-
-            const pdfBase64 = generateFluidReportPDF(consolidatedData, period);
-            
+            const pdfBase64 = generateFluidReportPDF(fleetData, periodName);
             await sendEmail(
                 ['aridos@marraque.es'],
-                `Informe Integral Fluidos - ${period}`,
-                `<p>Se adjunta la auditoría técnica de consumo de fluidos L/100h consolidada.</p>`,
+                `Informe Fluidos Flota - ${periodName}`,
+                `<p>Se adjunta el desglose detallado de consumos de fluidos por unidad para el periodo ${periodName}.</p>`,
                 pdfBase64,
-                `Informe_Integral_Fluidos_${period}.pdf`
+                `Informe_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
             );
-            alert("Informe integral enviado.");
+            alert("Informe enviado con éxito.");
         } catch (e) {
-            alert("Error al enviar.");
+            alert("Error al generar o enviar el informe.");
         } finally {
             setSending(false);
         }
@@ -116,170 +62,140 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
 
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+            {/* Cabecera */}
             <div className="flex items-center justify-between border-b pb-4 bg-white p-4 rounded-xl shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-2">
                     <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-800 tracking-tight">Monitor Fluidos</h3>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Monitor Fluidos</h3>
                         <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest">Tasas Técnicas L/100h</p>
                     </div>
                 </div>
-                <button 
-                    onClick={handleSendReport}
-                    disabled={sending}
-                    className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
-                    title="Enviar Informe Flota"
-                >
-                    {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
-                </button>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100 mx-1 space-y-4">
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
-                        <LayoutGrid size={12}/> 1. Subcentro
-                    </label>
-                    <select 
-                        value={selectedSubId}
-                        onChange={e => setSelectedSubId(e.target.value)}
-                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700"
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <Calendar className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                        <input 
+                            type="month" 
+                            value={selectedMonth} 
+                            onChange={e => setSelectedMonth(e.target.value)}
+                            className="pl-10 pr-4 py-2 border rounded-xl font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                        />
+                    </div>
+                    <button 
+                        onClick={handleSendReport}
+                        disabled={sending || loading}
+                        className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
+                        title="Enviar Informe Flota"
                     >
-                        <option value="">-- Seleccionar Sección --</option>
-                        {subCenters.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest flex items-center gap-1">
-                        <Truck size={12}/> 2. Máquina
-                    </label>
-                    <select 
-                        disabled={!selectedSubId}
-                        value={selectedMachineId}
-                        onChange={e => setSelectedMachineId(e.target.value)}
-                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 disabled:opacity-50"
-                    >
-                        <option value="">-- Seleccionar Unidad --</option>
-                        {filteredMachines.map(m => (
-                            <option key={m.id} value={m.id}>{m.companyCode ? `[${m.companyCode}] ` : ''}{m.name}</option>
-                        ))}
-                    </select>
+                        {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
+                    </button>
                 </div>
             </div>
 
             {loading ? (
-                <div className="py-20 flex flex-col items-center justify-center text-slate-400 font-black uppercase tracking-widest text-[10px]">
-                    <Loader2 className="animate-spin mb-4 text-indigo-500" size={40} />
-                    Auditando tasas de consumo...
+                <div className="py-40 flex flex-col items-center justify-center text-slate-400">
+                    <Loader2 className="animate-spin mb-4 text-indigo-500" size={48} />
+                    <p className="font-black uppercase text-[10px] tracking-widest">Compilando registros de flota...</p>
                 </div>
-            ) : stats ? (
-                <div className="space-y-6 px-1">
-                    <div className="grid grid-cols-1 gap-4">
-                        <TrendCard title="Aceite Motor" stat={stats.motor} icon={Activity} />
-                        <TrendCard title="Aceite Hidráulico" stat={stats.hydraulic} icon={Waves} />
-                        <TrendCard title="Refrigerante" stat={stats.coolant} icon={Thermometer} />
-                    </div>
-
-                    {/* TABLA DE EVOLUCIÓN TÉCNICA (L/100h) */}
-                    <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
-                        <div className="p-4 bg-slate-900 border-b flex justify-between items-center">
-                            <h4 className="font-black text-white uppercase text-[10px] tracking-widest flex items-center gap-2">
-                                <Table size={14} className="text-amber-500"/> Auditoría de Tasas por Intervalo
-                            </h4>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b text-[9px] font-black text-slate-400 uppercase">
-                                        <th className="p-3">Fecha</th>
-                                        <th className="p-3">Horas</th>
-                                        <th className="p-3 text-center">Motor (L/100h)</th>
-                                        <th className="p-3 text-center">Hidr. (L/100h)</th>
-                                        <th className="p-3 text-center">Refrig. (L/100h)</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {stats.evolution.map((point: any, idx: number) => (
-                                        <tr key={idx} className="hover:bg-slate-50/50">
-                                            <td className="p-3 text-[10px] font-bold text-slate-600">{point.date}</td>
-                                            <td className="p-3 text-[10px] font-mono font-bold text-slate-800">{point.hours}h</td>
-                                            <td className="p-3 text-[10px] text-center">
-                                                {point.motorRate !== null ? <span className={`font-black ${point.motorRate > stats.motor.baselineRate * 1.25 ? 'text-red-600' : 'text-slate-700'}`}>{point.motorRate.toFixed(3)}</span> : '-'}
-                                            </td>
-                                            <td className="p-3 text-[10px] text-center">
-                                                {point.hydRate !== null ? <span className={`font-black ${point.hydRate > stats.hydraulic.baselineRate * 1.25 ? 'text-red-600' : 'text-slate-700'}`}>{point.hydRate.toFixed(3)}</span> : '-'}
-                                            </td>
-                                            <td className="p-3 text-[10px] text-center">
-                                                {point.coolRate !== null ? <span className={`font-black ${point.coolRate > stats.coolant.baselineRate * 1.25 ? 'text-red-600' : 'text-slate-700'}`}>{point.coolRate.toFixed(3)}</span> : '-'}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {stats.evolution.length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="p-10 text-center text-[10px] font-bold text-slate-400 uppercase italic">Datos insuficientes para calcular intervalos</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
-                        <p className="text-[10px] text-amber-800 leading-relaxed italic">
-                            <strong>Nota Técnica:</strong> Los valores mostrados son el consumo medio calculado entre el registro actual y el anterior. Las celdas en <span className="text-red-600 font-bold">rojo</span> indican una desviación superior al 25% respecto a la media histórica del componente.
-                        </p>
-                    </div>
+            ) : fleetData.length === 0 ? (
+                <div className="py-40 text-center text-slate-300">
+                    <Table size={64} className="mx-auto mb-4 opacity-20"/>
+                    <p className="font-black uppercase tracking-widest text-xs">Sin registros de niveles en el periodo seleccionado</p>
                 </div>
             ) : (
-                <div className="py-20 text-center opacity-30">
-                    <Activity size={64} className="mx-auto text-slate-300 mb-4"/>
-                    <p className="font-black uppercase tracking-widest text-[10px]">Seleccione subcentro y unidad</p>
+                <div className="space-y-8 px-1">
+                    {fleetData.map(({ machine, fluidRecords }, mIdx) => (
+                        <div key={machine.id} className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
+                            {/* Cabecera Máquina */}
+                            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-white/10 rounded-lg">
+                                        <Truck size={20} className="text-indigo-400"/>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black uppercase text-sm tracking-tight">
+                                            {machine.companyCode ? `[${machine.companyCode}] ` : ''}{machine.name}
+                                        </h4>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Desglose por Fluido */}
+                            <div className="p-4 space-y-6">
+                                <FluidTable 
+                                    title="Aceite Motor" 
+                                    icon={<Activity size={14}/>} 
+                                    color="text-blue-600" 
+                                    records={fluidRecords.motor} 
+                                />
+                                <FluidTable 
+                                    title="Aceite Hidráulico" 
+                                    icon={<Waves size={14}/>} 
+                                    color="text-teal-600" 
+                                    records={fluidRecords.hydraulic} 
+                                />
+                                <FluidTable 
+                                    title="Refrigerante" 
+                                    icon={<Thermometer size={14}/>} 
+                                    color="text-red-600" 
+                                    records={fluidRecords.coolant} 
+                                />
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
+
+            <div className="mx-1 bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3 no-print">
+                <Info className="text-amber-600 shrink-0" size={18}/>
+                <p className="text-[10px] text-amber-800 leading-relaxed italic">
+                    La tasa <b>L/100h</b> se calcula respecto al registro inmediato anterior de la unidad dentro del mes seleccionado.
+                </p>
+            </div>
         </div>
     );
 };
 
-const TrendCard = ({ title, stat, icon: Icon }: any) => {
-    const isError = stat.logsCount < 2;
-    const info = getDeviationStatus(stat.deviation);
-    const StatusIcon = info.icon;
+const FluidTable = ({ title, icon, color, records }: any) => {
+    if (!records || records.length === 0) return null;
 
     return (
-        <div className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden ${isError ? 'opacity-50' : ''}`}>
-            <div className="flex justify-between items-start mb-4 relative z-10">
-                <div className="flex items-center gap-2">
-                    <div className={`p-2 rounded-lg bg-slate-50 text-slate-400`}>
-                        <Icon size={18} />
-                    </div>
-                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</h5>
-                </div>
-                {!isError && (
-                    <div className={`text-[9px] font-black px-2 py-1 rounded-full border flex items-center gap-1 ${info.bg} ${info.color}`}>
-                        <StatusIcon size={10} /> {info.label}
-                    </div>
-                )}
+        <div className="space-y-2">
+            <h5 className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${color}`}>
+                {icon} {title}
+            </h5>
+            <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left border-collapse text-[10px]">
+                    <thead>
+                        <tr className="bg-slate-50 border-b font-black text-slate-400 uppercase">
+                            <th className="p-2">Fecha</th>
+                            <th className="p-2">Horas</th>
+                            <th className="p-2 text-center">Litros (L)</th>
+                            <th className="p-2 text-center">Consumo (L/100h)</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {records.map((r: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-50/50">
+                                <td className="p-2 font-bold text-slate-600">{r.date}</td>
+                                <td className="p-2 font-mono text-slate-700">{r.hours}h</td>
+                                <td className="p-2 text-center font-black text-slate-800">{formatDecimal(r.amount, 1)} L</td>
+                                <td className="p-2 text-center">
+                                    {r.rate !== null ? (
+                                        <span className="font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-full">
+                                            {formatDecimal(r.rate, 2)}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-300 italic">Primer reg.</span>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
-
-            {!isError && (
-                <div className="space-y-4 relative z-10">
-                    <div className="flex items-end justify-between">
-                        <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tasa Media Reciente</p>
-                            <span className={`text-3xl font-black ${info.color}`}>{formatDecimal(stat.recentRate)}</span>
-                            <span className="ml-1 text-[10px] font-bold text-slate-400">L/100h</span>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Desviación</p>
-                            <span className={`text-xl font-black ${info.color}`}>
-                                {stat.deviation > 0 ? '+' : ''}{formatDecimal(stat.deviation, 1)}%
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
