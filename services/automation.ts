@@ -1,44 +1,44 @@
-
-import { getAllMachines } from './db';
-import { getMachineFluidStats } from './stats';
+import { getFleetFluidStats } from './stats';
 import { generateFluidReportPDF } from './pdf';
 import { sendEmail } from './api';
 
 /**
- * Genera y envía el informe consolidado de fluidos de toda la flota.
- * Esta función está diseñada para ser llamada por un Cron externo el día 1 a las 07:00.
+ * IMPORTANTE: Esta función está diseñada para ser ejecutada por Supabase Edge Functions.
+ * Configuración CRON recomendada en Supabase:
+ * select cron.schedule('envio-fluidos-mensual', '0 23 L * *', 'select net.http_post(url:="URL_DE_TU_FUNCION")');
+ * (Esto ejecuta la función a las 23:00 del último día de cada mes).
  */
 export const triggerMonthlyFluidReport = async () => {
     try {
-        const machines = await getAllMachines(false);
-        const consolidatedData = [];
         const now = new Date();
+        const currentMonthStr = now.toISOString().substring(0, 7); // YYYY-MM
         const periodName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
 
-        for (const m of machines) {
-            const mStats = await getMachineFluidStats(m.id);
-            // Solo incluimos máquinas con datos históricos para no ensuciar el informe
-            if (mStats.motor.logsCount > 1 || mStats.hydraulic.logsCount > 1) {
-                consolidatedData.push({ machine: m, stats: mStats });
-            }
+        // 1. Obtenemos las estadísticas ya procesadas por el motor de stats
+        const fleetData = await getFleetFluidStats(currentMonthStr);
+
+        if (fleetData.length === 0) {
+            console.log("No hay registros de fluidos para procesar este mes.");
+            return { success: false, error: "Sin datos." };
         }
 
-        if (consolidatedData.length === 0) return { success: false, error: "Sin datos para el informe." };
-
-        const pdfBase64 = generateFluidReportPDF(consolidatedData, periodName);
+        // 2. Generamos el PDF con los promedios incluidos
+        const pdfBase64 = generateFluidReportPDF(fleetData, periodName);
         
+        // 3. Envío de correo
         const res = await sendEmail(
             ['aridos@marraque.es'],
-            `[AUTOMÁTICO] Informe de Fluidos - ${periodName}`,
-            `<p>Buen día. Adjuntamos la auditoría técnica de fluidos consolidada correspondiente al inicio de mes.</p>
-             <p>Este informe se genera automáticamente el día 1 de cada mes a las 07:00h.</p>`,
+            `[CIERRE MES] Informe Consolidado Fluidos - ${periodName}`,
+            `<p>Hola. Se adjunta el informe de auditoría de fluidos de toda la flota correspondiente al mes de ${periodName}.</p>
+             <p>Este informe incluye las tasas de consumo L/100h y la media aritmética de la serie analizada.</p>`,
             pdfBase64,
-            `Informe_Mensual_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
+            `Informe_Fluidos_Cierre_${periodName.replace(/\s+/g, '_')}.pdf`
         );
 
+        console.log("Tarea de automatización finalizada con éxito.");
         return res;
     } catch (e) {
-        console.error("Error en automatización de fluidos:", e);
-        return { success: false, error: "Error crítico en proceso automático." };
+        console.error("Error crítico en triggerMonthlyFluidReport:", e);
+        return { success: false, error: "Error en el proceso de automatización." };
     }
 };
