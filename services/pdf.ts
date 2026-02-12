@@ -1,4 +1,4 @@
-import { jsPDF } from "jsPDF";
+import { jsPDF } from "jspdf";
 import 'jspdf-autotable';
 import { Machine, MaintenanceDefinition } from '../types';
 import { FuelConsumptionStat, formatDecimal } from './stats';
