@@ -106,7 +106,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             ) : (
                 <div className="space-y-8 px-1">
-                    {fleetData.map(({ machine, fluidRecords }, mIdx) => (
+                    {fleetData.map(({ machine, fluidRecords, averages }, mIdx) => (
                         <div key={machine.id} className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
                             {/* Cabecera Máquina */}
                             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
@@ -129,18 +129,21 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                                     icon={<Activity size={14}/>} 
                                     color="text-blue-600" 
                                     records={fluidRecords.motor} 
+                                    avgRate={averages.motor}
                                 />
                                 <FluidTable 
                                     title="Aceite Hidráulico" 
                                     icon={<Waves size={14}/>} 
                                     color="text-teal-600" 
                                     records={fluidRecords.hydraulic} 
+                                    avgRate={averages.hydraulic}
                                 />
                                 <FluidTable 
                                     title="Refrigerante" 
                                     icon={<Thermometer size={14}/>} 
                                     color="text-red-600" 
                                     records={fluidRecords.coolant} 
+                                    avgRate={averages.coolant}
                                 />
                             </div>
                         </div>
@@ -158,14 +161,21 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     );
 };
 
-const FluidTable = ({ title, icon, color, records }: any) => {
+const FluidTable = ({ title, icon, color, records, avgRate }: any) => {
     if (!records || records.length === 0) return null;
 
     return (
         <div className="space-y-2">
-            <h5 className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${color}`}>
-                {icon} {title}
-            </h5>
+            <div className="flex justify-between items-center">
+                <h5 className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${color}`}>
+                    {icon} {title}
+                </h5>
+                {avgRate !== null && (
+                    <div className="text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase">
+                        Media Serie: <span className="text-blue-700">{formatDecimal(avgRate, 2)} L/100h</span>
+                    </div>
+                )}
+            </div>
             <div className="overflow-x-auto rounded-xl border border-slate-100">
                 <table className="w-full text-left border-collapse text-[10px]">
                     <thead>
