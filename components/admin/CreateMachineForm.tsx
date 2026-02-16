@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createMachine, getCostCenters, getSubCentersByCenter, getWorkers } from '../../services/db';
 import { CostCenter, SubCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, ToggleRight, ToggleLeft, LayoutGrid, Calculator, Truck, Clock, Calendar, Activity } from 'lucide-react';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight, ToggleLeft, LayoutGrid, Calculator, Truck, Clock, Calendar, Activity, ClipboardList } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -161,12 +161,27 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                     </div>
                 </div>
 
-                {/* NUEVA SECCIÓN: CONFIGURACIÓN DE HORÓMETRO */}
+                {/* SECCIÓN: CONFIGURACIÓN DE COMPORTAMIENTO */}
                 <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
                     <h5 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-1">
-                        <Clock size={12}/> Configuración de Horómetro
+                        <Clock size={12}/> Configuración de Comportamiento
                     </h5>
                     <div className="grid grid-cols-1 gap-2">
+                        <button 
+                            type="button" 
+                            onClick={() => setSelectableForReports(!selectableForReports)}
+                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${selectableForReports ? 'bg-white border-blue-300 text-blue-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-400'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <ClipboardList size={18} />
+                                <div className="text-left">
+                                    <p className="text-xs font-black uppercase leading-none">Seleccionable en Partes</p>
+                                    <p className="text-[9px] font-bold opacity-60 mt-0.5">Aparece en listas de operarios</p>
+                                </div>
+                            </div>
+                            {selectableForReports ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                        </button>
+
                         <button 
                             type="button" 
                             onClick={() => setRequiresHours(!requiresHours)}
