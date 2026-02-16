@@ -125,6 +125,58 @@ const mapCostCenter = (c: any): CostCenter => ({
     selectableForReports: c.es_parte_trabajo !== undefined ? c.es_parte_trabajo : true
 });
 
+// --- FUNCIONES DE SINCRONIZACIÓN AUTOMÁTICA ---
+
+/**
+ * Busca máquinas vinculadas a producción y actualiza sus horas 
+ * basándose en los campos del parte diario de planta.
+ */
+const syncMachineHoursFromProduction = async (type: 'CP' | 'CR', report: any) => {
+    console.log(`[SYNC] Iniciando sincronización de horas desde parte ${type}`);
+    
+    // 1. Obtener todas las máquinas marcadas para sincronización
+    const { data: machines, error: mError } = await supabase
+        .from('mant_maquinas')
+        .select('id, subcentro_id, nombre')
+        .eq('vinculada_produccion', true);
+
+    if (mError || !machines || machines.length === 0) return;
+
+    // 2. Obtener los subcentros para saber a qué campo de producción están vinculados
+    const { data: subcenters, error: sError } = await supabase
+        .from('mant_subcentros')
+        .select('id, campo_produccion');
+
+    if (sError || !subcenters) return;
+
+    for (const machine of machines) {
+        const sub = subcenters.find(s => s.id === machine.subcentro_id);
+        if (!sub || !sub.campo_produccion) continue;
+
+        let newHours = 0;
+        
+        // Mapeo de campos: Subcentro -> Reporte
+        if (type === 'CP') {
+            if (sub.campo_produccion === 'MACHACADORA') newHours = report.crusherEnd;
+            if (sub.campo_produccion === 'MOLINOS') newHours = report.millsEnd;
+        } else if (type === 'CR') {
+            if (sub.campo_produccion === 'LAVADO') newHours = report.washingEnd;
+            if (sub.campo_produccion === 'TRITURACION') newHours = report.trituracion_fin;
+        }
+
+        if (newHours > 0) {
+            console.log(`[SYNC] Actualizando ${machine.nombre} a ${newHours}h (Vía Producción)`);
+            await updateMachineAttributes(machine.id, { currentHours: newHours });
+            
+            // Comprobar si esta actualización dispara algún mantenimiento
+            const { data: mFull } = await supabase.from('mant_maquinas').select('*, mant_mantenimientos_def(*)').eq('id', machine.id).single();
+            if (mFull) {
+                await checkMaintenanceThresholds(mapMachine(mFull), newHours);
+            }
+        }
+    }
+};
+
 // --- FUNCIONES CORE ---
 
 export const getWorkers = async (onlyActive: boolean = true): Promise<Worker[]> => {
@@ -606,6 +658,9 @@ export const saveCPReport = async (r: Omit<CPDailyReport, 'id'>): Promise<void> 
         comentarios: r.comments
     });
     if (error) throw error;
+
+    // Sincronizar horas de máquinas vinculadas
+    await syncMachineHoursFromProduction('CP', r);
 };
 
 export const getCPReportsByRange = async (start: Date, end: Date): Promise<CPDailyReport[]> => {
@@ -661,6 +716,9 @@ export const saveCRReport = async (r: Omit<CRDailyReport, 'id'>): Promise<void> 
         comentarios: r.comments
     });
     if (error) throw error;
+
+    // Sincronizar horas de máquinas vinculadas
+    await syncMachineHoursFromProduction('CR', r);
 };
 
 export const getCRReportsByRange = async (start: Date, end: Date): Promise<CRDailyReport[]> => {
