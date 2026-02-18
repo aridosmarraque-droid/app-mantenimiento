@@ -132,7 +132,7 @@ export const MaintenanceResponsiblesReport: React.FC<Props> = ({ onBack }) => {
                     </table>
                 </div>
 
-                {machinesWithMaintenance.length === 0 && (
+                {machinesWithMaintenance.length === 0 ? (
                     <div className="py-20 text-center text-slate-300">
                         <ClipboardList size={48} className="mx-auto mb-4 opacity-20" />
                         <p className="font-black uppercase text-xs">No se han encontrado máquinas con planes de mantenimiento configurados</p>
