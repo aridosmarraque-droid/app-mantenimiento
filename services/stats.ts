@@ -253,17 +253,28 @@ export const getMachineFluidStats = async (machineId: string) => {
     };
 };
 
-export const getFleetFluidStats = async (selectedMonth: string) => {
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0);
+export const getFleetFluidStats = async (selectedMonthOrMonths: string | string[]) => {
+    let start: Date, end: Date;
+    
+    if (Array.isArray(selectedMonthOrMonths)) {
+        if (selectedMonthOrMonths.length === 0) return [];
+        const sorted = [...selectedMonthOrMonths].sort();
+        const [yS, mS] = sorted[0].split('-').map(Number);
+        const [yE, mE] = sorted[sorted.length - 1].split('-').map(Number);
+        start = new Date(yS, mS - 1, 1);
+        end = new Date(yE, mE, 0);
+    } else {
+        const [year, month] = selectedMonthOrMonths.split('-').map(Number);
+        start = new Date(year, month - 1, 1);
+        end = new Date(year, month, 0);
+    }
 
     const [allM, allLogs] = await Promise.all([
         getAllMachines(false),
         getAllOperationLogsByRange(start, end, ['LEVELS'])
     ]);
 
-    const fleetData = allM.map(machine => {
+    return allM.map(machine => {
         const mLogs = allLogs
             .filter(l => l.machineId === machine.id)
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -301,9 +312,8 @@ export const getFleetFluidStats = async (selectedMonth: string) => {
             }
         }
 
-        // CÁLCULO DE PROMEDIOS DE LA SERIE DEL MES
         const calcAvg = (recs: any[]) => {
-            const rates = recs.filter(r => r.rate !== null).map(r => r.rate);
+            const rates = recs.filter(r => r.rate !== null).map(r => r.rate as number);
             return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
         };
 
@@ -317,6 +327,4 @@ export const getFleetFluidStats = async (selectedMonth: string) => {
             }
         };
     }).filter(d => d.fluidRecords.motor.length > 0 || d.fluidRecords.hydraulic.length > 0 || d.fluidRecords.coolant.length > 0);
-
-    return fleetData;
 };
