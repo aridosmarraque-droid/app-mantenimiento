@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     getDailyAuditLogs, 
@@ -15,11 +14,10 @@ import {
 } from '../../services/db';
 import { sendWhatsAppMessage } from '../../services/whatsapp';
 import { OperationLog, PersonalReport, Worker, Machine, CostCenter, ServiceProvider, CPDailyReport, CRDailyReport } from '../../types';
-// Import missing 'Info' icon
 import { 
     ArrowLeft, Search, Calendar, User, Truck, Droplet, Wrench, Hammer, 
     Fuel, CalendarClock, Loader2, AlertCircle, Mountain, Waves, 
-    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp, Droplets,
+    Factory, Edit2, Save, X, UserX, Clock, CheckCircle2, Trash2, TrendingUp,
     MessageSquare, Info
 } from 'lucide-react';
 
@@ -216,7 +214,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         <div className="space-y-6 pb-20 animate-in fade-in duration-500 relative">
             <div className="flex items-center gap-2 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
                 <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
-                    <ArrowLeft className="w-6 h-6" />
+                    <ArrowLeft size={24} />
                 </button>
                 <h3 className="text-xl font-bold text-slate-800 tracking-tight">Auditoría Diaria Integral</h3>
             </div>
@@ -289,6 +287,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             <p className="text-amber-700 font-black text-xs mt-1">Total: {report.millsEnd - report.millsStart}h</p>
                                         </div>
                                     </div>
+                                    {/* COMENTARIOS CP */}
+                                    {report.comments && (
+                                        <div className="mt-3 p-2 bg-amber-50/50 rounded-xl border border-amber-100/50 flex items-start gap-2">
+                                            <MessageSquare size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                                            <p className="text-[11px] text-slate-600 italic leading-snug">{report.comments}</p>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                             {auditData.cr.map(report => (
@@ -314,6 +319,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                             <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.trituracion_fin - report.trituracion_inicio).toFixed(1)}h</p>
                                         </div>
                                     </div>
+                                    {/* COMENTARIOS CR */}
+                                    {report.comments && (
+                                        <div className="mt-3 p-2 bg-teal-50/50 rounded-xl border border-teal-100/50 flex items-start gap-2">
+                                            <MessageSquare size={14} className="text-teal-600 mt-0.5 shrink-0" />
+                                            <p className="text-[11px] text-slate-600 italic leading-snug">{report.comments}</p>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -473,7 +485,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
             
-            {/* ... modales existentes sin cambios ... */}
             {/* MODAL DE EDICIÓN TÉCNICA */}
             {editingOp && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
