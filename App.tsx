@@ -20,8 +20,29 @@ import {
   SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, 
   Database, Users, Wrench, Droplet, MessageSquare, Loader2, 
   FileText, BarChart3, CalendarClock, Coins, Clock, Calculator, 
-  Plus, Search, ArrowLeft, Printer, Play
+  Plus, Search, ArrowLeft, Printer, Play, User
 } from 'lucide-react';
+
+/* --- COMPONENTES DE USUARIO Y MANTENIMIENTO --- */
+// Added missing component imports
+import { Login } from './components/Login';
+import { MachineSelector } from './components/MachineSelector';
+import { MainMenu } from './components/MainMenu';
+
+// Added missing form imports
+import { LevelsForm } from './components/forms/LevelsForm';
+import { BreakdownForm } from './components/forms/BreakdownForm';
+import { MaintenanceForm } from './components/forms/MaintenanceForm';
+import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
+import { RefuelingForm } from './components/forms/RefuelingForm';
+
+// Added missing role-specific component imports
+import { WorkerSelection } from './components/personal/WorkerSelection';
+import { PersonalReportForm } from './components/personal/PersonalReportForm';
+import { CPSelection } from './components/cp/CPSelection';
+import { DailyReportForm } from './components/cp/DailyReportForm';
+import { CRSelection } from './components/cr/CRSelection';
+import { DailyReportFormCR } from './components/cr/DailyReportFormCR';
 
 // Componentes Admin
 import { CreateCenterForm } from './components/admin/CreateCenterForm';
@@ -43,22 +64,7 @@ import { CostDistributionReport } from './components/admin/CostDistributionRepor
 import { WorkerHoursDistributionReport } from './components/admin/WorkerHoursDistributionReport';
 import { SpecificCostRulesManager } from './components/admin/SpecificCostRulesManager';
 import { FuelCostDistributionReport } from './components/admin/FuelCostDistributionReport';
-
-// Componentes Operario / Especialistas
-import { Login } from './components/Login';
-import { MachineSelector } from './components/MachineSelector';
-import { MainMenu } from './components/MainMenu';
-import { LevelsForm } from './components/forms/LevelsForm';
-import { BreakdownForm } from './components/forms/BreakdownForm';
-import { MaintenanceForm } from './components/forms/MaintenanceForm';
-import { RefuelingForm } from './components/forms/RefuelingForm';
-import { ScheduledMaintenanceForm } from './components/forms/ScheduledMaintenanceForm';
-import { CPSelection } from './components/cp/CPSelection';
-import { DailyReportForm } from './components/cp/DailyReportForm';
-import { CRSelection } from './components/cr/CRSelection';
-import { DailyReportFormCR } from './components/cr/DailyReportFormCR';
-import { WorkerSelection } from './components/personal/WorkerSelection';
-import { PersonalReportForm } from './components/personal/PersonalReportForm';
+import { MaintenanceResponsiblesReport } from './components/admin/MaintenanceResponsiblesReport';
 
 enum ViewState {
   LOGIN,
@@ -91,7 +97,8 @@ enum ViewState {
   ADMIN_COST_DISTRIBUTION,
   ADMIN_WORKER_HOURS_DISTRIBUTION,
   ADMIN_SPECIFIC_COSTS,
-  ADMIN_FUEL_RATIO_DISTRIBUTION
+  ADMIN_FUEL_RATIO_DISTRIBUTION,
+  ADMIN_MAINTENANCE_RESPONSIBLES
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'costes' | 'informes' | 'config' | null;
@@ -341,13 +348,14 @@ const App: React.FC = () => {
               <button onClick={() => setOpenCategory(openCategory === 'informes' ? null : 'informes')} className={`w-full px-5 py-4 flex items-center justify-between transition-colors ${openCategory === 'informes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'}`}>
                 <div className="flex items-center gap-3">
                   <SearchCheck className={`w-5 h-5 ${openCategory === 'informes' ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                  <span className="text-xs font-black uppercase tracking-tight">Auditoría Técnica</span>
+                  <span className="text-xs font-black uppercase tracking-tight">Informes</span>
                 </div>
                 {openCategory === 'informes' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
               {openCategory === 'informes' && (
                 <div className="bg-slate-50 divide-y divide-slate-100">
                   <button onClick={() => { setViewState(ViewState.ADMIN_MAINTENANCE_REPORT); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-red-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Mantenimientos Programados</button>
+                  <button onClick={() => { setViewState(ViewState.ADMIN_MAINTENANCE_RESPONSIBLES); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><User size={14} className="text-blue-500" /> Responsables de Mantenimiento</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_PRODUCTION_DASHBOARD); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-amber-700 hover:bg-white flex items-center gap-2">Dashboards Rendimiento</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_DAILY_AUDIT); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-black text-indigo-700 hover:bg-white flex items-center gap-2">Auditoría de Partes</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_VIEW_LOGS); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2">Histórico de Registros</button>
@@ -481,6 +489,7 @@ const App: React.FC = () => {
         {viewState === ViewState.ADMIN_WHATSAPP_CONFIG && <WhatsAppConfig onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_MAINTENANCE_REPORT && <ScheduledMaintenanceReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+        {viewState === ViewState.ADMIN_MAINTENANCE_RESPONSIBLES && <MaintenanceResponsiblesReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         
         {/* Reparto de Costes */}
         {viewState === ViewState.ADMIN_SPECIFIC_COSTS && <SpecificCostRulesManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
