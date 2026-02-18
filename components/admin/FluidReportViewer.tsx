@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getFleetFluidStats, formatDecimal } from '../../services/stats';
 import { generateFluidReportPDF } from '../../services/pdf';
 import { sendEmail } from '../../services/api';
 import { 
     ArrowLeft, Loader2, Truck, Activity,
     Thermometer, Waves, Table, Send, Calendar,
-    Droplets, Info, Printer
+    Droplets, Info, Filter, X
 } from 'lucide-react';
 
 interface Props {
@@ -13,34 +13,71 @@ interface Props {
 }
 
 export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
-    const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().substring(0, 7));
+    // Estado para múltiples meses seleccionados
+    const [selectedMonths, setSelectedMonths] = useState<string[]>([new Date().toISOString().substring(0, 7)]);
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
     const [fleetData, setFleetData] = useState<any[]>([]);
 
+    // Generar lista de los últimos 24 meses para el selector
+    const availableMonths = useMemo(() => {
+        const months = [];
+        const now = new Date();
+        for (let i = 0; i < 24; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            months.push(d.toISOString().substring(0, 7));
+        }
+        return months;
+    }, []);
+
+    const toggleMonth = (m: string) => {
+        setSelectedMonths(prev => {
+            if (prev.includes(m)) {
+                if (prev.length === 1) return prev; // Mantener al menos uno
+                return prev.filter(x => x !== m).sort();
+            }
+            return [...prev, m].sort();
+        });
+    };
+
+    const periodName = useMemo(() => {
+        if (selectedMonths.length === 0) return "SIN PERIODO";
+        if (selectedMonths.length === 1) {
+            const [year, month] = selectedMonths[0].split('-').map(Number);
+            const dateObj = new Date(year, month - 1, 1);
+            return dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+        }
+        const sorted = [...selectedMonths].sort();
+        const [yStart, mStart] = sorted[0].split('-').map(Number);
+        const [yEnd, mEnd] = sorted[sorted.length - 1].split('-').map(Number);
+        
+        const startLabel = new Date(yStart, mStart - 1, 1).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }).toUpperCase();
+        const endLabel = new Date(yEnd, mEnd - 1, 1).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }).toUpperCase();
+        
+        return `${startLabel} - ${endLabel}`;
+    }, [selectedMonths]);
+
     const loadData = useCallback(async () => {
+        if (selectedMonths.length === 0) return;
         setLoading(true);
         try {
-            const data = await getFleetFluidStats(selectedMonth);
+            const data = await getFleetFluidStats(selectedMonths);
             setFleetData(data);
         } catch (e) {
             console.error("Error cargando informe de fluidos:", e);
         } finally {
             setLoading(false);
         }
-    }, [selectedMonth]);
+    }, [selectedMonths]);
 
     useEffect(() => {
         loadData();
     }, [loadData]);
 
     const handleSendReport = async () => {
-        if (sending) return;
-        const [year, month] = selectedMonth.split('-').map(Number);
-        const dateObj = new Date(year, month - 1, 1);
-        const periodName = dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase();
+        if (sending || fleetData.length === 0) return;
 
-        if (!confirm(`¿Enviar informe de fluidos del mes de ${periodName} a aridos@marraque.es?`)) return;
+        if (!confirm(`¿Enviar informe de fluidos del periodo ${periodName} a aridos@marraque.es?`)) return;
 
         setSending(true);
         try {
@@ -48,7 +85,7 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
             await sendEmail(
                 ['aridos@marraque.es'],
                 `Informe Fluidos Flota - ${periodName}`,
-                `<p>Se adjunta el desglose detallado de consumos de fluidos por unidad para el periodo ${periodName}.</p>`,
+                `<p>Se adjunta el desglose detallado de consumos de fluidos por unidad para el periodo analizado: <b>${periodName}</b>.</p>`,
                 pdfBase64,
                 `Informe_Fluidos_${periodName.replace(/\s+/g, '_')}.pdf`
             );
@@ -63,41 +100,63 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
     return (
         <div className="space-y-6 pb-20 animate-in fade-in duration-500">
             {/* Cabecera */}
-            <div className="flex items-center justify-between border-b pb-4 bg-white p-4 rounded-xl shadow-sm sticky top-0 z-10">
-                <div className="flex items-center gap-2">
-                    <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
-                        <ArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Monitor Fluidos</h3>
-                        <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest">Tasas Técnicas L/100h</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="relative">
-                        <Calendar className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                        <input 
-                            type="month" 
-                            value={selectedMonth} 
-                            onChange={e => setSelectedMonth(e.target.value)}
-                            className="pl-10 pr-4 py-2 border rounded-xl font-bold text-slate-700 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
-                        />
+            <div className="flex flex-col border-b bg-white shadow-sm sticky top-0 z-10">
+                <div className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-2">
+                        <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700">
+                            <ArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">Monitor Fluidos</h3>
+                            <p className="text-[10px] font-black text-indigo-600 uppercase mt-1 tracking-widest flex items-center gap-1">
+                                <Activity size={10}/> {periodName}
+                            </p>
+                        </div>
                     </div>
                     <button 
                         onClick={handleSendReport}
-                        disabled={sending || loading}
+                        disabled={sending || loading || fleetData.length === 0}
                         className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-black transition-all disabled:opacity-30 shadow-lg"
                         title="Enviar Informe Flota"
                     >
                         {sending ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>}
                     </button>
                 </div>
+
+                {/* Selector Dinámico de Meses (Slicer) */}
+                <div className="px-4 pb-4 overflow-x-auto">
+                    <div className="flex items-center gap-2 pb-1">
+                        <Filter size={14} className="text-slate-400 shrink-0" />
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Seleccionar meses para visión a largo plazo:</span>
+                    </div>
+                    <div className="flex gap-2 min-w-max pr-4">
+                        {availableMonths.map(m => {
+                            const isSelected = selectedMonths.includes(m);
+                            const [year, month] = m.split('-').map(Number);
+                            const label = new Date(year, month - 1, 1).toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }).toUpperCase();
+                            
+                            return (
+                                <button
+                                    key={m}
+                                    onClick={() => toggleMonth(m)}
+                                    className={`px-3 py-1.5 rounded-full text-[10px] font-black transition-all border-2 ${
+                                        isSelected 
+                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
+                                        : 'bg-white border-slate-200 text-slate-400 hover:border-indigo-200'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
 
             {loading ? (
                 <div className="py-40 flex flex-col items-center justify-center text-slate-400">
                     <Loader2 className="animate-spin mb-4 text-indigo-500" size={48} />
-                    <p className="font-black uppercase text-[10px] tracking-widest">Compilando registros de flota...</p>
+                    <p className="font-black uppercase text-[10px] tracking-widest">Analizando periodo extendido...</p>
                 </div>
             ) : fleetData.length === 0 ? (
                 <div className="py-40 text-center text-slate-300">
@@ -151,10 +210,10 @@ export const FluidReportViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
 
-            <div className="mx-1 bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3 no-print">
-                <Info className="text-amber-600 shrink-0" size={18}/>
-                <p className="text-[10px] text-amber-800 leading-relaxed italic">
-                    La tasa <b>L/100h</b> se calcula respecto al registro inmediato anterior de la unidad dentro del mes seleccionado.
+            <div className="mx-1 bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3 no-print">
+                <Info className="text-blue-600 shrink-0" size={18}/>
+                <p className="text-[10px] text-blue-800 leading-relaxed italic">
+                    <b>Análisis a Largo Plazo:</b> La tasa <b>L/100h</b> se calcula entre cada registro consecutivo. El "Promedio Serie" representa el comportamiento técnico global en todo el periodo seleccionado.
                 </p>
             </div>
         </div>
@@ -166,20 +225,23 @@ const FluidTable = ({ title, icon, color, records, avgRate }: any) => {
 
     return (
         <div className="space-y-2">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center bg-slate-50/80 p-2 rounded-lg border border-slate-100">
                 <h5 className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${color}`}>
                     {icon} {title}
                 </h5>
                 {avgRate !== null && (
-                    <div className="text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase">
-                        Media Serie: <span className="text-blue-700">{formatDecimal(avgRate, 2)} L/100h</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Promedio Serie:</span>
+                        <span className={`text-xs font-black px-2 py-0.5 rounded-md bg-white border border-slate-200 ${color}`}>
+                            {formatDecimal(avgRate, 2)} <small className="text-[8px]">L/100h</small>
+                        </span>
                     </div>
                 )}
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
                 <table className="w-full text-left border-collapse text-[10px]">
                     <thead>
-                        <tr className="bg-slate-50 border-b font-black text-slate-400 uppercase">
+                        <tr className="bg-slate-100/50 border-b font-black text-slate-400 uppercase">
                             <th className="p-2">Fecha</th>
                             <th className="p-2">Horas</th>
                             <th className="p-2 text-center">Litros (L)</th>
@@ -194,11 +256,11 @@ const FluidTable = ({ title, icon, color, records, avgRate }: any) => {
                                 <td className="p-2 text-center font-black text-slate-800">{formatDecimal(r.amount, 1)} L</td>
                                 <td className="p-2 text-center">
                                     {r.rate !== null ? (
-                                        <span className="font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-full">
+                                        <span className={`font-black px-1.5 py-0.5 rounded-full ${r.rate > (avgRate * 1.2) ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
                                             {formatDecimal(r.rate, 2)}
                                         </span>
                                     ) : (
-                                        <span className="text-slate-300 italic">Primer reg.</span>
+                                        <span className="text-slate-300 italic">Base serie</span>
                                     )}
                                 </td>
                             </tr>
