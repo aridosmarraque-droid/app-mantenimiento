@@ -81,9 +81,10 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
             }
 
             if (machine?.transportExpenses) {
-                const key = `TTE-TTE`;
+                const mCode = machine.companyCode || machine.name || 'TTE';
+                const key = `TTE-${mCode}`;
                 if (!units[key]) {
-                    units[key] = { centerCode: 'TTE', centerName: 'TRANSPORTE', machineName: 'TTE', liters: 0 };
+                    units[key] = { centerCode: 'TTE', centerName: 'TRANSPORTE', machineName: mCode, liters: 0 };
                 }
                 units[key].liters += totalLiters;
                 return;
