@@ -273,7 +273,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                     const isActuallyTransport = dbMachine?.transportExpenses;
                     
                     const centerKey = isActuallyAdmon ? 'ADMON' : isActuallyTransport ? 'TTE' : (center.centerId || 'N/A');
-                    const machineKey = isActuallyAdmon ? 'ADMON' : isActuallyTransport ? 'TTE' : (machine.machineId || 'N/A');
+                    const machineKey = isActuallyAdmon ? 'ADMON' : (machine.machineId || 'N/A');
                     const aggKey = `${centerKey}-${machineKey}`;
 
                     if (!unitsMap[aggKey]) {
@@ -286,7 +286,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
                             cCode = "ADMON";
                             cName = "ADMINISTRACIÓN";
                         } else if (isActuallyTransport) {
-                            mCode = "TTE";
+                            mCode = dbMachine ? (dbMachine.companyCode || dbMachine.name) : "TTE";
                             cCode = "TTE";
                             cName = "TRANSPORTE";
                         } else {
@@ -371,7 +371,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         summaryByUnit.forEach(unit => {
             let costingCode = "";
             if (unit.centerCode === "ADMON") costingCode = "ADMON";
-            else if (unit.centerCode === "TTE") costingCode = "TTE";
+            else if (unit.centerCode === "TTE") costingCode = `TTE-${unit.machineName}`;
             else costingCode = `${unit.centerCode}-${unit.machineName}`;
             
             linesContent += `1\t\t640000\t\t${unit.totalSalary.toFixed(2)}\t0.00\tNOMINA ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
@@ -384,7 +384,7 @@ export const WorkerHoursDistributionReport: React.FC<Props> = ({ onBack }) => {
         summaryByUnit.forEach(unit => {
             let costingCode = "";
             if (unit.centerCode === "ADMON") costingCode = "ADMON";
-            else if (unit.centerCode === "TTE") costingCode = "TTE";
+            else if (unit.centerCode === "TTE") costingCode = `TTE-${unit.machineName}`;
             else costingCode = `${unit.centerCode}-${unit.machineName}`;
             
             linesContent += `1\t\t642000\t\t${unit.totalSS.toFixed(2)}\t0.00\tSEG. SOCIAL ${monthYearStr}\t\t\t\t${costingCode}\r\n`;
