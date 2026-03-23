@@ -656,5 +656,3 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         </div>
     );
 };
-    );
-};
