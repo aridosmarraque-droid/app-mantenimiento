@@ -596,6 +596,16 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                         </div>
                         <form onSubmit={handleSavePersonalEdit} className="p-6 space-y-4">
                             <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha</label>
+                                <input 
+                                    type="date" 
+                                    value={new Date(editingPersonal.date).toISOString().split('T')[0]}
+                                    onChange={e => setEditingPersonal({...editingPersonal, date: new Date(e.target.value)})}
+                                    className="w-full p-3 border rounded-xl font-bold bg-slate-50"
+                                />
+                            </div>
+
+                            <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Centro de Trabajo</label>
                                 <select 
                                     value={editingPersonal.costCenterId || ''}
@@ -644,5 +654,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                 </div>
             )}
         </div>
+    );
+};
     );
 };
