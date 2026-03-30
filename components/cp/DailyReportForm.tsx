@@ -104,6 +104,12 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
         // No seteamos isSaving a false aquí porque el padre desmontará el componente o mostrará éxito
     };
 
+    const decimalToTime = (decimal: number) => {
+        const hours = Math.floor(decimal);
+        const minutes = Math.round((decimal - hours) * 60);
+        return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+    };
+
     if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-amber-600" /></div>;
 
     return (
@@ -138,31 +144,31 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Inicio (Anterior)</label>
                             <div className="p-3 bg-slate-100 rounded-lg text-slate-600 font-mono font-semibold border border-slate-200">
-                                {crusherStart}
+                                {decimalToTime(crusherStart)} ({crusherStart.toFixed(2)})
                             </div>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-amber-700 uppercase mb-1">Fin Jornada *</label>
                             <div className="flex gap-2">
-                                <div className="flex-1">
+                                <div className="flex-[3]">
                                     <label className="block text-[10px] font-bold text-amber-600 uppercase mb-0.5">Horas</label>
                                     <input 
                                         type="number" 
                                         required
                                         min={Math.floor(crusherStart)}
-                                        placeholder="0"
+                                        placeholder="00000"
                                         value={crusherEndHours}
                                         onChange={e => setCrusherEndHours(e.target.value === '' ? '' : Math.floor(Number(e.target.value)))}
                                         className="w-full p-3 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono font-bold text-lg"
                                     />
                                 </div>
-                                <div className="w-24">
+                                <div className="flex-1 min-w-[70px]">
                                     <label className="block text-[10px] font-bold text-amber-600 uppercase mb-0.5">Minutos</label>
                                     <input 
                                         type="number" 
                                         min="0"
                                         max="59"
-                                        placeholder="0"
+                                        placeholder="00"
                                         value={crusherEndMinutes}
                                         onChange={e => setCrusherEndMinutes(e.target.value === '' ? '' : Math.floor(Number(e.target.value)))}
                                         className="w-full p-3 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono font-bold text-lg"
@@ -185,31 +191,31 @@ export const DailyReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack })
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Inicio (Anterior)</label>
                             <div className="p-3 bg-slate-100 rounded-lg text-slate-600 font-mono font-semibold border border-slate-200">
-                                {millsStart}
+                                {decimalToTime(millsStart)} ({millsStart.toFixed(2)})
                             </div>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-blue-700 uppercase mb-1">Fin Jornada *</label>
                             <div className="flex gap-2">
-                                <div className="flex-1">
+                                <div className="flex-[3]">
                                     <label className="block text-[10px] font-bold text-blue-600 uppercase mb-0.5">Horas</label>
                                     <input 
                                         type="number" 
                                         required
                                         min={Math.floor(millsStart)}
-                                        placeholder="0"
+                                        placeholder="00000"
                                         value={millsEndHours}
                                         onChange={e => setMillsEndHours(e.target.value === '' ? '' : Math.floor(Number(e.target.value)))}
                                         className="w-full p-3 bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono font-bold text-lg"
                                     />
                                 </div>
-                                <div className="w-24">
+                                <div className="flex-1 min-w-[70px]">
                                     <label className="block text-[10px] font-bold text-blue-600 uppercase mb-0.5">Minutos</label>
                                     <input 
                                         type="number" 
                                         min="0"
                                         max="59"
-                                        placeholder="0"
+                                        placeholder="00"
                                         value={millsEndMinutes}
                                         onChange={e => setMillsEndMinutes(e.target.value === '' ? '' : Math.floor(Number(e.target.value)))}
                                         className="w-full p-3 bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono font-bold text-lg"
