@@ -278,13 +278,13 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.crusherStart} → {report.crusherEnd}</p>
-                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {report.crusherEnd - report.crusherStart}h</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{report.crusherStart.toFixed(2)} → {report.crusherEnd.toFixed(2)}</p>
+                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.crusherEnd - report.crusherStart).toFixed(2)}h</p>
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.millsStart} → {report.millsEnd}</p>
-                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {report.millsEnd - report.millsStart}h</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{report.millsStart.toFixed(2)} → {report.millsEnd.toFixed(2)}</p>
+                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.millsEnd - report.millsStart).toFixed(2)}h</p>
                                         </div>
                                     </div>
                                     {/* COMENTARIOS CP */}
