@@ -197,6 +197,12 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
 
     const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
     
+    const decimalToTime = (decimal: number) => {
+        const hours = Math.floor(decimal);
+        const minutes = Math.round((decimal - hours) * 60);
+        return `${hours}:${minutes.toString().padStart(2, '0')}`;
+    };
+
     const getMachineName = (id: string) => {
         const m = machines.find(m => m.id === id);
         return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Sin Asignar";
@@ -278,12 +284,14 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.crusherStart.toFixed(2)} → {report.crusherEnd.toFixed(2)}</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{decimalToTime(report.crusherStart)} → {decimalToTime(report.crusherEnd)}</p>
+                                            <p className="text-[10px] text-slate-400 font-mono">({report.crusherStart.toFixed(2)} → {report.crusherEnd.toFixed(2)})</p>
                                             <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.crusherEnd - report.crusherStart).toFixed(2)}h</p>
                                         </div>
                                         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                             <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.millsStart.toFixed(2)} → {report.millsEnd.toFixed(2)}</p>
+                                            <p className="font-mono font-bold text-sm text-slate-700">{decimalToTime(report.millsStart)} → {decimalToTime(report.millsEnd)}</p>
+                                            <p className="text-[10px] text-slate-400 font-mono">({report.millsStart.toFixed(2)} → {report.millsEnd.toFixed(2)})</p>
                                             <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.millsEnd - report.millsStart).toFixed(2)}h</p>
                                         </div>
                                     </div>
