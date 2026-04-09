@@ -39,12 +39,13 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
     }, []);
 
     const flattenedMaintenance = useMemo(() => {
-        const list: { machine: Machine, def: MaintenanceDefinition, isOverdue: boolean, isWarning: boolean, proximity: number }[] = [];
+        const list: { machine: Machine, def: MaintenanceDefinition, isOverdue: boolean, isWarning: boolean, proximity: number, sortValue: number }[] = [];
         machines.forEach(machine => {
             machine.maintenanceDefs.forEach(def => {
                 let isOverdue = false;
                 let isWarning = false;
                 let proximity = 0;
+                let sortValue = 0;
 
                 if (def.maintenanceType === 'DATE') {
                     const nextDate = def.nextDate ? new Date(def.nextDate) : null;
@@ -56,17 +57,20 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
                         isOverdue = diffDays <= 0;
                         isWarning = diffDays > 0 && diffDays <= 15;
                         proximity = diffDays;
+                        sortValue = diffDays * 10; // 1 day = 10 hours for sorting
                     } else {
                         proximity = 999999;
+                        sortValue = 999999;
                     }
                 } else {
                     const remaining = def.remainingHours ?? 0;
                     isOverdue = remaining <= 0;
                     isWarning = remaining > 0 && remaining <= (def.warningHours || 0);
                     proximity = remaining;
+                    sortValue = remaining;
                 }
 
-                list.push({ machine, def, isOverdue, isWarning, proximity });
+                list.push({ machine, def, isOverdue, isWarning, proximity, sortValue });
             });
         });
 
@@ -75,7 +79,7 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
             if (!a.isOverdue && b.isOverdue) return 1;
             if (a.isWarning && !b.isWarning) return -1;
             if (!a.isWarning && b.isWarning) return 1;
-            return a.proximity - b.proximity;
+            return a.sortValue - b.sortValue;
         });
     }, [machines, today]);
 
