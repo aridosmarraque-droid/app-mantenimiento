@@ -38,34 +38,53 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
         return d;
     }, []);
 
-    const summary = useMemo(() => {
-        let total = 0;
-        let overdue = 0;
-        let warning = 0;
+    const flattenedMaintenance = useMemo(() => {
+        const list: { machine: Machine, def: MaintenanceDefinition, isOverdue: boolean, isWarning: boolean, proximity: number }[] = [];
+        machines.forEach(machine => {
+            machine.maintenanceDefs.forEach(def => {
+                let isOverdue = false;
+                let isWarning = false;
+                let proximity = 0;
 
-        machines.forEach(m => {
-            m.maintenanceDefs.forEach(d => {
-                total++;
-                if (d.maintenanceType === 'DATE') {
-                    const nextDate = d.nextDate ? new Date(d.nextDate) : null;
+                if (def.maintenanceType === 'DATE') {
+                    const nextDate = def.nextDate ? new Date(def.nextDate) : null;
                     if (nextDate) {
-                        nextDate.setHours(0, 0, 0, 0);
-                        const diffTime = nextDate.getTime() - today.getTime();
+                        const d = new Date(nextDate);
+                        d.setHours(0, 0, 0, 0);
+                        const diffTime = d.getTime() - today.getTime();
                         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        
-                        if (diffDays <= 0) overdue++;
-                        else if (diffDays <= 15) warning++;
+                        isOverdue = diffDays <= 0;
+                        isWarning = diffDays > 0 && diffDays <= 15;
+                        proximity = diffDays;
+                    } else {
+                        proximity = 999999;
                     }
                 } else {
-                    const remaining = d.remainingHours ?? 0;
-                    if (remaining <= 0) overdue++;
-                    else if (remaining <= (d.warningHours || 0)) warning++;
+                    const remaining = def.remainingHours ?? 0;
+                    isOverdue = remaining <= 0;
+                    isWarning = remaining > 0 && remaining <= (def.warningHours || 0);
+                    proximity = remaining;
                 }
+
+                list.push({ machine, def, isOverdue, isWarning, proximity });
             });
         });
 
-        return { total, overdue, warning };
+        return list.sort((a, b) => {
+            if (a.isOverdue && !b.isOverdue) return -1;
+            if (!a.isOverdue && b.isOverdue) return 1;
+            if (a.isWarning && !b.isWarning) return -1;
+            if (!a.isWarning && b.isWarning) return 1;
+            return a.proximity - b.proximity;
+        });
     }, [machines, today]);
+
+    const summary = useMemo(() => {
+        const total = flattenedMaintenance.length;
+        const overdue = flattenedMaintenance.filter(i => i.isOverdue).length;
+        const warning = flattenedMaintenance.filter(i => i.isWarning).length;
+        return { total, overdue, warning };
+    }, [flattenedMaintenance]);
 
     const handleSendReport = async () => {
         if (sending) return;
@@ -141,108 +160,51 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
                 </div>
             </div>
 
-            {/* SECCIÓN 1: MANTENIMIENTOS POR HORAS */}
+            {/* LISTADO UNIFICADO DE MANTENIMIENTOS */}
             <div className="space-y-4">
                 <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tight px-2">
-                    <Clock size={18} className="text-blue-600" /> Preventivos por Horas
+                    <LayoutGrid size={18} className="text-blue-600" /> Listado de Intervenciones
                 </h4>
-                <div className="space-y-4">
-                    {machines.filter(m => m.maintenanceDefs.some(d => d.maintenanceType !== 'DATE')).map(machine => (
-                        <div key={`hours-${machine.id}`} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mx-1">
-                            <div className="p-3 bg-slate-50 border-b flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <Truck size={16} className="text-blue-500" />
-                                    <span className="font-black text-slate-700 text-xs uppercase">{machine.companyCode ? `[${machine.companyCode}] ` : ''}{machine.name}</span>
-                                </div>
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{machine.currentHours}h actuales</span>
-                            </div>
-                            <div className="divide-y divide-slate-50">
-                                {machine.maintenanceDefs.filter(d => d.maintenanceType !== 'DATE').map(def => {
-                                    const remaining = def.remainingHours ?? 0;
-                                    const isOverdue = remaining <= 0;
-                                    const isWarning = remaining > 0 && remaining <= (def.warningHours || 0);
-                                    return (
-                                        <div key={def.id} className={`p-4 flex justify-between items-center ${isOverdue ? 'bg-red-50/20' : isWarning ? 'bg-amber-50/20' : ''}`}>
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full ${isOverdue ? 'bg-red-500 animate-pulse' : isWarning ? 'bg-amber-500' : 'bg-green-500'}`}></span>
-                                                    <h5 className="font-bold text-slate-700 text-xs uppercase">{def.name}</h5>
-                                                </div>
-                                                <p className="text-[9px] text-slate-400 mt-0.5 ml-4 italic line-clamp-1">{def.tasks}</p>
-                                            </div>
-                                            <div className="text-right flex items-center gap-4">
-                                                <div>
-                                                    <p className="text-[7px] font-black text-slate-400 uppercase">Restantes</p>
-                                                    <p className={`text-xs font-mono font-black ${isOverdue ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-green-600'}`}>
-                                                        {remaining}h
-                                                    </p>
-                                                </div>
-                                                <div className={`p-1 rounded ${isOverdue ? 'bg-red-100 text-red-600' : isWarning ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
-                                                    {isOverdue ? <AlertTriangle size={14}/> : <CheckCircle2 size={14}/>}
-                                                </div>
-                                            </div>
+                <div className="space-y-3 px-1">
+                    {flattenedMaintenance.map(({ machine, def, isOverdue, isWarning, proximity }) => {
+                        const isDate = def.maintenanceType === 'DATE';
+                        
+                        return (
+                            <div key={def.id} className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden ${isOverdue ? 'border-l-4 border-l-red-500' : isWarning ? 'border-l-4 border-l-amber-500' : ''}`}>
+                                <div className="p-4 flex justify-between items-center">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-blue-600">
+                                                {machine.companyCode ? `[${machine.companyCode}] ` : ''}{machine.name}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                • {isDate ? 'Calendario' : 'Horas'}
+                                            </span>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* SECCIÓN 2: MANTENIMIENTOS POR FECHAS */}
-            <div className="space-y-4 pt-4">
-                <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tight px-2">
-                    <Calendar size={18} className="text-purple-600" /> Preventivos por Calendario
-                </h4>
-                <div className="space-y-4">
-                    {machines.filter(m => m.maintenanceDefs.some(d => d.maintenanceType === 'DATE')).map(machine => (
-                        <div key={`date-${machine.id}`} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mx-1">
-                            <div className="p-3 bg-slate-50 border-b flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <Truck size={16} className="text-purple-500" />
-                                    <span className="font-black text-slate-700 text-xs uppercase">{machine.companyCode ? `[${machine.companyCode}] ` : ''}{machine.name}</span>
-                                </div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Referencia: {today.toLocaleDateString()}</span>
-                            </div>
-                            <div className="divide-y divide-slate-50">
-                                {machine.maintenanceDefs.filter(d => d.maintenanceType === 'DATE').map(def => {
-                                    const nextDate = def.nextDate ? new Date(def.nextDate) : null;
-                                    let diffDays = 0;
-                                    if (nextDate) {
-                                        nextDate.setHours(0,0,0,0);
-                                        diffDays = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                                    }
-                                    
-                                    const isOverdue = diffDays <= 0;
-                                    const isWarning = diffDays > 0 && diffDays <= 15;
-                                    
-                                    return (
-                                        <div key={def.id} className={`p-4 flex justify-between items-center ${isOverdue ? 'bg-red-50/20' : isWarning ? 'bg-amber-50/20' : ''}`}>
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full ${isOverdue ? 'bg-red-500 animate-pulse' : isWarning ? 'bg-amber-500' : 'bg-green-500'}`}></span>
-                                                    <h5 className="font-bold text-slate-700 text-xs uppercase">{def.name}</h5>
-                                                </div>
-                                                <p className="text-[9px] text-slate-400 mt-0.5 ml-4">Fecha Vencimiento: <span className="font-bold text-slate-600">{nextDate ? nextDate.toLocaleDateString() : 'N/A'}</span></p>
-                                            </div>
-                                            <div className="text-right flex items-center gap-4">
-                                                <div>
-                                                    <p className="text-[7px] font-black text-slate-400 uppercase">Días Restantes</p>
-                                                    <p className={`text-xs font-mono font-black ${isOverdue ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-green-600'}`}>
-                                                        {isOverdue ? 'PLAZO CUMPLIDO' : `${diffDays} Días`}
-                                                    </p>
-                                                </div>
-                                                <div className={`p-1 rounded ${isOverdue ? 'bg-red-100 text-red-600' : isWarning ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
-                                                    {isOverdue ? <AlertTriangle size={14}/> : <Calendar size={14}/>}
-                                                </div>
-                                            </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`w-2 h-2 rounded-full ${isOverdue ? 'bg-red-500 animate-pulse' : isWarning ? 'bg-amber-500' : 'bg-green-500'}`}></span>
+                                            <h5 className="font-black text-slate-700 text-xs uppercase">{def.name}</h5>
                                         </div>
-                                    );
-                                })}
+                                        <p className="text-[9px] text-slate-400 mt-1 ml-4 italic line-clamp-1">{def.tasks}</p>
+                                        {isDate && def.nextDate && (
+                                            <p className="text-[9px] text-slate-400 mt-0.5 ml-4">Vence: <span className="font-bold text-slate-600">{new Date(def.nextDate).toLocaleDateString()}</span></p>
+                                        )}
+                                    </div>
+                                    <div className="text-right flex items-center gap-4">
+                                        <div>
+                                            <p className="text-[7px] font-black text-slate-400 uppercase">{isDate ? 'Días Restantes' : 'Horas Restantes'}</p>
+                                            <p className={`text-xs font-mono font-black ${isOverdue ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-green-600'}`}>
+                                                {isDate ? (isOverdue ? 'VENCIDO' : `${proximity} Días`) : `${proximity}h`}
+                                            </p>
+                                        </div>
+                                        <div className={`p-2 rounded-xl ${isOverdue ? 'bg-red-100 text-red-600' : isWarning ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
+                                            {isOverdue ? <AlertTriangle size={18}/> : isWarning ? <BellRing size={18}/> : <CheckCircle2 size={18}/>}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
