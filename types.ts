@@ -32,7 +32,7 @@ export interface SubCenter {
 
 // --- 2. GESTIÓN DE PERSONAL Y PRL (PREVENCIÓN) ---
 
-export type WorkerRole = 'admin' | 'worker' | 'cp' | 'cr' | 'reparador' | 'prevencion';
+export type WorkerRole = 'admin' | 'worker' | 'cp' | 'cr' | 'reparador' | 'prevencion' | 'ingeniero';
 
 export interface Worker {
   id: string;
@@ -231,12 +231,62 @@ export interface PersonalReport {
     location?: string;
 }
 
-// --- 7. REPARTO DE COSTES ---
+// --- 8. PREVENCIÓN DE RIESGOS LABORALES (PRL) - INGENIERÍA ---
 
-export interface SpecificCostRule {
-    id: string;
-    machineOriginId: string;
-    targetCenterId: string;
-    targetMachineId?: string | null;
-    percentage: number;
+export type PRLCategory = 'EPI' | 'DOCUMENTO' | 'FORMACION';
+
+export interface PRLDocumentType {
+  id: string;
+  name: string;
+  category: PRLCategory;
+  periodicityMonths?: number;
+  warningDays: number;
+  activo: boolean;
+}
+
+export interface Subcontractor {
+  id: string;
+  name: string;
+  cif: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  activo: boolean;
+}
+
+export interface SubcontractorWorker {
+  id: string;
+  subcontractorId: string;
+  name: string;
+  dni: string;
+  phone?: string;
+  email?: string;
+  activo: boolean;
+}
+
+export interface PRLAssignment {
+  id: string;
+  workerId?: string;
+  subcontractorWorkerId?: string;
+  documentTypeId: string;
+  issueDate: Date;
+  expiryDate?: Date;
+  fileUrl?: string;
+  notified: boolean;
+  
+  // Virtual fields for UI
+  documentTypeName?: string;
+  workerName?: string;
+  category?: PRLCategory;
+}
+
+export interface CompanyPRLDocument {
+  id: string;
+  subcontractorId?: string;
+  name: string;
+  issueDate: Date;
+  expiryDate?: Date;
+  fileUrl?: string;
+  warningDays: number;
+  notified: boolean;
 }
