@@ -698,7 +698,12 @@ export const updateSubcontractorWorker = async (id: string, updates: Partial<Sub
 
 export const getPRLAssignments = async (workerId?: string, subWorkerId?: string): Promise<PRLAssignment[]> => {
     if (!isConfigured) return [];
-    let query = supabase.from('prl_asignaciones').select('*, prl_tipos_documento(nombre, categoria)');
+    let query = supabase.from('prl_asignaciones').select(`
+        *, 
+        prl_tipos_documento(nombre, categoria),
+        mant_trabajadores(nombre),
+        prl_trabajadores_subcontrata(nombre)
+    `);
     if (workerId) query = query.eq('trabajador_id', workerId);
     if (subWorkerId) query = query.eq('trabajador_sub_id', subWorkerId);
     
@@ -714,6 +719,7 @@ export const getPRLAssignments = async (workerId?: string, subWorkerId?: string)
         fileUrl: a.url_archivo,
         notified: a.notificado,
         documentTypeName: a.prl_tipos_documento?.nombre,
+        workerName: a.mant_trabajadores?.nombre || a.prl_trabajadores_subcontrata?.nombre,
         category: a.prl_tipos_documento?.categoria as PRLCategory
     }));
 };
@@ -752,8 +758,10 @@ export const deletePRLAssignment = async (id: string): Promise<void> => {
 export const getCompanyPRLDocuments = async (subId?: string): Promise<CompanyPRLDocument[]> => {
     if (!isConfigured) return [];
     let query = supabase.from('prl_documentos_empresa').select('*');
-    if (subId) query = query.eq('subcontrata_id', subId);
-    else query = query.is('subcontrata_id', null);
+    if (subId !== undefined) {
+        if (subId === null) query = query.is('subcontrata_id', null);
+        else query = query.eq('subcontrata_id', subId);
+    }
     
     const { data, error } = await query;
     if (error) return [];
