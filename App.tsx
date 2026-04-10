@@ -9,6 +9,7 @@ import {
   saveOperationLog, saveCPReport, saveCRReport, syncPendingData, 
   savePersonalReport, getWorkers 
 } from './services/db';
+import { checkPRLThresholds } from './services/notifications';
 import { getQueue } from './services/offlineQueue';
 import { generateCPReportPDF } from './services/pdf';
 import { sendEmail } from './services/api';
@@ -20,7 +21,7 @@ import {
   SearchCheck, LayoutGrid, ChevronDown, ChevronUp, Fuel, 
   Database, Users, Wrench, Droplet, MessageSquare, Loader2, 
   FileText, BarChart3, CalendarClock, Coins, Clock, Calculator, 
-  Plus, Search, ArrowLeft, Printer, Play, User
+  Plus, Search, ArrowLeft, Printer, Play, User, ShieldCheck
 } from 'lucide-react';
 
 /* --- COMPONENTES DE USUARIO Y MANTENIMIENTO --- */
@@ -65,6 +66,7 @@ import { WorkerHoursDistributionReport } from './components/admin/WorkerHoursDis
 import { SpecificCostRulesManager } from './components/admin/SpecificCostRulesManager';
 import { FuelCostDistributionReport } from './components/admin/FuelCostDistributionReport';
 import { MaintenanceResponsiblesReport } from './components/admin/MaintenanceResponsiblesReport';
+import { EngineerDashboard } from './components/engineer/EngineerDashboard';
 
 enum ViewState {
   LOGIN,
@@ -98,7 +100,8 @@ enum ViewState {
   ADMIN_WORKER_HOURS_DISTRIBUTION,
   ADMIN_SPECIFIC_COSTS,
   ADMIN_FUEL_RATIO_DISTRIBUTION,
-  ADMIN_MAINTENANCE_RESPONSIBLES
+  ADMIN_MAINTENANCE_RESPONSIBLES,
+  ENGINEER_DASHBOARD
 }
 
 type MenuCategory = 'datos' | 'produccion' | 'costes' | 'informes' | 'config' | null;
@@ -132,12 +135,20 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const role = currentUser?.role?.toLowerCase();
+    if (role === 'admin' || role === 'ingeniero') {
+      checkPRLThresholds();
+    }
+  }, [currentUser]);
+
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
     const role = worker.role?.toLowerCase();
     if (role === 'admin') setViewState(ViewState.CONTEXT_SELECTION);
     else if (role === 'cp') setViewState(ViewState.CP_SELECTION);
     else if (role === 'cr') setViewState(ViewState.CR_SELECTION);
+    else if (role === 'ingeniero') setViewState(ViewState.ENGINEER_DASHBOARD);
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
@@ -156,6 +167,7 @@ const App: React.FC = () => {
     const role = currentUser?.role?.toLowerCase();
     if (role === 'cp') setViewState(ViewState.CP_SELECTION);
     else if (role === 'cr') setViewState(ViewState.CR_SELECTION);
+    else if (role === 'ingeniero') setViewState(ViewState.ENGINEER_DASHBOARD);
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
@@ -376,6 +388,7 @@ const App: React.FC = () => {
               </button>
               {openCategory === 'config' && (
                 <div className="bg-slate-50 divide-y divide-slate-100">
+                  <button onClick={() => { setViewState(ViewState.ENGINEER_DASHBOARD); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><ShieldCheck size={14} className="text-blue-500" /> Ingeniería y PRL</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_WHATSAPP_CONFIG); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><MessageSquare size={14} /> Canal WhatsApp</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_DIAGNOSTICS); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><Database size={14} /> Diagnóstico DB</button>
                   <button onClick={() => { setViewState(ViewState.ADMIN_CP_PLANNING); setIsMenuOpen(false); }} className="w-full text-left pl-14 py-3 text-xs font-bold text-slate-600 hover:bg-white flex items-center gap-2"><CalendarClock size={14} /> Plan Semanal Cantera</button>
@@ -490,6 +503,7 @@ const App: React.FC = () => {
         {viewState === ViewState.ADMIN_DIAGNOSTICS && <DatabaseDiagnostics onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_MAINTENANCE_REPORT && <ScheduledMaintenanceReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
         {viewState === ViewState.ADMIN_MAINTENANCE_RESPONSIBLES && <MaintenanceResponsiblesReport onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
+        {viewState === ViewState.ENGINEER_DASHBOARD && <EngineerDashboard onBack={navigateBack} />}
         
         {/* Reparto de Costes */}
         {viewState === ViewState.ADMIN_SPECIFIC_COSTS && <SpecificCostRulesManager onBack={() => setViewState(ViewState.CONTEXT_SELECTION)} />}
@@ -500,5 +514,7 @@ const App: React.FC = () => {
     </div>
   );
 }
+
+export default App;
 
 export default App;
