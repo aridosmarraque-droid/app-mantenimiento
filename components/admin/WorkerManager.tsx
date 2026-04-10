@@ -17,7 +17,7 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
     const [name, setName] = useState('');
     const [dni, setDni] = useState('');
     const [phone, setPhone] = useState('');
-    const [role, setRole] = useState<'worker' | 'admin' | 'cp' | 'cr'>('worker');
+    const [role, setRole] = useState<'worker' | 'admin' | 'cp' | 'cr' | 'ingeniero'>('worker');
     // Fix: state renamed to 'activo' to match Worker interface
     const [activo, setActivo] = useState(true);
     const [expectedHours, setExpectedHours] = useState<number>(8);
@@ -142,6 +142,7 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                 <option value="worker">Operario (Solo Mantenimiento)</option>
                                 <option value="cp">Cantera Pura (Mantenimiento + Producción)</option>
                                 <option value="cr">Canto Rodado (Mantenimiento + Producción)</option>
+                                <option value="ingeniero">Ingeniero (PRL + Ingeniería)</option>
                                 <option value="admin">Administrador (Acceso Total)</option>
                             </select>
                         </div>
@@ -182,7 +183,8 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                     w.role === 'admin' ? 'bg-red-100 text-red-600 border-red-200' : 
                                     w.role === 'cp' ? 'bg-amber-100 text-amber-600 border-amber-200' : 
                                     w.role === 'cr' ? 'bg-teal-100 text-teal-600 border-teal-200' : 
-                                    'bg-blue-100 text-blue-600 border-blue-200'
+                                    w.role === 'ingeniero' ? 'bg-blue-100 text-blue-600 border-blue-200' :
+                                    'bg-slate-100 text-slate-600 border-slate-200'
                                 }`}>
                                     <UserCircle size={24} />
                                 </div>
@@ -200,6 +202,7 @@ export const WorkerManager: React.FC<Props> = ({ onBack }) => {
                                             w.role === 'admin' ? 'bg-red-600 text-white' : 
                                             w.role === 'cp' ? 'bg-amber-500 text-white' : 
                                             w.role === 'cr' ? 'bg-teal-600 text-white' : 
+                                            w.role === 'ingeniero' ? 'bg-blue-600 text-white' :
                                             'bg-slate-500 text-white'
                                         }`}>
                                             {w.role}
