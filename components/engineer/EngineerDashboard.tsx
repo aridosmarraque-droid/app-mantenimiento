@@ -9,6 +9,7 @@ import { PRLDocumentTypeManager } from './PRLDocumentTypeManager';
 import { SubcontractorManager } from './SubcontractorManager';
 import { WorkerPRLManager } from './WorkerPRLManager';
 import { CompanyPRLManager } from './CompanyPRLManager';
+import { PRLReports } from './PRLReports';
 
 interface Props {
     onBack: () => void;
@@ -19,7 +20,8 @@ enum EngineerView {
     DOC_TYPES,
     SUBCONTRACTORS,
     WORKERS_PRL,
-    COMPANY_DOCS
+    COMPANY_DOCS,
+    PRL_REPORTS
 }
 
 export const EngineerDashboard: React.FC<Props> = ({ onBack }) => {
@@ -35,6 +37,8 @@ export const EngineerDashboard: React.FC<Props> = ({ onBack }) => {
                 return <WorkerPRLManager onBack={() => setView(EngineerView.HOME)} />;
             case EngineerView.COMPANY_DOCS:
                 return <CompanyPRLManager onBack={() => setView(EngineerView.HOME)} />;
+            case EngineerView.PRL_REPORTS:
+                return <PRLReports onBack={() => setView(EngineerView.HOME)} />;
             default:
                 return (
                     <div className="space-y-6 animate-in fade-in duration-500">
@@ -92,6 +96,17 @@ export const EngineerDashboard: React.FC<Props> = ({ onBack }) => {
                                     </div>
                                     <h3 className="font-black text-slate-800 text-sm uppercase mb-1">Docs. Empresa</h3>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Seguros, CAE, RC</p>
+                                </button>
+
+                                <button 
+                                    onClick={() => setView(EngineerView.PRL_REPORTS)}
+                                    className="p-6 bg-slate-50 rounded-3xl border-2 border-transparent hover:border-red-500 hover:bg-white transition-all text-left group"
+                                >
+                                    <div className="p-3 bg-red-100 text-red-600 rounded-2xl w-fit mb-4 group-hover:scale-110 transition-transform">
+                                        <ClipboardList size={24} />
+                                    </div>
+                                    <h3 className="font-black text-slate-800 text-sm uppercase mb-1">Informes PRL</h3>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Vencimientos y Consultas</p>
                                 </button>
                             </div>
                         </div>
