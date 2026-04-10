@@ -110,10 +110,18 @@ export const EngineerDashboard: React.FC<Props> = ({ onBack }) => {
         }
     };
 
+    const handleBack = () => {
+        if (view !== EngineerView.HOME) {
+            setView(EngineerView.HOME);
+        } else {
+            onBack();
+        }
+    };
+
     return (
         <div className="pb-20">
             <div className="flex items-center gap-4 mb-6">
-                <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <button onClick={handleBack} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                     <ArrowLeft size={24} className="text-slate-600" />
                 </button>
                 <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">Gestión de Ingeniería</h1>
