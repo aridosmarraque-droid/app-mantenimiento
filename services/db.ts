@@ -569,6 +569,239 @@ export const getMachineLogs = async (machineId: string, start?: Date, end?: Date
     return (data || []).map(mapLogFromDb);
 };
 
+// --- 8. PREVENCIÓN DE RIESGOS LABORALES (PRL) ---
+
+export const getPRLDocumentTypes = async (onlyActive: boolean = true): Promise<PRLDocumentType[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('prl_tipos_documento').select('*');
+    if (onlyActive) query = query.eq('activo', true);
+    const { data, error } = await query.order('nombre');
+    if (error) return [];
+    return (data || []).map(d => ({
+        id: d.id,
+        name: d.nombre,
+        category: d.categoria as PRLCategory,
+        periodicityMonths: d.periodicidad_meses,
+        warningDays: d.dias_preaviso,
+        activo: d.activo
+    }));
+};
+
+export const createPRLDocumentType = async (d: Omit<PRLDocumentType, 'id'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_tipos_documento').insert({
+        nombre: d.name,
+        categoria: d.category,
+        periodicidad_meses: d.periodicityMonths,
+        dias_preaviso: d.warningDays,
+        activo: d.activo
+    });
+    if (error) throw error;
+};
+
+export const updatePRLDocumentType = async (id: string, updates: Partial<PRLDocumentType>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (updates.name !== undefined) p.nombre = updates.name;
+    if (updates.category !== undefined) p.categoria = updates.category;
+    if (updates.periodicityMonths !== undefined) p.periodicidad_meses = updates.periodicityMonths;
+    if (updates.warningDays !== undefined) p.dias_preaviso = updates.warningDays;
+    if (updates.activo !== undefined) p.activo = updates.activo;
+    const { error } = await supabase.from('prl_tipos_documento').update(p).eq('id', id);
+    if (error) throw error;
+};
+
+export const getSubcontractors = async (onlyActive: boolean = true): Promise<Subcontractor[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('prl_subcontratas').select('*');
+    if (onlyActive) query = query.eq('activo', true);
+    const { data, error } = await query.order('nombre');
+    if (error) return [];
+    return (data || []).map(s => ({
+        id: s.id,
+        name: s.nombre,
+        cif: s.cif,
+        contactName: s.contacto_nombre,
+        phone: s.telefono,
+        email: s.email,
+        activo: s.activo
+    }));
+};
+
+export const createSubcontractor = async (s: Omit<Subcontractor, 'id'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_subcontratas').insert({
+        nombre: s.name,
+        cif: s.cif,
+        contacto_nombre: s.contactName,
+        telefono: s.phone,
+        email: s.email,
+        activo: s.activo
+    });
+    if (error) throw error;
+};
+
+export const updateSubcontractor = async (id: string, updates: Partial<Subcontractor>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (updates.name !== undefined) p.nombre = updates.name;
+    if (updates.cif !== undefined) p.cif = updates.cif;
+    if (updates.contactName !== undefined) p.contacto_nombre = updates.contactName;
+    if (updates.phone !== undefined) p.telefono = updates.phone;
+    if (updates.email !== undefined) p.email = updates.email;
+    if (updates.activo !== undefined) p.activo = updates.activo;
+    const { error } = await supabase.from('prl_subcontratas').update(p).eq('id', id);
+    if (error) throw error;
+};
+
+export const getSubcontractorWorkers = async (subId: string, onlyActive: boolean = true): Promise<SubcontractorWorker[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('prl_trabajadores_subcontrata').select('*').eq('subcontrata_id', subId);
+    if (onlyActive) query = query.eq('activo', true);
+    const { data, error } = await query.order('nombre');
+    if (error) return [];
+    return (data || []).map(w => ({
+        id: w.id,
+        subcontractorId: w.subcontrata_id,
+        name: w.nombre,
+        dni: w.dni,
+        phone: w.telefono,
+        email: w.email,
+        activo: w.activo
+    }));
+};
+
+export const createSubcontractorWorker = async (w: Omit<SubcontractorWorker, 'id'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_trabajadores_subcontrata').insert({
+        subcontrata_id: w.subcontractorId,
+        nombre: w.name,
+        dni: w.dni,
+        telefono: w.phone,
+        email: w.email,
+        activo: w.activo
+    });
+    if (error) throw error;
+};
+
+export const updateSubcontractorWorker = async (id: string, updates: Partial<SubcontractorWorker>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (updates.name !== undefined) p.nombre = updates.name;
+    if (updates.dni !== undefined) p.dni = updates.dni;
+    if (updates.phone !== undefined) p.telefono = updates.phone;
+    if (updates.email !== undefined) p.email = updates.email;
+    if (updates.activo !== undefined) p.activo = updates.activo;
+    const { error } = await supabase.from('prl_trabajadores_subcontrata').update(p).eq('id', id);
+    if (error) throw error;
+};
+
+export const getPRLAssignments = async (workerId?: string, subWorkerId?: string): Promise<PRLAssignment[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('prl_asignaciones').select('*, prl_tipos_documento(nombre, categoria)');
+    if (workerId) query = query.eq('trabajador_id', workerId);
+    if (subWorkerId) query = query.eq('trabajador_sub_id', subWorkerId);
+    
+    const { data, error } = await query;
+    if (error) return [];
+    return (data || []).map(a => ({
+        id: a.id,
+        workerId: a.trabajador_id,
+        subcontractorWorkerId: a.trabajador_sub_id,
+        documentTypeId: a.tipo_documento_id,
+        issueDate: new Date(a.fecha_emision),
+        expiryDate: a.fecha_vencimiento ? new Date(a.fecha_vencimiento) : undefined,
+        fileUrl: a.url_archivo,
+        notified: a.notificado,
+        documentTypeName: a.prl_tipos_documento?.nombre,
+        category: a.prl_tipos_documento?.categoria as PRLCategory
+    }));
+};
+
+export const savePRLAssignment = async (a: Omit<PRLAssignment, 'id' | 'documentTypeName' | 'workerName' | 'category'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_asignaciones').insert({
+        trabajador_id: a.workerId,
+        trabajador_sub_id: a.subcontractorWorkerId,
+        tipo_documento_id: a.documentTypeId,
+        fecha_emision: toLocalDateString(a.issueDate),
+        fecha_vencimiento: a.expiryDate ? toLocalDateString(a.expiryDate) : null,
+        url_archivo: a.fileUrl,
+        notificado: a.notified
+    });
+    if (error) throw error;
+};
+
+export const updatePRLAssignment = async (id: string, updates: Partial<PRLAssignment>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (updates.issueDate) p.fecha_emision = toLocalDateString(updates.issueDate);
+    if (updates.expiryDate !== undefined) p.fecha_vencimiento = updates.expiryDate ? toLocalDateString(updates.expiryDate) : null;
+    if (updates.fileUrl !== undefined) p.url_archivo = updates.fileUrl;
+    if (updates.notified !== undefined) p.notificado = updates.notified;
+    const { error } = await supabase.from('prl_asignaciones').update(p).eq('id', id);
+    if (error) throw error;
+};
+
+export const deletePRLAssignment = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_asignaciones').delete().eq('id', id);
+    if (error) throw error;
+};
+
+export const getCompanyPRLDocuments = async (subId?: string): Promise<CompanyPRLDocument[]> => {
+    if (!isConfigured) return [];
+    let query = supabase.from('prl_documentos_empresa').select('*');
+    if (subId) query = query.eq('subcontrata_id', subId);
+    else query = query.is('subcontrata_id', null);
+    
+    const { data, error } = await query;
+    if (error) return [];
+    return (data || []).map(d => ({
+        id: d.id,
+        subcontractorId: d.subcontrata_id,
+        name: d.nombre,
+        issueDate: new Date(d.fecha_emision),
+        expiryDate: d.fecha_vencimiento ? new Date(d.fecha_vencimiento) : undefined,
+        fileUrl: d.url_archivo,
+        warningDays: d.dias_preaviso,
+        notified: d.notificado
+    }));
+};
+
+export const saveCompanyPRLDocument = async (d: Omit<CompanyPRLDocument, 'id'>): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_documentos_empresa').insert({
+        subcontrata_id: d.subcontractorId,
+        nombre: d.name,
+        fecha_emision: toLocalDateString(d.issueDate),
+        fecha_vencimiento: d.expiryDate ? toLocalDateString(d.expiryDate) : null,
+        url_archivo: d.fileUrl,
+        dias_preaviso: d.warningDays,
+        notificado: d.notified
+    });
+    if (error) throw error;
+};
+
+export const updateCompanyPRLDocument = async (id: string, updates: Partial<CompanyPRLDocument>): Promise<void> => {
+    if (!isConfigured) return;
+    const p: any = {};
+    if (updates.name !== undefined) p.nombre = updates.name;
+    if (updates.issueDate) p.fecha_emision = toLocalDateString(updates.issueDate);
+    if (updates.expiryDate !== undefined) p.fecha_vencimiento = updates.expiryDate ? toLocalDateString(updates.expiryDate) : null;
+    if (updates.fileUrl !== undefined) p.url_archivo = updates.fileUrl;
+    if (updates.warningDays !== undefined) p.dias_preaviso = updates.warningDays;
+    if (updates.notified !== undefined) p.notificado = updates.notified;
+    const { error } = await supabase.from('prl_documentos_empresa').update(p).eq('id', id);
+    if (error) throw error;
+};
+
+export const deleteCompanyPRLDocument = async (id: string): Promise<void> => {
+    if (!isConfigured) return;
+    const { error } = await supabase.from('prl_documentos_empresa').delete().eq('id', id);
+    if (error) throw error;
+};
+
 export const updateOperationLog = async (id: string, log: Partial<OperationLog>): Promise<void> => {
     if (!isConfigured) {
         await mock.updateOperationLog(id, log);
