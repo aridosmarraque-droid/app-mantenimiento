@@ -1,5 +1,5 @@
 
-import { Worker, Machine, MaintenanceDefinition } from '../types';
+import { Worker, Machine, MaintenanceDefinition, PRLAssignment, CompanyPRLDocument } from '../types';
 import { supabase, isConfigured } from './client';
 
 export const sendWhatsAppMessage = async (to: string, message: string): Promise<{ success: boolean; error?: string; raw?: any }> => {
@@ -69,6 +69,22 @@ export const formatMaintenanceAlert = (worker: Worker, machine: Machine, def: Ma
            `*Tarea:* ${def.name}\n` +
            `${hoursInfo}\n\n` +
            `_Por favor, registre la intervención en la APP una vez finalizada._`;
+};
+
+export const formatPRLAlert = (engineer: Worker, item: PRLAssignment | CompanyPRLDocument, type: 'WORKER' | 'COMPANY'): string => {
+    const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date();
+    const status = isExpired ? '🔴 VENCIDO' : '⚠️ PRÓXIMO A VENCER';
+    const itemName = 'documentTypeName' in item ? item.documentTypeName : item.name;
+    const subjectName = 'workerName' in item ? item.workerName : 'Empresa Principal/Subcontrata';
+
+    return `*PRL ARIDOS MARRAQUE*\n\n` +
+           `*AVISO DE PREVENCIÓN*\n` +
+           `--------------------------\n` +
+           `*Estado:* ${status}\n` +
+           `*Documento:* ${itemName}\n` +
+           `*Asignado a:* ${subjectName}\n` +
+           `*Vencimiento:* ${item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'N/A'}\n\n` +
+           `_Por favor, revise la documentación en el panel de ingeniería._`;
 };
 
 export const sendTestWhatsApp = async (phone: string): Promise<{ success: boolean; error?: string; raw?: any }> => {
