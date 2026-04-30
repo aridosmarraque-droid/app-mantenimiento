@@ -12,30 +12,37 @@ export const checkMaintenanceThresholds = async (machine: Machine, newHours: num
     const responsible = workers.find(w => w.id === machine.responsibleWorkerId);
 
     for (const def of machine.maintenanceDefs) {
-        if (def.maintenanceType !== 'HOURS' || !def.id) continue;
+        if (!def.id) continue;
 
-        const interval = def.intervalHours || 0;
-        const warning = def.warningHours || 0;
-        const lastHours = def.lastMaintenanceHours || 0;
-        
-        // El punto de vencimiento es exacto (Ej: 39000)
-        const limitOverdue = lastHours + interval;
-        // El punto de preaviso es X horas antes (Ej: 38950)
-        const limitWarning = limitOverdue - warning;
+        if (def.maintenanceType === 'HOURS') {
+            const interval = def.intervalHours || 0;
+            const warning = def.warningHours || 0;
+            const lastHours = def.lastMaintenanceHours || 0;
+            
+            const limitOverdue = lastHours + interval;
+            const limitWarning = limitOverdue - warning;
 
-        // 1. CHEQUEO DE VENCIMIENTO (CRÍTICO)
-        // Se dispara si ya hemos pasado las horas de vencimiento
-        if (newHours >= limitOverdue && !def.notifiedOverdue) {
-            console.log(`[Notif] Disparando ALERTA VENCIDA para ${machine.name} - ${def.name}`);
-            await triggerNotification(machine, def, responsible, 'OVERDUE');
-            await markAsNotified(def.id, 'overdue');
-        } 
-        // 2. CHEQUEO DE PREAVISO
-        // Solo se dispara si estamos DENTRO de la ventana de aviso y NO hemos llegado al vencimiento
-        else if (newHours >= limitWarning && newHours < limitOverdue && !def.notifiedWarning) {
-            console.log(`[Notif] Disparando PREAVISO para ${machine.name} - ${def.name}`);
-            await triggerNotification(machine, def, responsible, 'WARNING');
-            await markAsNotified(def.id, 'warning');
+            if (newHours >= limitOverdue && !def.notifiedOverdue) {
+                console.log(`[Notif] Disparando ALERTA VENCIDA para ${machine.name} - ${def.name}`);
+                await triggerNotification(machine, def, responsible, 'OVERDUE');
+                await markAsNotified(def.id, 'overdue');
+            } 
+            else if (newHours >= limitWarning && newHours < limitOverdue && !def.notifiedWarning) {
+                console.log(`[Notif] Disparando PREAVISO para ${machine.name} - ${def.name}`);
+                await triggerNotification(machine, def, responsible, 'WARNING');
+                await markAsNotified(def.id, 'warning');
+            }
+        } else if (def.maintenanceType === 'DATE' && def.nextDate) {
+            const next = new Date(def.nextDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Si la fecha ha vencido y no se ha notificado
+            if (next <= today && !def.notifiedOverdue) {
+                console.log(`[Notif] Disparando ALERTA VENCIDA (FECHA) para ${machine.name} - ${def.name}`);
+                await triggerNotification(machine, def, responsible, 'OVERDUE');
+                await markAsNotified(def.id, 'overdue');
+            }
         }
     }
 };
