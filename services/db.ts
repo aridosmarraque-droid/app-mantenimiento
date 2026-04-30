@@ -93,19 +93,38 @@ const mapMachine = (m: any): Machine => {
             const remaining = nextDueHours - currentHours;
             
             let isActuallyPending = !!d.pendiente;
-            if (d.tipo_programacion === 'HOURS') {
+            
+            // Check by Hours
+            if (d.tipo_programacion === 'HOURS' || (d.intervalo_horas && d.intervalo_horas > 0)) {
                 isActuallyPending = isActuallyPending || (remaining <= warning);
-            } else if (d.tipo_programacion === 'DATE' && d.proxima_fecha) {
-                const proximDate = new Date(d.proxima_fecha);
-                proximDate.setHours(0, 0, 0, 0);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                if (proximDate <= today) {
-                    isActuallyPending = true;
-                    console.log(`[Mapper] Task ${d.nombre} for machine ${m.nombre} is PENDING because ${d.proxima_fecha} <= today`);
-                } else {
-                    console.log(`[Mapper] Task ${d.nombre} for machine ${m.nombre} is NOT PENDING: ${d.proxima_fecha} > today`);
+            }
+            
+            // Check by Date (Robust check)
+            if (d.proxima_fecha) {
+                try {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    
+                    // Intentamos parsear la fecha de forma segura
+                    const pDate = new Date(d.proxima_fecha);
+                    pDate.setHours(0,0,0,0);
+                    
+                    if (!isNaN(pDate.getTime())) {
+                        if (pDate.getTime() <= today.getTime()) {
+                            isActuallyPending = true;
+                        }
+                    } else {
+                        // Si falla el parseo de Date (ej: formato no estándar), 
+                        // recurrimos a comparación de strings si parece YYYY-MM-DD
+                        const todayStr = today.getFullYear() + '-' + 
+                                       String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+                                       String(today.getDate()).padStart(2, '0');
+                        if (d.proxima_fecha <= todayStr) {
+                            isActuallyPending = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error parsing proxima_fecha:", d.proxima_fecha, e);
                 }
             }
 
