@@ -27,8 +27,27 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
     getServiceProviders().then(setProviders);
     getWorkers(false).then(setWorkers);
     
-    // Filtrar por pendiente - Usamos la propiedad 'pending' que ya viene calculada del mapper
-    const pending = machine.maintenanceDefs.filter(def => def.pending);
+    // Filtrar por pendiente - Usamos la propiedad 'pending' del mapper, 
+    // pero añadimos un respaldo por si el mapeo falló o el estado cambió
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const pending = machine.maintenanceDefs.filter(def => {
+        if (def.pending) return true;
+        
+        // Respaldo manual en el componente
+        if (def.maintenanceType === 'DATE' && def.nextDate) {
+            const next = new Date(def.nextDate);
+            next.setHours(0,0,0,0);
+            return next.getTime() <= today.getTime();
+        }
+        if (def.maintenanceType === 'HOURS') {
+            const rem = def.remainingHours ?? 999999;
+            return rem <= (def.warningHours || 0);
+        }
+        return false;
+    });
+    
     console.log(`[Form] Machine: ${machine.name}, Pending tasks: ${pending.length} of ${machine.maintenanceDefs.length}`);
     setPendingList(pending);
 
@@ -181,20 +200,24 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
        <div className="mt-8 pt-4 border-t border-slate-100">
            <h4 className="text-xs font-black text-slate-400 mb-2 flex items-center gap-1 uppercase tracking-widest"><Clock size={14}/> Calendario Próximos Eventos</h4>
            <ul className="text-[10px] text-slate-400 space-y-1">
-               {machine.maintenanceDefs.filter(d => !d.pending).map(d => {
-                   let info = "";
-                   if (d.maintenanceType === 'DATE') {
-                       info = d.nextDate ? new Date(d.nextDate).toLocaleDateString() : '-';
-                   } else {
-                       info = `Restan: ${d.remainingHours ?? '?'}h`;
-                   }
-                   return (
-                   <li key={d.id} className="flex justify-between p-1 hover:bg-slate-50 rounded">
-                       <span className="font-bold">{d.name}</span>
-                       <span className="font-mono">{info}</span>
-                   </li>
-                   );
-               })}
+                   {machine.maintenanceDefs.filter(d => {
+                       // Ocultamos de próximos eventos si están en la lista de pendientes (vencidos)
+                       const isActuallyPending = pendingList.some(p => p.id === d.id);
+                       return !isActuallyPending;
+                   }).map(d => {
+                       let info = "";
+                       if (d.maintenanceType === 'DATE') {
+                           info = d.nextDate ? new Date(d.nextDate).toLocaleDateString() : '-';
+                       } else {
+                           info = `Restan: ${d.remainingHours ?? '?'}h`;
+                       }
+                       return (
+                       <li key={d.id} className="flex justify-between p-1 hover:bg-slate-50 rounded">
+                           <span className="font-bold">{d.name}</span>
+                           <span className="font-mono">{info}</span>
+                       </li>
+                       );
+                   })}
            </ul>
        </div>
 
