@@ -94,12 +94,18 @@ const mapMachine = (m: any): Machine => {
             
             let isActuallyPending = !!d.pendiente;
             if (d.tipo_programacion === 'HOURS') {
-                isActuallyPending = remaining <= warning;
+                isActuallyPending = isActuallyPending || (remaining <= warning);
             } else if (d.tipo_programacion === 'DATE' && d.proxima_fecha) {
-                const todayStr = toLocalDateString(new Date());
-                // Si la fecha próxima es hoy o anterior, es un mantenimiento pendiente
-                if (d.proxima_fecha <= todayStr) {
+                const proximDate = new Date(d.proxima_fecha);
+                proximDate.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                if (proximDate <= today) {
                     isActuallyPending = true;
+                    console.log(`[Mapper] Task ${d.nombre} for machine ${m.nombre} is PENDING because ${d.proxima_fecha} <= today`);
+                } else {
+                    console.log(`[Mapper] Task ${d.nombre} for machine ${m.nombre} is NOT PENDING: ${d.proxima_fecha} > today`);
                 }
             }
 
