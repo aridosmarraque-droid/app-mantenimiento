@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getAllMachines } from '../../services/db';
+import { getAllMachines, getWorkers } from '../../services/db';
 import { generateMaintenanceReportPDF } from '../../services/pdf';
 import { sendEmail } from '../../services/api';
-import { Machine, MaintenanceDefinition } from '../../types';
-import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Clock, BellRing, Mail, Truck, LayoutGrid, CalendarClock, Info, Send, Calendar } from 'lucide-react';
+import { sendWhatsAppMessage, formatMaintenanceAlert } from '../../services/whatsapp';
+import { Machine, MaintenanceDefinition, Worker } from '../../types';
+import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Clock, BellRing, Mail, Truck, LayoutGrid, CalendarClock, Info, Send, Calendar, MessageSquare } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -12,8 +13,10 @@ interface Props {
 
 export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
     const [machines, setMachines] = useState<Machine[]>([]);
+    const [workers, setWorkers] = useState<Worker[]>([]);
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
+    const [sendingWhatsapp, setSendingWhatsapp] = useState<string | null>(null);
 
     useEffect(() => {
         loadData();
@@ -22,9 +25,13 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const data = await getAllMachines(true); // Solo activas
-            const sorted = data.sort((a, b) => (a.companyCode || a.name).localeCompare(b.companyCode || b.name));
+            const [machinesData, workersData] = await Promise.all([
+                getAllMachines(true),
+                getWorkers(false)
+            ]);
+            const sorted = machinesData.sort((a, b) => (a.companyCode || a.name).localeCompare(b.companyCode || b.name));
             setMachines(sorted);
+            setWorkers(workersData);
         } catch (e) {
             console.error(e);
         } finally {
@@ -118,6 +125,22 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
         }
     };
 
+    const handleSendWhatsApp = async (machine: Machine, def: MaintenanceDefinition) => {
+        const responsible = workers.find(w => w.id === machine.responsibleWorkerId);
+        if (!responsible || !responsible.phone) {
+            alert("La máquina no tiene un responsable con teléfono asignado.");
+            return;
+        }
+
+        setSendingWhatsapp(`${machine.id}-${def.id}`);
+        const message = formatMaintenanceAlert(responsible, machine, def);
+        const res = await sendWhatsAppMessage(responsible.phone, message);
+        
+        if (res.success) alert(`WhatsApp enviado a ${responsible.name}`);
+        else alert("Error al enviar WhatsApp.");
+        setSendingWhatsapp(null);
+    };
+
     if (loading) return (
         <div className="p-10 flex flex-col items-center justify-center min-h-[400px] text-slate-400">
             <Loader2 className="animate-spin mb-4 text-blue-600" size={48} />
@@ -194,15 +217,31 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
                                             <p className="text-[9px] text-slate-400 mt-0.5 ml-4">Vence: <span className="font-bold text-slate-600">{new Date(def.nextDate).toLocaleDateString()}</span></p>
                                         )}
                                     </div>
-                                    <div className="text-right flex items-center gap-4">
+                                    <div className="text-right flex items-center gap-2">
                                         <div>
                                             <p className="text-[7px] font-black text-slate-400 uppercase">{isDate ? 'Días Restantes' : 'Horas Restantes'}</p>
                                             <p className={`text-xs font-mono font-black ${isOverdue ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-green-600'}`}>
                                                 {isDate ? (isOverdue ? 'VENCIDO' : `${proximity} Días`) : `${proximity}h`}
                                             </p>
                                         </div>
-                                        <div className={`p-2 rounded-xl ${isOverdue ? 'bg-red-100 text-red-600' : isWarning ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
-                                            {isOverdue ? <AlertTriangle size={18}/> : isWarning ? <BellRing size={18}/> : <CheckCircle2 size={18}/>}
+                                        <div className="flex items-center gap-1">
+                                            {(isOverdue || isWarning) && (
+                                                <button
+                                                    onClick={() => handleSendWhatsApp(machine, def)}
+                                                    disabled={sendingWhatsapp === `${machine.id}-${def.id}`}
+                                                    className="p-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all disabled:opacity-50"
+                                                    title="Reenviar WhatsApp al responsable"
+                                                >
+                                                    {sendingWhatsapp === `${machine.id}-${def.id}` ? (
+                                                        <Loader2 className="animate-spin" size={16} />
+                                                    ) : (
+                                                        <MessageSquare size={16} />
+                                                    )}
+                                                </button>
+                                            )}
+                                            <div className={`p-2 rounded-xl ${isOverdue ? 'bg-red-100 text-red-600' : isWarning ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
+                                                {isOverdue ? <AlertTriangle size={18}/> : isWarning ? <BellRing size={18}/> : <CheckCircle2 size={18}/>}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
