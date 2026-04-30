@@ -91,7 +91,17 @@ const mapMachine = (m: any): Machine => {
             const warning = Number(d.horas_preaviso || 0);
             const nextDueHours = lastHours + interval;
             const remaining = nextDueHours - currentHours;
-            const isActuallyPending = d.tipo_programacion === 'HOURS' ? (remaining <= warning) : !!d.pendiente;
+            
+            let isActuallyPending = !!d.pendiente;
+            if (d.tipo_programacion === 'HOURS') {
+                isActuallyPending = remaining <= warning;
+            } else if (d.tipo_programacion === 'DATE' && d.proxima_fecha) {
+                const todayStr = toLocalDateString(new Date());
+                // Si la fecha próxima es hoy o anterior, es un mantenimiento pendiente
+                if (d.proxima_fecha <= todayStr) {
+                    isActuallyPending = true;
+                }
+            }
 
             return {
                 id: d.id,
@@ -1195,8 +1205,13 @@ export const saveWorkerDocument = async (doc: Omit<WorkerDocument, 'id'>): Promi
 
 export const getSpecificCostRules = async (): Promise<SpecificCostRule[]> => {
     if (!isConfigured) return [];
+    console.log("Fetching specific cost rules from 'mant_costes_especificos'...");
     const { data, error } = await supabase.from('mant_costes_especificos').select('*');
-    if (error) return [];
+    if (error) {
+        console.error("Error fetching specific cost rules:", error);
+        return [];
+    }
+    console.log(`Fetched ${data?.length || 0} cost rules.`);
     return (data || []).map(r => ({
         id: r.id,
         machineOriginId: r.maquina_origen_id,
@@ -1214,7 +1229,10 @@ export const createSpecificCostRule = async (rule: Omit<SpecificCostRule, 'id'>)
         maquina_destino_id: rule.targetMachineId || null,
         porcentaje: rule.percentage
     });
-    if (error) throw error;
+    if (error) {
+        console.error("Error creating specific cost rule:", error);
+        throw error;
+    }
 };
 
 export const updateSpecificCostRule = async (id: string, rule: Partial<SpecificCostRule>): Promise<void> => {
