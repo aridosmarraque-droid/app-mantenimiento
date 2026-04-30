@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Machine, OperationLog, ServiceProvider, MaintenanceDefinition, Worker } from '../../types';
 import { getServiceProviders, getWorkers } from '../../services/db';
