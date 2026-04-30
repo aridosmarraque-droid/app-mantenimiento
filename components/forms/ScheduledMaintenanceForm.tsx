@@ -27,8 +27,9 @@ export const ScheduledMaintenanceForm: React.FC<Props> = ({ machine, onSubmit, o
     getServiceProviders().then(setProviders);
     getWorkers(false).then(setWorkers);
     
-    // Filtrar por pendiente
+    // Filtrar por pendiente - Usamos la propiedad 'pending' que ya viene calculada del mapper
     const pending = machine.maintenanceDefs.filter(def => def.pending);
+    console.log(`[Form] Machine: ${machine.name}, Pending tasks: ${pending.length} of ${machine.maintenanceDefs.length}`);
     setPendingList(pending);
 
   }, [machine]);
