@@ -7,7 +7,7 @@ import {
 // Servicios
 import { 
   saveOperationLog, saveCPReport, saveCRReport, syncPendingData, 
-  savePersonalReport, getWorkers 
+  savePersonalReport, getWorkers, calculateAndSyncMachineStatus
 } from './services/db';
 import { checkPRLThresholds } from './services/notifications';
 import { getQueue } from './services/offlineQueue';
@@ -137,7 +137,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const role = currentUser?.role?.toLowerCase();
-    if (role === 'admin' || role === 'ingeniero') {
+    if (role === 'admin' || role === 'ingeniero' || role === 'prevencion') {
       checkPRLThresholds();
     }
   }, [currentUser]);
@@ -148,7 +148,7 @@ const App: React.FC = () => {
     if (role === 'admin') setViewState(ViewState.CONTEXT_SELECTION);
     else if (role === 'cp') setViewState(ViewState.CP_SELECTION);
     else if (role === 'cr') setViewState(ViewState.CR_SELECTION);
-    else if (role === 'ingeniero') setViewState(ViewState.ENGINEER_DASHBOARD);
+    else if (role === 'ingeniero' || role === 'prevencion') setViewState(ViewState.ENGINEER_DASHBOARD);
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
@@ -160,14 +160,27 @@ const App: React.FC = () => {
   };
 
   const navigateBack = () => {
-    if (isUserAdmin && viewState !== ViewState.CONTEXT_SELECTION) {
-        setViewState(ViewState.CONTEXT_SELECTION);
-        return;
+    if (viewState === ViewState.FORM) {
+      setViewState(ViewState.ACTION_MENU);
+      return;
     }
+    if (viewState === ViewState.ACTION_MENU) {
+      setViewState(ViewState.CONTEXT_SELECTION);
+      return;
+    }
+
+    if (isUserAdmin && viewState !== ViewState.CONTEXT_SELECTION) {
+      setViewState(ViewState.CONTEXT_SELECTION);
+      return;
+    }
+
     const role = currentUser?.role?.toLowerCase();
     if (role === 'cp') setViewState(ViewState.CP_SELECTION);
     else if (role === 'cr') setViewState(ViewState.CR_SELECTION);
-    else if (role === 'ingeniero') setViewState(ViewState.ENGINEER_DASHBOARD);
+    else if (role === 'ingeniero' || role === 'prevencion') {
+      if (viewState === ViewState.ENGINEER_DASHBOARD) setViewState(ViewState.LOGIN);
+      else setViewState(ViewState.ENGINEER_DASHBOARD);
+    }
     else setViewState(ViewState.WORKER_SELECTION);
   };
 
@@ -244,6 +257,15 @@ const App: React.FC = () => {
         ...data 
       };
       await saveOperationLog(logData);
+      
+      // REFRESH: Actualizamos el estado de la máquina en el contexto local
+      try {
+        const updatedMachine = await calculateAndSyncMachineStatus(selectedContext.machine);
+        setSelectedContext({ ...selectedContext, machine: updatedMachine });
+      } catch (err) {
+        console.error("Error al refrescar estado de máquina:", err);
+      }
+
       setSuccessMsg('Registro Correcto');
       setTimeout(() => { 
         setSuccessMsg(''); 
