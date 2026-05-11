@@ -57,6 +57,9 @@ const triggerNotification = async (machine: Machine, def: MaintenanceDefinition,
         await sendWhatsAppMessage(responsible.phone, wsMsg);
     }
 
+    const plannedHours = def.lastMaintenanceHours + def.intervalHours;
+    const remaining = def.remainingHours;
+
     // Preparar Email
     const emailHtml = `
         <div style="font-family: sans-serif; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
@@ -64,7 +67,16 @@ const triggerNotification = async (machine: Machine, def: MaintenanceDefinition,
             <p style="font-size: 16px;"><strong>Máquina:</strong> ${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}</p>
             <p style="font-size: 16px;"><strong>Tarea:</strong> ${def.name}</p>
             <p style="font-size: 16px;"><strong>Horas Actuales:</strong> <span style="font-family: monospace; font-weight: bold;">${machine.currentHours}h</span></p>
-            <p style="font-size: 14px; color: #666; background: #f9f9f9; padding: 10px; border-radius: 5px;">${def.tasks}</p>
+            ${def.maintenanceType === 'HOURS' ? `
+                <p style="font-size: 16px;"><strong>Planificado a las:</strong> ${plannedHours}h</p>
+                <p style="font-size: 16px; color: ${isOverdue ? '#dc2626' : '#d97706'};"><strong>Horas Restantes:</strong> ${remaining}h</p>
+            ` : `
+                <p style="font-size: 16px;"><strong>Fecha Límite:</strong> ${def.nextDate ? new Date(def.nextDate).toLocaleDateString() : 'N/A'}</p>
+            `}
+            <div style="font-size: 14px; color: #666; background: #f9f9f9; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                <p style="margin-top: 0; font-weight: bold;">Descripción de trabajos:</p>
+                ${def.tasks.replace(/\n/g, '<br/>')}
+            </div>
             <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
             <p style="font-size: 12px; color: #999; text-align: center;">Este es un aviso automático del sistema GMAO Aridos Marraque.</p>
         </div>
