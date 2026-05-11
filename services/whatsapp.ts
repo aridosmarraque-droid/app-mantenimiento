@@ -68,6 +68,7 @@ export const formatMaintenanceAlert = (worker: Worker, machine: Machine, def: Ma
            `*Máquina:* ${machine.companyCode ? `[${machine.companyCode}] ` : ''}${machine.name}\n` +
            `*Tarea:* ${def.name}\n` +
            `${hoursInfo}\n\n` +
+           `*Descripción:*\n${def.tasks}\n\n` +
            `_Por favor, registre la intervención en la APP una vez finalizada._`;
 };
 
