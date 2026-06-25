@@ -32,6 +32,9 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
     // Edit Modal State
     const [editingLog, setEditingLog] = useState<OperationLog | null>(null);
     const [savingEdit, setSavingEdit] = useState(false);
+    const [editCenterId, setEditCenterId] = useState('');
+    const [editSubId, setEditSubId] = useState('');
+    const [editSubCenters, setEditSubCenters] = useState<SubCenter[]>([]);
 
     useEffect(() => {
         getCostCenters().then(setCenters);
@@ -58,6 +61,43 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
         }
         return filtered;
     }, [selectedCenterId, selectedSubId, machines]);
+
+    // Inicializar campos de edición de máquina al cargar un registro
+    useEffect(() => {
+        if (editingLog) {
+            const currentMachine = machines.find(m => m.id === editingLog.machineId);
+            if (currentMachine) {
+                setEditCenterId(currentMachine.costCenterId || '');
+                setEditSubId(currentMachine.subCenterId || '');
+            } else {
+                setEditCenterId('');
+                setEditSubId('');
+            }
+        } else {
+            setEditCenterId('');
+            setEditSubId('');
+            setEditSubCenters([]);
+        }
+    }, [editingLog?.id, machines]);
+
+    // Cargar subcentros para el modal de edición
+    useEffect(() => {
+        if (editCenterId) {
+            getSubCentersByCenter(editCenterId).then(setEditSubCenters);
+        } else {
+            setEditSubCenters([]);
+        }
+    }, [editCenterId]);
+
+    // Máquinas filtradas en el modal de edición
+    const editFilteredMachines = useMemo(() => {
+        if (!editCenterId) return [];
+        let filtered = machines.filter(m => m.costCenterId === editCenterId);
+        if (editSubId) {
+            filtered = filtered.filter(m => m.subCenterId === editSubId);
+        }
+        return filtered;
+    }, [editCenterId, editSubId, machines]);
 
     const handleSearch = async () => {
         if (!selectedMachineId || loading) return;
@@ -367,6 +407,65 @@ export const MachineLogsViewer: React.FC<Props> = ({ onBack }) => {
                             <button onClick={() => setEditingLog(null)}><X size={20}/></button>
                         </div>
                         <form onSubmit={handleSaveEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                                <span className="block text-[11px] font-black text-slate-500 uppercase tracking-wider">Cambiar Máquina</span>
+                                
+                                <div>
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Centro de Trabajo</label>
+                                    <select 
+                                        value={editCenterId}
+                                        onChange={e => {
+                                            const newCenterId = e.target.value;
+                                            setEditCenterId(newCenterId);
+                                            setEditSubId('');
+                                            setEditingLog(prev => prev ? { ...prev, machineId: '' } : null);
+                                        }}
+                                        className="w-full p-2 border border-slate-200 rounded-lg bg-white font-bold text-xs text-slate-700 shadow-sm"
+                                        required
+                                    >
+                                        <option value="">-- Seleccionar Centro --</option>
+                                        {centers.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Subcentro / Planta</label>
+                                    <select 
+                                        disabled={!editCenterId}
+                                        value={editSubId}
+                                        onChange={e => {
+                                            const newSubId = e.target.value;
+                                            setEditSubId(newSubId);
+                                            setEditingLog(prev => prev ? { ...prev, machineId: '' } : null);
+                                        }}
+                                        className="w-full p-2 border border-slate-200 rounded-lg bg-white font-bold text-xs text-slate-700 shadow-sm disabled:opacity-40"
+                                    >
+                                        <option value="">-- Todos los Subcentros --</option>
+                                        {editSubCenters.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Unidad / Máquina *</label>
+                                    <select 
+                                        disabled={!editCenterId}
+                                        value={editingLog.machineId}
+                                        onChange={e => setEditingLog(prev => prev ? { ...prev, machineId: e.target.value } : null)}
+                                        className="w-full p-2 border border-slate-200 rounded-lg bg-white font-bold text-xs text-slate-800 shadow-sm disabled:opacity-40"
+                                        required
+                                    >
+                                        <option value="">-- Seleccionar Unidad --</option>
+                                        {editFilteredMachines.map(m => (
+                                            <option key={m.id} value={m.id}>{m.companyCode ? `[${m.companyCode}] ` : ''}{m.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha Registro</label>
                                 <input 
