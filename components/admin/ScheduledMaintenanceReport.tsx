@@ -5,7 +5,8 @@ import { generateMaintenanceReportPDF } from '../../services/pdf';
 import { sendEmail } from '../../services/api';
 import { sendWhatsAppMessage, formatMaintenanceAlert } from '../../services/whatsapp';
 import { Machine, MaintenanceDefinition, Worker } from '../../types';
-import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Clock, BellRing, Mail, Truck, LayoutGrid, CalendarClock, Info, Send, Calendar, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Clock, BellRing, Mail, Truck, LayoutGrid, CalendarClock, Info, Send, Calendar, MessageSquare, ChevronRight, ArrowRight } from 'lucide-react';
+import { EditMachineForm } from './EditMachineForm';
 
 interface Props {
     onBack: () => void;
@@ -17,6 +18,7 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [sendingWhatsapp, setSendingWhatsapp] = useState<string | null>(null);
+    const [selectedMachineForFicha, setSelectedMachineForFicha] = useState<Machine | null>(null);
 
     useEffect(() => {
         loadData();
@@ -141,6 +143,21 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
         setSendingWhatsapp(null);
     };
 
+    if (selectedMachineForFicha) {
+        return (
+            <div className="animate-in fade-in duration-300">
+                <EditMachineForm 
+                    machine={selectedMachineForFicha}
+                    onBack={() => setSelectedMachineForFicha(null)}
+                    onSuccess={() => {
+                        setSelectedMachineForFicha(null);
+                        loadData();
+                    }}
+                />
+            </div>
+        );
+    }
+
     if (loading) return (
         <div className="p-10 flex flex-col items-center justify-center min-h-[400px] text-slate-400">
             <Loader2 className="animate-spin mb-4 text-blue-600" size={48} />
@@ -200,10 +217,18 @@ export const ScheduledMaintenanceReport: React.FC<Props> = ({ onBack }) => {
                             <div key={def.id} className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden ${isOverdue ? 'border-l-4 border-l-red-500' : isWarning ? 'border-l-4 border-l-amber-500' : ''}`}>
                                 <div className="p-4 flex justify-between items-center">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                                             <span className="font-bold text-blue-600">
                                                 {machine.companyCode ? `[${machine.companyCode}] ` : ''}{machine.name}
                                             </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedMachineForFicha(machine)}
+                                                className="inline-flex items-center justify-center w-5 h-5 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black rounded shadow-xs transition-all hover:scale-110 active:scale-95 border border-yellow-500/50"
+                                                title="Ver ficha de la máquina"
+                                            >
+                                                <ChevronRight size={14} className="stroke-[3]" />
+                                            </button>
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
                                                 • {isDate ? 'Calendario' : 'Horas'}
                                             </span>
