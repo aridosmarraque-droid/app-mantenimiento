@@ -208,6 +208,22 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Sin Asignar";
     };
 
+    const isMobileCenter = (centerId?: string) => {
+        if (!centerId) return false;
+        const c = centers.find(center => center.id === centerId);
+        if (!c) return false;
+        const name = (c.name || '').toLowerCase();
+        const code = (c.companyCode || '').toLowerCase();
+        return name.includes('móvil') || name.includes('movil') || code === 'pm' || code === 'mov' || code === 'mm';
+    };
+
+    const isMobileMachine = (m: Machine) => {
+        if (isMobileCenter(m.costCenterId)) return true;
+        if (m.transportExpenses) return true;
+        const mName = (m.name || '').toLowerCase();
+        return mName.includes('móvil') || mName.includes('movil');
+    };
+
     const typeConfig: any = {
         'LEVELS': { label: 'Niveles', icon: Droplet, color: 'text-blue-600 bg-blue-50' },
         'BREAKDOWN': { label: 'Avería', icon: Wrench, color: 'text-red-600 bg-red-50' },
@@ -617,7 +633,18 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Centro de Trabajo</label>
                                 <select 
                                     value={editingPersonal.costCenterId || ''}
-                                    onChange={e => setEditingPersonal({...editingPersonal, costCenterId: e.target.value})}
+                                    onChange={e => {
+                                        const newCenterId = e.target.value;
+                                        const currentMac = machines.find(m => m.id === editingPersonal.machineId);
+                                        const isValid = currentMac && (
+                                            currentMac.costCenterId === newCenterId || isMobileMachine(currentMac)
+                                        );
+                                        setEditingPersonal({
+                                            ...editingPersonal, 
+                                            costCenterId: newCenterId,
+                                            machineId: isValid ? editingPersonal.machineId : ''
+                                        });
+                                    }}
                                     className="w-full p-3 border rounded-xl font-bold bg-slate-50"
                                 >
                                     <option value="">-- Seleccionar Centro --</option>
@@ -633,9 +660,16 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                                     className="w-full p-3 border rounded-xl font-bold bg-slate-50"
                                 >
                                     <option value="">-- General / Sin asignar --</option>
-                                    {machines.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name}</option>
-                                    ))}
+                                    {machines
+                                        .filter(m => {
+                                            if (!editingPersonal.costCenterId) return true;
+                                            return m.costCenterId === editingPersonal.costCenterId || isMobileMachine(m);
+                                        })
+                                        .map(m => (
+                                            <option key={m.id} value={m.id}>
+                                                {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name}
+                                            </option>
+                                        ))}
                                 </select>
                             </div>
 
