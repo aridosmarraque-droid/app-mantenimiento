@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PersonalReport, CostCenter, Machine } from '../../types';
 import { getCostCenters, getAllMachines, getPersonalReports } from '../../services/db';
 import { Save, ArrowLeft, Loader2, Calendar, Clock, Factory, Truck, ClipboardList } from 'lucide-react';
@@ -16,6 +16,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
     // Form State
     const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [centers, setCenters] = useState<CostCenter[]>([]);
+    const [allCenters, setAllCenters] = useState<CostCenter[]>([]);
     const [selectedCenterId, setSelectedCenterId] = useState('');
     
     const [allMachines, setAllMachines] = useState<Machine[]>([]);
@@ -40,6 +41,7 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                 getAllMachines(false) 
             ]);
             
+            setAllCenters(centersData);
             setCenters(centersData.filter(c => c.selectableForReports !== false));
             setAllMachines(machinesData);
 
@@ -67,6 +69,28 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
         }
     };
 
+    const isMobileCenter = (centerId?: string) => {
+        if (!centerId) return false;
+        const c = allCenters.find(center => center.id === centerId);
+        if (!c) return false;
+        const name = (c.name || '').toLowerCase();
+        const code = (c.companyCode || '').toLowerCase();
+        return name.includes('móvil') || 
+               name.includes('movil') || 
+               name.includes('parque móvil') || 
+               name.includes('parque movil') || 
+               code === 'pm' || 
+               code === 'mov' || 
+               code === 'mm';
+    };
+
+    const isMobileMachine = (m: Machine) => {
+        if (isMobileCenter(m.costCenterId)) return true;
+        if (m.transportExpenses) return true;
+        const mName = (m.name || '').toLowerCase();
+        return mName.includes('móvil') || mName.includes('movil');
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isSaving) return; 
@@ -86,15 +110,36 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
         });
     };
 
-    // Para el selector solo mostramos máquinas activas y marcadas para partes
-    const selectableMachines = allMachines
-        .filter(m => m.activo !== false && m.selectableForReports === true)
-        .sort((a, b) => {
-            const codeA = a.companyCode || '';
-            const codeB = b.companyCode || '';
-            if (codeA && codeB) return codeA.localeCompare(codeB);
-            return a.name.localeCompare(b.name);
-        });
+    // Al seleccionar un centro de trabajo, las máquinas/tajo seleccionables serán:
+    // 1. Las máquinas de ese centro de trabajo
+    // 2. Las máquinas móviles
+    // Requisito: activas (activo !== false) y marcadas como seleccionables (selectableForReports === true)
+    // Las máquinas de otros centros no aparecen.
+    const selectableMachines = useMemo(() => {
+        if (!selectedCenterId) return [];
+
+        return allMachines
+            .filter(m => {
+                // Validación: activa y con el check de seleccionable para partes
+                if (m.activo === false || m.selectableForReports !== true) {
+                    return false;
+                }
+
+                // Máquinas de ese centro de trabajo
+                if (m.costCenterId === selectedCenterId) {
+                    return true;
+                }
+
+                // Máquinas móviles
+                return isMobileMachine(m);
+            })
+            .sort((a, b) => {
+                const codeA = a.companyCode || '';
+                const codeB = b.companyCode || '';
+                if (codeA && codeB) return codeA.localeCompare(codeB);
+                return a.name.localeCompare(b.name);
+            });
+    }, [selectedCenterId, allMachines, allCenters]);
 
     if (loadingData) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-green-600" /></div>;
 
@@ -127,7 +172,19 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     </label>
                     <select
                         value={selectedCenterId}
-                        onChange={(e) => setSelectedCenterId(e.target.value)}
+                        onChange={(e) => {
+                            const newCenterId = e.target.value;
+                            setSelectedCenterId(newCenterId);
+                            if (selectedMachineId) {
+                                const currentMac = allMachines.find(m => m.id === selectedMachineId);
+                                const isStillValid = currentMac && (
+                                    currentMac.costCenterId === newCenterId || isMobileMachine(currentMac)
+                                );
+                                if (!isStillValid) {
+                                    setSelectedMachineId('');
+                                }
+                            }
+                        }}
                         className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
                         <option value="">-- Seleccionar Centro --</option>
@@ -145,12 +202,19 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                     </label>
                     <select
                         value={selectedMachineId}
+                        disabled={!selectedCenterId}
                         onChange={e => setSelectedMachineId(e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        <option value="">-- Seleccionar Máquina --</option>
+                        <option value="">
+                            {!selectedCenterId 
+                                ? '-- Seleccione primero un Centro --' 
+                                : selectableMachines.length === 0 
+                                    ? '-- No hay máquinas disponibles --' 
+                                    : '-- Seleccionar Máquina --'}
+                        </option>
                         {selectableMachines.map(m => {
-                             const defaultCenterName = centers.find(c => c.id === m.costCenterId)?.name || '';
+                             const defaultCenterName = allCenters.find(c => c.id === m.costCenterId)?.name || '';
                              return (
                                 <option key={m.id} value={m.id}>
                                     {m.companyCode ? `[${m.companyCode}] ` : ''}{m.name} {defaultCenterName ? `(${defaultCenterName})` : ''}
@@ -158,6 +222,11 @@ export const PersonalReportForm: React.FC<Props> = ({ workerId, onSubmit, onBack
                              );
                         })}
                     </select>
+                    {!selectedCenterId && (
+                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-1.5 ml-1">
+                            Seleccione el centro de trabajo para ver sus máquinas y la maquinaria móvil
+                        </p>
+                    )}
                 </div>
 
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
