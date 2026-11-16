@@ -94,39 +94,7 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         fetchAudit();
     }, [fetchAudit]);
 
-    const workerReports = useMemo(() => {
-        const grouped = new Map<string, { worker: Worker, reports: PersonalReport[], totalHours: number }>();
-        
-        workers
-            .filter(w => w.activo && w.role !== 'admin' && w.requiresReport !== false)
-            .forEach(w => {
-                grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
-            });
-
-        auditData.personal.forEach(p => {
-            if (!grouped.has(p.workerId)) {
-                const w = workers.find(work => work.id === p.workerId);
-                if (w) {
-                    grouped.set(p.workerId, { worker: w, reports: [], totalHours: 0 });
-                }
-            }
-            
-            const entry = grouped.get(p.workerId);
-            if (entry) {
-                entry.reports.push(p);
-                entry.totalHours += p.hours;
-            }
-        });
-
-        return Array.from(grouped.values()).sort((a, b) => a.worker.name.localeCompare(b.worker.name));
-    }, [workers, auditData.personal]);
-
-    const getWorkerStatusConfig = (total: number, expected: number) => {
-        if (total === 0) return { color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle, label: 'No Presentado' };
-        if (total < expected) return { color: 'text-orange-600', bg: 'bg-orange-50', icon: AlertCircle, label: 'Incompleto' };
-        if (total === expected) return { color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle2, label: 'Jornada Completa' };
-        return { color: 'text-blue-600', bg: 'bg-blue-50', icon: TrendingUp, label: 'Horas Extras' };
-    };
+    const workerReports = useMemo(() => computeWorkerReports(workers, auditData.personal), [workers, auditData.personal]);
 
     const handleSaveOpEdit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -195,14 +163,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         }
     };
 
-    const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
-    
-    const decimalToTime = (decimal: number) => {
-        const hours = Math.floor(decimal);
-        const minutes = Math.round((decimal - hours) * 60);
-        return `${hours}:${minutes.toString().padStart(2, '0')}`;
-    };
-
     const getMachineName = (id: string) => {
         const m = machines.find(m => m.id === id);
         return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Sin Asignar";
@@ -222,14 +182,6 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
         if (m.transportExpenses) return true;
         const mName = (m.name || '').toLowerCase();
         return mName.includes('móvil') || mName.includes('movil');
-    };
-
-    const typeConfig: any = {
-        'LEVELS': { label: 'Niveles', icon: Droplet, color: 'text-blue-600 bg-blue-50' },
-        'BREAKDOWN': { label: 'Avería', icon: Wrench, color: 'text-red-600 bg-red-50' },
-        'MAINTENANCE': { label: 'Mantenimiento', icon: Hammer, color: 'text-amber-600 bg-amber-50' },
-        'REFUELING': { label: 'Repostaje', icon: Fuel, color: 'text-green-600 bg-green-50' },
-        'SCHEDULED': { label: 'Programado', icon: CalendarClock, color: 'text-purple-600 bg-purple-50' }
     };
 
     return (
@@ -272,241 +224,18 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                     <p className="font-bold animate-pulse text-sm uppercase tracking-widest">Sincronizando documentación...</p>
                 </div>
             ) : (
-                <div className="space-y-8 px-1">
-                    
-                    {/* BLOQUE 1: PLANTAS */}
-                    <div className="space-y-4">
-                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
-                            <span className="bg-amber-500 w-2 h-6 rounded-full"></span>
-                            1. Producción y Plantas
-                        </h4>
-                        <div className="grid gap-3">
-                            {auditData.cp.length === 0 && auditData.cr.length === 0 && (
-                                <div className="p-8 text-center text-slate-300 border-2 border-dashed rounded-2xl">
-                                    <p className="text-[10px] font-black uppercase tracking-widest">Sin partes de planta para hoy</p>
-                                </div>
-                            )}
-                            {auditData.cp.map(report => (
-                                <div key={`cp-${report.id}`} className="bg-white border border-amber-100 rounded-2xl p-5 shadow-sm">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Mountain size={20}/></div>
-                                            <div>
-                                                <div className="font-bold text-slate-800">Cantera Pura</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{decimalToTime(report.crusherStart)} → {decimalToTime(report.crusherEnd)}</p>
-                                            <p className="text-[10px] text-slate-400 font-mono">({report.crusherStart.toFixed(2)} → {report.crusherEnd.toFixed(2)})</p>
-                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.crusherEnd - report.crusherStart).toFixed(2)}h</p>
-                                        </div>
-                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{decimalToTime(report.millsStart)} → {decimalToTime(report.millsEnd)}</p>
-                                            <p className="text-[10px] text-slate-400 font-mono">({report.millsStart.toFixed(2)} → {report.millsEnd.toFixed(2)})</p>
-                                            <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.millsEnd - report.millsStart).toFixed(2)}h</p>
-                                        </div>
-                                    </div>
-                                    {/* COMENTARIOS CP */}
-                                    {report.comments && (
-                                        <div className="mt-3 p-2 bg-amber-50/50 rounded-xl border border-amber-100/50 flex items-start gap-2">
-                                            <MessageSquare size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                                            <p className="text-[11px] text-slate-600 italic leading-snug">{report.comments}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                            {auditData.cr.map(report => (
-                                <div key={`cr-${report.id}`} className="bg-white border border-teal-100 rounded-2xl p-5 shadow-sm">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="p-2 bg-teal-50 text-teal-600 rounded-lg"><Waves size={20}/></div>
-                                            <div>
-                                                <div className="font-bold text-slate-800">Canto Rodado</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.washingStart.toFixed(1)} → {report.washingEnd.toFixed(1)}</p>
-                                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.washingEnd - report.washingStart).toFixed(1)}h</p>
-                                        </div>
-                                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                            <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
-                                            <p className="font-mono font-bold text-sm text-slate-700">{report.trituracion_inicio.toFixed(1)} → {report.trituracion_fin.toFixed(1)}</p>
-                                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.trituracion_fin - report.trituracion_inicio).toFixed(1)}h</p>
-                                        </div>
-                                    </div>
-                                    {/* COMENTARIOS CR */}
-                                    {report.comments && (
-                                        <div className="mt-3 p-2 bg-teal-50/50 rounded-xl border border-teal-100/50 flex items-start gap-2">
-                                            <MessageSquare size={14} className="text-teal-600 mt-0.5 shrink-0" />
-                                            <p className="text-[11px] text-slate-600 italic leading-snug">{report.comments}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* BLOQUE 2: MANTENIMIENTO */}
-                    <div className="space-y-4">
-                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
-                            <span className="bg-indigo-600 w-2 h-6 rounded-full"></span>
-                            2. Registros de Maquinaria
-                        </h4>
-                        <div className="space-y-3">
-                            {auditData.ops.map(log => {
-                                const conf = typeConfig[log.type] || typeConfig['LEVELS'];
-                                const Icon = conf.icon;
-                                return (
-                                    <div key={log.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm group">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex gap-3 w-full">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${conf.color}`}>
-                                                    <Icon size={20} />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-black text-slate-800 text-xs">{getMachineName(log.machineId)}</span>
-                                                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${conf.color} bg-opacity-20`}>{conf.label}</span>
-                                                    </div>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">{getWorkerName(log.workerId)} • {log.hoursAtExecution}h</p>
-                                                    
-                                                    {/* DETALLES DINÁMICOS POR TIPO */}
-                                                    {log.type === 'REFUELING' && log.fuelLitres && (
-                                                        <div className="flex items-center gap-1.5 text-green-700 font-black text-xs bg-green-50 px-2 py-1 rounded-lg w-fit">
-                                                            <Fuel size={12}/> {log.fuelLitres} Litros
-                                                        </div>
-                                                    )}
-                                                    {log.type === 'BREAKDOWN' && (
-                                                        <div className="p-2 bg-red-50 border border-red-100 rounded-xl text-[10px] space-y-1.5">
-                                                            <div>
-                                                                <span className="font-black text-red-800 uppercase tracking-tighter block">Avería Detectada</span>
-                                                                <p className="text-slate-700 font-medium">{log.breakdownCause}</p>
-                                                            </div>
-                                                            <div className="border-t border-red-100 pt-1">
-                                                                <span className="font-black text-slate-800 uppercase tracking-tighter block">Solución Aplicada</span>
-                                                                <p className="text-slate-600 italic">{log.breakdownSolution}</p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {(log.type === 'MAINTENANCE' || log.type === 'SCHEDULED') && (
-                                                        <div className="p-2 bg-amber-50 border border-amber-100 rounded-xl text-[10px]">
-                                                            <p className="font-bold text-slate-800 mb-1">{log.description || 'Sin descripción'}</p>
-                                                            {log.materials && (
-                                                                <p className="text-slate-500 italic mt-1 pt-1 border-t border-amber-100/50 flex items-start gap-1">
-                                                                    <Info size={10} className="shrink-0 mt-0.5"/> {log.materials}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                    {log.type === 'LEVELS' && (
-                                                        <div className="grid grid-cols-3 gap-1 text-[9px] font-bold">
-                                                            {log.motorOil !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Motor: {log.motorOil}L</span>}
-                                                            {log.hydraulicOil !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Hidr: {log.hydraulicOil}L</span>}
-                                                            {log.coolant !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Refrig: {log.coolant}L</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <button onClick={() => setEditingOp(log)} className="p-2 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all">
-                                                <Edit2 size={16}/>
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* BLOQUE 3: PARTES DE PERSONAL */}
-                    <div className="space-y-4">
-                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
-                            <span className="bg-green-600 w-2 h-6 rounded-full"></span>
-                            3. Partes de Trabajo Personal
-                        </h4>
-                        
-                        <div className="space-y-4">
-                            {workerReports.map(entry => {
-                                const status = getWorkerStatusConfig(entry.totalHours, entry.worker.expectedHours || 0);
-                                const StatusIcon = status.icon;
-
-                                return (
-                                    <div key={entry.worker.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                                        <div className={`p-4 flex justify-between items-center border-b transition-colors ${status.bg}`}>
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${entry.totalHours > 0 ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-200 text-slate-400'}`}>
-                                                    {entry.worker.name.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-black text-slate-800 text-sm uppercase leading-none">{entry.worker.name}</p>
-                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Plan: {entry.worker.expectedHours || 8}h</p>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="text-right flex items-center gap-3">
-                                                {/* BOTÓN WHATSAPP PARA RECORDATORIO */}
-                                                {entry.totalHours === 0 && entry.worker.phone && (
-                                                    <button 
-                                                        onClick={() => handleWhatsAppReminder(entry.worker)}
-                                                        disabled={sendingWhatsappWorkerId === entry.worker.id}
-                                                        className="p-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all shadow-md shadow-green-100 disabled:opacity-50 active:scale-90"
-                                                        title="Enviar recordatorio WhatsApp"
-                                                    >
-                                                        {sendingWhatsappWorkerId === entry.worker.id ? (
-                                                            <Loader2 size={16} className="animate-spin" />
-                                                        ) : (
-                                                            <MessageSquare size={16} fill="currentColor" />
-                                                        )}
-                                                    </button>
-                                                )}
-                                                
-                                                <div>
-                                                    <div className={`flex items-center gap-1.5 justify-end font-black ${status.color}`}>
-                                                        <StatusIcon size={16} />
-                                                        <span className="text-lg">{entry.totalHours.toFixed(1)}h</span>
-                                                    </div>
-                                                    <p className={`text-[8px] font-black uppercase tracking-widest ${status.color} opacity-70`}>{status.label}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="divide-y divide-slate-50">
-                                            {entry.reports.map(rep => (
-                                                <div key={rep.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
-                                                    <div className="flex-1">
-                                                        <p className="font-bold text-slate-700 text-xs">{getMachineName(rep.machineId!)}</p>
-                                                        <p className="text-[9px] text-slate-400 font-bold uppercase flex items-center gap-1">
-                                                            <Factory size={10}/> {centers.find(c => c.id === rep.costCenterId)?.name || 'Sin Centro'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-sm font-black text-slate-800">{rep.hours.toFixed(1)}h</span>
-                                                        <button onClick={() => setEditingPersonal(rep)} className="p-2 text-slate-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all">
-                                                            <Edit2 size={16}/>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {entry.reports.length === 0 && (
-                                                <div className="p-6 text-center text-red-400 bg-red-50/10 italic text-[10px] font-bold uppercase tracking-widest">
-                                                    <UserX size={20} className="mx-auto mb-1 opacity-20"/> Parte no presentado
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
+                <DailyAuditReportContent
+                    date={date}
+                    auditData={auditData}
+                    workers={workers}
+                    machines={machines}
+                    centers={centers}
+                    workerReports={workerReports}
+                    onEditOp={setEditingOp}
+                    onEditPersonal={setEditingPersonal}
+                    onWhatsAppReminder={handleWhatsAppReminder}
+                    sendingWhatsappWorkerId={sendingWhatsappWorkerId}
+                />
             )}
             
             {/* MODAL DE EDICIÓN TÉCNICA */}
@@ -695,6 +424,414 @@ export const DailyAuditViewer: React.FC<Props> = ({ onBack }) => {
                     </div>
                 </div>
             )}
+        </div>
+    );
+};
+
+export interface WorkerAuditEntry {
+    worker: Worker;
+    reports: PersonalReport[];
+    totalHours: number;
+}
+
+export const computeWorkerReports = (workers: Worker[], personalReports: PersonalReport[]): WorkerAuditEntry[] => {
+    const grouped = new Map<string, WorkerAuditEntry>();
+
+    workers
+        .filter(w => w.activo && w.role !== 'admin' && w.requiresReport !== false)
+        .forEach(w => {
+            grouped.set(w.id, { worker: w, reports: [], totalHours: 0 });
+        });
+
+    personalReports.forEach(p => {
+        if (!grouped.has(p.workerId)) {
+            const w = workers.find(work => work.id === p.workerId);
+            if (w) {
+                grouped.set(p.workerId, { worker: w, reports: [], totalHours: 0 });
+            }
+        }
+
+        const entry = grouped.get(p.workerId);
+        if (entry) {
+            entry.reports.push(p);
+            entry.totalHours += p.hours;
+        }
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => a.worker.name.localeCompare(b.worker.name));
+};
+
+export interface DailyAuditReportContentProps {
+    date: string;
+    auditData: {
+        ops: OperationLog[];
+        personal: PersonalReport[];
+        cp: CPDailyReport[];
+        cr: CRDailyReport[];
+    };
+    workers: Worker[];
+    machines: Machine[];
+    centers: CostCenter[];
+    workerReports: WorkerAuditEntry[];
+    isSnapshot?: boolean;
+    onEditOp?: (log: OperationLog) => void;
+    onEditPersonal?: (rep: PersonalReport) => void;
+    onWhatsAppReminder?: (worker: Worker) => void;
+    sendingWhatsappWorkerId?: string | null;
+}
+
+export const DailyAuditReportContent: React.FC<DailyAuditReportContentProps> = ({
+    date,
+    auditData,
+    workers,
+    machines,
+    centers,
+    workerReports,
+    isSnapshot = false,
+    onEditOp,
+    onEditPersonal,
+    onWhatsAppReminder,
+    sendingWhatsappWorkerId = null
+}) => {
+    const getWorkerName = (id: string) => workers.find(w => w.id === id)?.name || "Desconocido";
+
+    const decimalToTime = (decimal: number) => {
+        const hours = Math.floor(decimal);
+        const minutes = Math.round((decimal - hours) * 60);
+        return `${hours}:${minutes.toString().padStart(2, '0')}`;
+    };
+
+    const getMachineName = (id: string) => {
+        const m = machines.find(m => m.id === id);
+        return m ? `${m.companyCode ? `[${m.companyCode}] ` : ''}${m.name}` : "General / Sin Asignar";
+    };
+
+    const getWorkerStatusConfig = (total: number, expected: number) => {
+        if (total === 0) return { color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle, label: 'No Presentado' };
+        if (total < expected) return { color: 'text-orange-600', bg: 'bg-orange-50', icon: AlertCircle, label: 'Incompleto' };
+        if (total === expected) return { color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle2, label: 'Jornada Completa' };
+        return { color: 'text-blue-600', bg: 'bg-blue-50', icon: TrendingUp, label: 'Horas Extras' };
+    };
+
+    const typeConfig: Record<string, { label: string; icon: any; color: string }> = {
+        'LEVELS': { label: 'Niveles', icon: Droplet, color: 'text-blue-600 bg-blue-50' },
+        'BREAKDOWN': { label: 'Avería', icon: Wrench, color: 'text-red-600 bg-red-50' },
+        'MAINTENANCE': { label: 'Mantenimiento', icon: Hammer, color: 'text-amber-600 bg-amber-50' },
+        'REFUELING': { label: 'Repostaje', icon: Fuel, color: 'text-green-600 bg-green-50' },
+        'SCHEDULED': { label: 'Programado', icon: CalendarClock, color: 'text-purple-600 bg-purple-50' }
+    };
+
+    const formattedDisplayDate = (() => {
+        const parts = date.split('-');
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        return date;
+    })();
+
+    const plantCards: Array<{ key: string; node: React.ReactNode }> = [
+        ...auditData.cp.map(report => ({
+            key: `cp-${report.id}`,
+            node: (
+                <div className="bg-white border border-amber-100 rounded-2xl p-5 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Mountain size={20}/></div>
+                            <div>
+                                <div className="font-bold text-slate-800">Cantera Pura</div>
+                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <p className="text-slate-400 font-bold uppercase text-[9px]">Machacadora</p>
+                            <p className="font-mono font-bold text-sm text-slate-700">{decimalToTime(report.crusherStart)} → {decimalToTime(report.crusherEnd)}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">({report.crusherStart.toFixed(2)} → {report.crusherEnd.toFixed(2)})</p>
+                            <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.crusherEnd - report.crusherStart).toFixed(2)}h</p>
+                        </div>
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <p className="text-slate-400 font-bold uppercase text-[9px]">Molinos</p>
+                            <p className="font-mono font-bold text-sm text-slate-700">{decimalToTime(report.millsStart)} → {decimalToTime(report.millsEnd)}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">({report.millsStart.toFixed(2)} → {report.millsEnd.toFixed(2)})</p>
+                            <p className="text-amber-700 font-black text-xs mt-1">Total: {(report.millsEnd - report.millsStart).toFixed(2)}h</p>
+                        </div>
+                    </div>
+                    {report.comments && (
+                        <div className="mt-3 p-2 bg-amber-50/50 rounded-xl border border-amber-100/50 flex items-start gap-2">
+                            <MessageSquare size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                            <p className="text-[11px] text-slate-600 italic leading-snug">{report.comments}</p>
+                        </div>
+                    )}
+                </div>
+            )
+        })),
+        ...auditData.cr.map(report => ({
+            key: `cr-${report.id}`,
+            node: (
+                <div className="bg-white border border-teal-100 rounded-2xl p-5 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-teal-50 text-teal-600 rounded-lg"><Waves size={20}/></div>
+                            <div>
+                                <div className="font-bold text-slate-800">Canto Rodado</div>
+                                <div className="text-[10px] text-slate-400 font-bold uppercase">{getWorkerName(report.workerId)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <p className="text-slate-400 font-bold uppercase text-[9px]">Lavado</p>
+                            <p className="font-mono font-bold text-sm text-slate-700">{report.washingStart.toFixed(1)} → {report.washingEnd.toFixed(1)}</p>
+                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.washingEnd - report.washingStart).toFixed(1)}h</p>
+                        </div>
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <p className="text-slate-400 font-bold uppercase text-[9px]">Trituración</p>
+                            <p className="font-mono font-bold text-sm text-slate-700">{report.trituracion_inicio.toFixed(1)} → {report.trituracion_fin.toFixed(1)}</p>
+                            <p className="text-teal-700 font-black text-xs mt-1">Total: {(report.trituracion_fin - report.trituracion_inicio).toFixed(1)}h</p>
+                        </div>
+                    </div>
+                    {report.comments && (
+                        <div className="mt-3 p-2 bg-teal-50/50 rounded-xl border border-teal-100/50 flex items-start gap-2">
+                            <MessageSquare size={14} className="text-teal-600 mt-0.5 shrink-0" />
+                            <p className="text-[11px] text-slate-600 italic leading-snug">{report.comments}</p>
+                        </div>
+                    )}
+                </div>
+            )
+        }))
+    ];
+
+    const renderOpCard = (log: OperationLog) => {
+        const conf = typeConfig[log.type] || typeConfig['LEVELS'];
+        const Icon = conf.icon;
+        return (
+            <div key={log.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm group">
+                <div className="flex justify-between items-start">
+                    <div className="flex gap-3 w-full">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${conf.color}`}>
+                            <Icon size={20} />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                                <span className="font-black text-slate-800 text-xs">{getMachineName(log.machineId)}</span>
+                                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${conf.color} bg-opacity-20`}>{conf.label}</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-2">{getWorkerName(log.workerId)} • {log.hoursAtExecution}h</p>
+                            
+                            {log.type === 'REFUELING' && log.fuelLitres && (
+                                <div className="flex items-center gap-1.5 text-green-700 font-black text-xs bg-green-50 px-2 py-1 rounded-lg w-fit">
+                                    <Fuel size={12}/> {log.fuelLitres} Litros
+                                </div>
+                            )}
+                            {log.type === 'BREAKDOWN' && (
+                                <div className="p-2 bg-red-50 border border-red-100 rounded-xl text-[10px] space-y-1.5">
+                                    <div>
+                                        <span className="font-black text-red-800 uppercase tracking-tighter block">Avería Detectada</span>
+                                        <p className="text-slate-700 font-medium">{log.breakdownCause}</p>
+                                    </div>
+                                    <div className="border-t border-red-100 pt-1">
+                                        <span className="font-black text-slate-800 uppercase tracking-tighter block">Solución Aplicada</span>
+                                        <p className="text-slate-600 italic">{log.breakdownSolution}</p>
+                                    </div>
+                                </div>
+                            )}
+                            {(log.type === 'MAINTENANCE' || log.type === 'SCHEDULED') && (
+                                <div className="p-2 bg-amber-50 border border-amber-100 rounded-xl text-[10px]">
+                                    <p className="font-bold text-slate-800 mb-1">{log.description || 'Sin descripción'}</p>
+                                    {log.materials && (
+                                        <p className="text-slate-500 italic mt-1 pt-1 border-t border-amber-100/50 flex items-start gap-1">
+                                            <Info size={10} className="shrink-0 mt-0.5"/> {log.materials}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                            {log.type === 'LEVELS' && (
+                                <div className="grid grid-cols-3 gap-1 text-[9px] font-bold">
+                                    {log.motorOil !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Motor: {log.motorOil}L</span>}
+                                    {log.hydraulicOil !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Hidr: {log.hydraulicOil}L</span>}
+                                    {log.coolant !== undefined && <span className="bg-blue-50 text-blue-600 p-1 rounded-md border border-blue-100">Refrig: {log.coolant}L</span>}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {!isSnapshot && onEditOp && (
+                        <button onClick={() => onEditOp(log)} className="p-2 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all">
+                            <Edit2 size={16}/>
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderWorkerCard = (entry: WorkerAuditEntry) => {
+        const status = getWorkerStatusConfig(entry.totalHours, entry.worker.expectedHours || 0);
+        const StatusIcon = status.icon;
+
+        return (
+            <div key={entry.worker.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className={`p-4 flex justify-between items-center border-b transition-colors ${status.bg}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${entry.totalHours > 0 ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-200 text-slate-400'}`}>
+                            {entry.worker.name.charAt(0)}
+                        </div>
+                        <div>
+                            <p className="font-black text-slate-800 text-sm uppercase leading-none">{entry.worker.name}</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Plan: {entry.worker.expectedHours || 8}h</p>
+                        </div>
+                    </div>
+                    
+                    <div className="text-right flex items-center gap-3">
+                        {!isSnapshot && onWhatsAppReminder && entry.totalHours === 0 && entry.worker.phone && (
+                            <button 
+                                onClick={() => onWhatsAppReminder(entry.worker)}
+                                disabled={sendingWhatsappWorkerId === entry.worker.id}
+                                className="p-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all shadow-md shadow-green-100 disabled:opacity-50 active:scale-90"
+                                title="Enviar recordatorio WhatsApp"
+                            >
+                                {sendingWhatsappWorkerId === entry.worker.id ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                    <MessageSquare size={16} fill="currentColor" />
+                                )}
+                            </button>
+                        )}
+                        
+                        <div>
+                            <div className={`flex items-center gap-1.5 justify-end font-black ${status.color}`}>
+                                <StatusIcon size={16} />
+                                <span className="text-lg">{entry.totalHours.toFixed(1)}h</span>
+                            </div>
+                            <p className={`text-[8px] font-black uppercase tracking-widest ${status.color} opacity-70`}>{status.label}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="divide-y divide-slate-50">
+                    {entry.reports.map(rep => (
+                        <div key={rep.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors group">
+                            <div className="flex-1">
+                                <p className="font-bold text-slate-700 text-xs">{getMachineName(rep.machineId!)}</p>
+                                <p className="text-[9px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                                    <Factory size={10}/> {centers.find(c => c.id === rep.costCenterId)?.name || 'Sin Centro'}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-sm font-black text-slate-800">{rep.hours.toFixed(1)}h</span>
+                                {!isSnapshot && onEditPersonal && (
+                                    <button onClick={() => onEditPersonal(rep)} className="p-2 text-slate-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all">
+                                        <Edit2 size={16}/>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {entry.reports.length === 0 && (
+                        <div className="p-6 text-center text-red-400 bg-red-50/10 italic text-[10px] font-bold uppercase tracking-widest">
+                            <UserX size={20} className="mx-auto mb-1 opacity-20"/> Parte no presentado
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="space-y-8 px-1">
+            {isSnapshot && (
+                <div data-pdf-block="true" className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="text-xl font-bold text-slate-800 tracking-tight">Auditoría Diaria Integral</h3>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ARIDOS MARRAQUE • Control Diario</p>
+                    </div>
+                    <div className="text-right">
+                        <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha de Consulta</span>
+                        <span className="font-bold text-sm text-blue-600">{formattedDisplayDate}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* BLOQUE 1: PLANTAS */}
+            <div className="space-y-4">
+                {plantCards.length === 0 ? (
+                    <div data-pdf-block="true" className="space-y-4">
+                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                            <span className="bg-amber-500 w-2 h-6 rounded-full"></span>
+                            1. Producción y Plantas
+                        </h4>
+                        <div className="p-8 text-center text-slate-300 border-2 border-dashed rounded-2xl bg-white">
+                            <p className="text-[10px] font-black uppercase tracking-widest">Sin partes de planta para hoy</p>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        <div data-pdf-block="true" className="space-y-4">
+                            <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                                <span className="bg-amber-500 w-2 h-6 rounded-full"></span>
+                                1. Producción y Plantas
+                            </h4>
+                            {plantCards[0].node}
+                        </div>
+                        {plantCards.slice(1).map(c => (
+                            <div key={c.key} data-pdf-block="true">{c.node}</div>
+                        ))}
+                    </>
+                )}
+            </div>
+
+            {/* BLOQUE 2: MANTENIMIENTO */}
+            <div className="space-y-4">
+                {auditData.ops.length === 0 ? (
+                    <div data-pdf-block="true" className="space-y-4">
+                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                            <span className="bg-indigo-600 w-2 h-6 rounded-full"></span>
+                            2. Registros de Maquinaria
+                        </h4>
+                        {isSnapshot && (
+                            <div className="p-6 text-center text-slate-300 border-2 border-dashed rounded-2xl bg-white">
+                                <p className="text-[10px] font-black uppercase tracking-widest">Sin registros de maquinaria para hoy</p>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        <div data-pdf-block="true" className="space-y-4">
+                            <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                                <span className="bg-indigo-600 w-2 h-6 rounded-full"></span>
+                                2. Registros de Maquinaria
+                            </h4>
+                            {renderOpCard(auditData.ops[0])}
+                        </div>
+                        {auditData.ops.slice(1).map(log => (
+                            <div key={log.id} data-pdf-block="true">{renderOpCard(log)}</div>
+                        ))}
+                    </>
+                )}
+            </div>
+
+            {/* BLOQUE 3: PARTES DE PERSONAL */}
+            <div className="space-y-4">
+                {workerReports.length === 0 ? (
+                    <div data-pdf-block="true" className="space-y-4">
+                        <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                            <span className="bg-green-600 w-2 h-6 rounded-full"></span>
+                            3. Partes de Trabajo Personal
+                        </h4>
+                    </div>
+                ) : (
+                    <>
+                        <div data-pdf-block="true" className="space-y-4">
+                            <h4 className="flex items-center gap-2 text-slate-800 font-black text-sm uppercase tracking-tighter">
+                                <span className="bg-green-600 w-2 h-6 rounded-full"></span>
+                                3. Partes de Trabajo Personal
+                            </h4>
+                            {renderWorkerCard(workerReports[0])}
+                        </div>
+                        {workerReports.slice(1).map(entry => (
+                            <div key={entry.worker.id} data-pdf-block="true">{renderWorkerCard(entry)}</div>
+                        ))}
+                    </>
+                )}
+            </div>
         </div>
     );
 };
