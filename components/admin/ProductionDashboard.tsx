@@ -7,6 +7,80 @@ interface Props {
     onBack: () => void;
 }
 
+export interface ProductionDashboardViewProps {
+    stats: PerformanceDashboardData;
+    selectedDate: string;
+    isSnapshot?: boolean;
+}
+
+export const ProductionDashboardView: React.FC<ProductionDashboardViewProps> = ({ stats, selectedDate, isSnapshot = false }) => {
+    const formattedDisplayDate = (() => {
+        const parts = selectedDate.split('-');
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        return selectedDate;
+    })();
+
+    return (
+        <div className="space-y-6">
+            {isSnapshot && (
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <BarChart3 className="text-amber-600" size={24} />
+                        <div>
+                            <h2 className="font-bold text-lg text-slate-800 leading-tight">Rendimiento de Plantas</h2>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ARIDOS MARRAQUE • Cantera Pura</p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha de análisis</span>
+                        <span className="font-bold text-sm text-slate-700">{formattedDisplayDate}</span>
+                    </div>
+                </div>
+            )}
+
+            <div className={`grid grid-cols-1 gap-4 ${isSnapshot ? '' : 'animate-in fade-in slide-in-from-bottom-4 duration-700'}`}>
+                <PerformanceCard 
+                    title="Rendimiento Hoy" 
+                    data={stats.daily} 
+                    color="bg-amber-500"
+                    info={`Comparado con ayer (${stats.daily.previous.efficiency}%)`}
+                    isSnapshot={isSnapshot}
+                />
+
+                <PerformanceCard 
+                    title="Rendimiento Semanal" 
+                    data={stats.weekly} 
+                    color="bg-blue-600"
+                    info={`Semana actual vs anterior (${stats.weekly.previous.efficiency}%)`}
+                    isSnapshot={isSnapshot}
+                />
+
+                <PerformanceCard 
+                    title="Rendimiento Mensual" 
+                    data={stats.monthly} 
+                    color="bg-indigo-600"
+                    info={`Mes actual vs anterior (${stats.monthly.previous.efficiency}%)`}
+                    isSnapshot={isSnapshot}
+                />
+
+                <PerformanceCard 
+                    title="Rendimiento Anual" 
+                    data={stats.yearly} 
+                    color="bg-slate-800"
+                    info={`Año actual vs anterior (${stats.yearly.previous.efficiency}%)`}
+                    isSnapshot={isSnapshot}
+                />
+
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mt-2">
+                    <p className="text-[10px] text-amber-800 leading-relaxed italic">
+                        * El rendimiento se calcula dividiendo las horas reales de **Molinos / Planta** entre las **Horas Planificadas** en el calendario de producción para Cantera Pura.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
     const [stats, setStats] = useState<PerformanceDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -68,42 +142,7 @@ export const ProductionDashboard: React.FC<Props> = ({ onBack }) => {
                         <p className="font-black uppercase tracking-widest text-[10px]">Calculando KPIs de Trituración...</p>
                     </div>
                 ) : stats && (
-                    <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        
-                        <PerformanceCard 
-                            title="Rendimiento Hoy" 
-                            data={stats.daily} 
-                            color="bg-amber-500"
-                            info={`Comparado con ayer (${stats.daily.previous.efficiency}%)`}
-                        />
-
-                        <PerformanceCard 
-                            title="Rendimiento Semanal" 
-                            data={stats.weekly} 
-                            color="bg-blue-600"
-                            info={`Semana actual vs anterior (${stats.weekly.previous.efficiency}%)`}
-                        />
-
-                        <PerformanceCard 
-                            title="Rendimiento Mensual" 
-                            data={stats.monthly} 
-                            color="bg-indigo-600"
-                            info={`Mes actual vs anterior (${stats.monthly.previous.efficiency}%)`}
-                        />
-
-                        <PerformanceCard 
-                            title="Rendimiento Anual" 
-                            data={stats.yearly} 
-                            color="bg-slate-800"
-                            info={`Año actual vs anterior (${stats.yearly.previous.efficiency}%)`}
-                        />
-
-                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mt-2">
-                            <p className="text-[10px] text-amber-800 leading-relaxed italic">
-                                * El rendimiento se calcula dividiendo las horas reales de **Molinos / Planta** entre las **Horas Planificadas** en el calendario de producción para Cantera Pura.
-                            </p>
-                        </div>
-                    </div>
+                    <ProductionDashboardView stats={stats} selectedDate={selectedDate} />
                 )}
             </div>
         </div>
@@ -115,9 +154,10 @@ interface CardProps {
     data: ProductionComparison;
     color: string;
     info: string;
+    isSnapshot?: boolean;
 }
 
-const PerformanceCard: React.FC<CardProps> = ({ title, data, color, info }) => {
+const PerformanceCard: React.FC<CardProps> = ({ title, data, color, info, isSnapshot = false }) => {
     const isUp = data.trend === 'up';
     const isDown = data.trend === 'down';
     const eff = data.current.efficiency;
@@ -167,7 +207,7 @@ const PerformanceCard: React.FC<CardProps> = ({ title, data, color, info }) => {
             
             <div className="h-1.5 w-full bg-slate-50 relative">
                 <div 
-                    className={`h-full transition-all duration-1000 ${eff >= 85 ? 'bg-green-500' : eff >= 60 ? 'bg-blue-500' : 'bg-red-500'}`}
+                    className={`h-full ${isSnapshot ? '' : 'transition-all duration-1000'} ${eff >= 85 ? 'bg-green-500' : eff >= 60 ? 'bg-blue-500' : 'bg-red-500'}`}
                     style={{ width: `${Math.min(eff, 100)}%` }}
                 ></div>
             </div>
