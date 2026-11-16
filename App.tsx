@@ -11,8 +11,7 @@ import {
 } from './services/db';
 import { checkPRLThresholds } from './services/notifications';
 import { getQueue } from './services/offlineQueue';
-import { generateCPReportPDF } from './services/pdf';
-import { sendEmail } from './services/api';
+import { sendCPTriggerEmails } from './services/cpReportEmails';
 
 // Iconos
 import { 
@@ -210,10 +209,9 @@ const App: React.FC = () => {
     setIsSubmitting(true);
     try {
       await saveCPReport(data);
-      // Opcional: Generar PDF y enviar email si es online
+      // Generar y enviar los 3 correos (Rendimiento Plantas PDF, Auditoría Diaria y Gasoil Acumulado Mes)
       if (isOnline) {
-          const pdf = generateCPReportPDF(data, currentUser?.name || '', 8, 100);
-          await sendEmail(['aridos@marraque.es'], `Parte Cantera Pura - ${data.date.toLocaleDateString()}`, '<p>Adjunto parte diario.</p>', pdf, 'parte_cp.pdf');
+          await sendCPTriggerEmails(data, currentUser?.name || '');
       }
       setSuccessMsg('Parte Cantera Guardado ✅');
       setTimeout(() => { 
