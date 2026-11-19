@@ -49,13 +49,26 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
         return days;
     }, [selectedMonth]);
 
+    // Solo se tienen en cuenta para los costes de gasoil las máquinas con Gasoil B
+    const gasoilBMachineIds = useMemo(() => {
+        return new Set(
+            allMachines
+                .filter(m => (m.fuelType || 'GASOIL_B') === 'GASOIL_B')
+                .map(m => m.id)
+        );
+    }, [allMachines]);
+
+    const eligibleRefuelingLogs = useMemo(() => {
+        return refuelingLogs.filter(l => gasoilBMachineIds.has(l.machineId));
+    }, [refuelingLogs, gasoilBMachineIds]);
+
     // Omit machines with NO consumption in the selected month
     const consumedMachines = useMemo(() => {
-        const consumedIds = new Set(refuelingLogs.map(l => l.machineId));
+        const consumedIds = new Set(eligibleRefuelingLogs.map(l => l.machineId));
         return allMachines
-            .filter(m => consumedIds.has(m.id))
+            .filter(m => gasoilBMachineIds.has(m.id) && consumedIds.has(m.id))
             .sort((a, b) => (a.companyCode || a.name).localeCompare(b.companyCode || b.name));
-    }, [allMachines, refuelingLogs]);
+    }, [allMachines, gasoilBMachineIds, eligibleRefuelingLogs]);
 
     // Matrix calculation (Day x Machine)
     const grid = useMemo(() => {
@@ -65,7 +78,7 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
             consumedMachines.forEach(m => matrix[day][m.id] = 0);
         });
 
-        refuelingLogs.forEach(l => {
+        eligibleRefuelingLogs.forEach(l => {
             const day = new Date(l.date).getDate();
             if (matrix[day] && consumedMachines.find(m => m.id === l.machineId)) {
                 matrix[day][l.machineId] = (matrix[day][l.machineId] || 0) + (l.fuelLitres || 0);
@@ -73,31 +86,31 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
         });
 
         return matrix;
-    }, [refuelingLogs, consumedMachines, daysInMonth]);
+    }, [eligibleRefuelingLogs, consumedMachines, daysInMonth]);
 
     const machineTotals = useMemo(() => {
         const totals: Record<string, number> = {};
         consumedMachines.forEach(m => {
-            totals[m.id] = refuelingLogs
+            totals[m.id] = eligibleRefuelingLogs
                 .filter(l => l.machineId === m.id)
                 .reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
         });
         return totals;
-    }, [refuelingLogs, consumedMachines]);
+    }, [eligibleRefuelingLogs, consumedMachines]);
 
     const dayTotals = useMemo(() => {
         const totals: Record<number, number> = {};
         daysInMonth.forEach(day => {
-            totals[day] = refuelingLogs
+            totals[day] = eligibleRefuelingLogs
                 .filter(l => new Date(l.date).getDate() === day)
                 .reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
         });
         return totals;
-    }, [refuelingLogs, daysInMonth]);
+    }, [eligibleRefuelingLogs, daysInMonth]);
 
     const grandTotal = useMemo(() => {
-        return refuelingLogs.reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
-    }, [refuelingLogs]);
+        return eligibleRefuelingLogs.reduce((acc, curr) => acc + (curr.fuelLitres || 0), 0);
+    }, [eligibleRefuelingLogs]);
 
     const handlePrint = () => {
         window.print();
@@ -190,7 +203,7 @@ export const CostDistributionReport: React.FC<Props> = ({ onBack }) => {
                     <div>
                         <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none uppercase">Gasoil Mensual</h3>
                         <p className="text-[10px] font-bold text-green-600 uppercase mt-1 tracking-widest flex items-center gap-1">
-                            <Fuel size={10}/> Distribución Mensual por Unidad
+                            <Fuel size={10}/> Distribución Mensual por Unidad (Solo Gasoil B)
                         </p>
                     </div>
                 </div>
