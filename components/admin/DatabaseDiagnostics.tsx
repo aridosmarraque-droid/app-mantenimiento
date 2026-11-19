@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { getSchemaInfo } from '../../services/db';
-import { ArrowLeft, Search, CheckCircle, XCircle, Terminal, Clipboard, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
+import { getPreviousMonthInfo, sendPreviousMonthFleetReports } from '../../services/automation';
+import { ArrowLeft, Search, CheckCircle, XCircle, Terminal, Clipboard, AlertTriangle, Trash2, Loader2, Send } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -9,6 +10,8 @@ interface Props {
 export const DatabaseDiagnostics: React.FC<Props> = ({ onBack }) => {
     const [results, setResults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [sendingMonthly, setSendingMonthly] = useState(false);
+    const prevMonthInfo = getPreviousMonthInfo();
     
     const duplicateCheckQuery = `-- 1. BUSCAR DUPLICADOS EXACTOS (Misma máquina, fecha, horas y litros)
 SELECT maquina_id, fecha, horas_registro, litros_combustible, COUNT(*)
@@ -57,18 +60,50 @@ UPDATE public.mant_maquinas
 SET tipo_gasoil = 'GASOIL_B'
 WHERE tipo_gasoil IS NULL;`;
 
+    const monthlyAutomationTableQuery = `-- 5. TABLA DE CONTROL DE ENVÍOS MENSUALES (FLUIDOS + GASOIL)
+-- Evita duplicados cuando varios usuarios abren la app el primer día del mes
+CREATE TABLE IF NOT EXISTS public.mant_envios_mensuales (
+    periodo TEXT PRIMARY KEY,
+    estado TEXT NOT NULL DEFAULT 'SENT',
+    fecha_envio TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    detalle TEXT
+);
+
+ALTER TABLE public.mant_envios_mensuales ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access" ON public.mant_envios_mensuales;
+CREATE POLICY "Enable all access" ON public.mant_envios_mensuales FOR ALL USING (true) WITH CHECK (true);`;
+
     const runDiagnostic = async () => {
         setLoading(true);
         try {
             const data = await getSchemaInfo([
                 'mant_registros', 'partes_trabajo', 'cp_partes_diarios', 
-                'cr_partes_diarios', 'mant_maquinas', 'mant_centros', 'mant_costes_especificos'
+                'cr_partes_diarios', 'mant_maquinas', 'mant_centros', 'mant_costes_especificos',
+                'mant_envios_mensuales'
             ]);
             setResults(data);
         } catch (e) {
             console.error(e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleManualMonthlySend = async () => {
+        if (sendingMonthly) return;
+        if (!confirm(`¿Generar y enviar por email los informes de Monitor de Fluidos y Monitor de Gasoil correspondientes a ${prevMonthInfo.periodName}?`)) return;
+        setSendingMonthly(true);
+        try {
+            const res = await sendPreviousMonthFleetReports(prevMonthInfo.monthKey);
+            if (res.success) {
+                alert(`Informes enviados correctamente (${prevMonthInfo.periodName}).\nMonitor Fluidos: ${res.fluidCount} unidades.\nMonitor Gasoil: ${res.fuelCount} unidades.`);
+            } else {
+                alert(`No se pudo enviar: ${res.error || 'Error desconocido'}`);
+            }
+        } catch (e: any) {
+            alert(e?.message || 'Error al enviar los informes mensuales.');
+        } finally {
+            setSendingMonthly(false);
         }
     };
 
@@ -153,9 +188,44 @@ WHERE tipo_gasoil IS NULL;`;
                     </div>
                 </div>
                 
+                <div>
+                    <div className="flex items-center gap-2 mb-2 text-cyan-400 font-black uppercase text-[10px] tracking-widest">
+                        <Terminal size={14} /> Paso 5: Control Envíos Mensuales (Fluidos y Gasoil)
+                    </div>
+                    <div className="relative group">
+                        <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono overflow-x-auto text-cyan-200 border border-cyan-900/30">
+                            {monthlyAutomationTableQuery}
+                        </pre>
+                        <button 
+                            onClick={() => copyToClipboard(monthlyAutomationTableQuery, "Consulta para CONTROL MENSUAL copiada.")}
+                            className="absolute top-2 right-2 p-2 bg-cyan-500/20 hover:bg-cyan-500/40 rounded-lg transition-all"
+                        >
+                            <Clipboard size={14} />
+                        </button>
+                    </div>
+                </div>
+                
                 <p className="text-[9px] text-slate-500 italic">
                     * La de-duplicación por código se ha deshabilitado en la app para evitar pérdida de datos si hay repostajes múltiples legítimos. Use SQL para limpiezas profundas.
                 </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h4 className="font-black text-slate-800 uppercase text-xs tracking-widest">Cierre Mensual: Fluidos y Gasoil ({prevMonthInfo.periodName})</h4>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                        La app envía ambos informes automáticamente el primer día del mes que se abre. Pulsa aquí si quieres enviarlos manualmente ahora.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={handleManualMonthlySend}
+                    disabled={sendingMonthly}
+                    className="bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 shrink-0 disabled:opacity-50"
+                >
+                    {sendingMonthly ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+                    Enviar Mes Anterior
+                </button>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 mx-1">
