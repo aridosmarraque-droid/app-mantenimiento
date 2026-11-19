@@ -616,15 +616,37 @@ export const saveOperationLog = async (log: Omit<OperationLog, 'id'>): Promise<v
 
 export const getMachineLogs = async (machineId: string, start?: Date, end?: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return [];
-    let query = supabase.from('mant_registros').select('*').eq('maquina_id', machineId);
-    if (start) query = query.gte('fecha', toLocalDateString(start));
-    if (end) query = query.lte('fecha', toLocalDateString(end));
-    if (types && types.length > 0) query = query.in('tipo_operacion', types);
-    query = query.order('fecha', { ascending: false }).order('horas_registro', { ascending: false });
-    
-    const { data, error } = await query;
-    if (error) return [];
-    return (data || []).map(mapLogFromDb);
+    const startStr = start ? toLocalDateString(start) : null;
+    const endStr = end ? toLocalDateString(end) : null;
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+        let query = supabase
+            .from('mant_registros')
+            .select('*')
+            .eq('maquina_id', machineId);
+
+        if (startStr) query = query.gte('fecha', startStr);
+        if (endStr) query = query.lte('fecha', endStr);
+        if (types && types.length > 0) query = query.in('tipo_operacion', types);
+
+        query = query
+            .order('fecha', { ascending: false })
+            .order('horas_registro', { ascending: false })
+            .order('id', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+        const { data, error } = await query;
+        if (error) break;
+        const batch = data || [];
+        allRows = allRows.concat(batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return allRows.map(mapLogFromDb);
 };
 
 // --- 8. PREVENCIÓN DE RIESGOS LABORALES (PRL) ---
@@ -1094,14 +1116,30 @@ export const getPersonalReports = async (workerId: string): Promise<PersonalRepo
 
 export const getAllPersonalReportsByRange = async (start: Date, end: Date): Promise<PersonalReport[]> => {
     if (!isConfigured) return [];
-    const { data, error } = await supabase.from('partes_trabajo')
-        .select('*')
-        .gte('fecha', toLocalDateString(start))
-        .lte('fecha', toLocalDateString(end))
-        .order('fecha');
-    
-    if (error) return [];
-    return (data || []).map(r => ({
+    const startStr = toLocalDateString(start);
+    const endStr = toLocalDateString(end);
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+        const { data, error } = await supabase
+            .from('partes_trabajo')
+            .select('*')
+            .gte('fecha', startStr)
+            .lte('fecha', endStr)
+            .order('fecha', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) break;
+        const batch = data || [];
+        allRows = allRows.concat(batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return allRows.map(r => ({
         id: r.id,
         date: new Date(r.fecha),
         workerId: r.trabajador_id,
@@ -1197,7 +1235,7 @@ export const getDailyAuditLogs = async (date: Date): Promise<{ ops: OperationLog
 export const getSchemaInfo = async (tables: string[]): Promise<any[]> => {
     if (!isConfigured) return [];
     const results = await Promise.all(tables.map(async (t) => {
-        const { error } = await supabase.from(t).select('id', { count: 'exact', head: true }).limit(1);
+        const { error } = await supabase.from(t).select('*', { count: 'exact', head: true }).limit(1);
         return { name: t, status: error ? 'ERROR' : 'FOUND' };
     }));
     return results;
@@ -1303,13 +1341,36 @@ export const deleteSpecificCostRule = async (id: string): Promise<void> => {
 
 export const getAllOperationLogsByRange = async (start: Date, end: Date, types?: OperationType[]): Promise<OperationLog[]> => {
     if (!isConfigured) return [];
-    let query = supabase.from('mant_registros').select('*')
-        .gte('fecha', toLocalDateString(start))
-        .lte('fecha', toLocalDateString(end));
-    
-    if (types && types.length > 0) query = query.in('tipo_operacion', types);
-    
-    const { data, error } = await query;
-    if (error) return [];
-    return (data || []).map(mapLogFromDb);
+    const startStr = toLocalDateString(start);
+    const endStr = toLocalDateString(end);
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+        let query = supabase
+            .from('mant_registros')
+            .select('*')
+            .gte('fecha', startStr)
+            .lte('fecha', endStr)
+            .order('fecha', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (types && types.length > 0) {
+            query = query.in('tipo_operacion', types);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+            console.error("Error paginando mant_registros:", error);
+            break;
+        }
+        const batch = data || [];
+        allRows = allRows.concat(batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return allRows.map(mapLogFromDb);
 };
