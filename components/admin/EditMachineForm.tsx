@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { updateMachineAttributes, addMaintenanceDef, updateMaintenanceDef, deleteMaintenanceDef, getCostCenters, getSubCentersByCenter, calculateAndSyncMachineStatus, getWorkers, deleteMachine, getMachineDependencyCount } from '../../services/db';
-import { CostCenter, SubCenter, Machine, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock, User, Activity, ClipboardList } from 'lucide-react';
+import { CostCenter, SubCenter, Machine, MaintenanceDefinition, Worker, FuelType } from '../../types';
+import { Save, ArrowLeft, Plus, Trash2, Edit2, X, AlertTriangle, Loader2, ToggleLeft, ToggleRight, LayoutGrid, Zap, MessageSquare, Mail, Calculator, Truck as TruckIcon, Calendar, Clock, User, Activity, ClipboardList, Fuel } from 'lucide-react';
 
 interface Props {
     machine: Machine;
@@ -30,6 +30,7 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     const [selectableForReports, setSelectableForReports] = useState(machine.selectableForReports ?? true);
     const [activo, setActivo] = useState(machine.activo ?? true);
     const [vinculadaProduccion, setVinculadaProduccion] = useState(machine.vinculadaProduccion ?? false);
+    const [fuelType, setFuelType] = useState<FuelType>(machine.fuelType || 'GASOIL_B');
 
     // --- MAINTENANCE DEFS STATE ---
     const [editingDefId, setEditingDefId] = useState<string | null>(null);
@@ -44,7 +45,10 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
     useEffect(() => {
         getCostCenters().then(setCenters);
         getWorkers(false).then(setWorkers); // Cargar todos los trabajadores (activos e inactivos para historial)
-        calculateAndSyncMachineStatus(initialMachine).then(setMachine);
+        calculateAndSyncMachineStatus(initialMachine).then(m => {
+            setMachine(m);
+            setFuelType(m.fuelType || 'GASOIL_B');
+        });
     }, [initialMachine]);
 
     useEffect(() => {
@@ -71,13 +75,14 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                 transportExpenses,
                 selectableForReports,
                 activo,
-                vinculadaProduccion
+                vinculadaProduccion,
+                fuelType
             });
             alert("Máquina actualizada correctamente.");
             onSuccess();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("Error al actualizar máquina.");
+            alert(error?.message || "Error al actualizar máquina.");
         } finally {
             setLoading(false);
         }
@@ -300,6 +305,23 @@ export const EditMachineForm: React.FC<Props> = ({ machine: initialMachine, onBa
                             ))}
                         </select>
                     </div>
+                </div>
+
+                <div className="p-4 bg-green-50/70 rounded-xl border border-green-200">
+                    <label className="block text-sm font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Fuel size={16} className="text-green-600" /> Tipo de Gasoil
+                    </label>
+                    <select
+                        value={fuelType}
+                        onChange={e => setFuelType(e.target.value as FuelType)}
+                        className="w-full p-3 border border-green-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-green-500"
+                    >
+                        <option value="GASOIL_B">Gasoil B</option>
+                        <option value="GASOIL_A">Gasoil A</option>
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                        Solo las máquinas con <b>Gasoil B</b> se incluyen en el reparto de costes de gasoil (Matriz Diaria y Reparto Ratios).
+                    </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pt-2">
