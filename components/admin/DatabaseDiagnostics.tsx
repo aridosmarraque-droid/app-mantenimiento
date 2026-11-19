@@ -31,6 +31,32 @@ WHERE id IN (
     ) t WHERE t.numero_fila > 1
 );`;
 
+    const rlsFixQuery = `-- 3. REPARAR PERMISOS (ERROR 401 / TABLAS VACÍAS)
+-- Ejecuta esto en el SQL Editor de Supabase para habilitar acceso a todas las tablas
+DO $$ 
+DECLARE 
+    t text;
+BEGIN
+    FOR t IN SELECT table_name FROM information_schema.tables 
+             WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    LOOP
+        -- Habilitar RLS
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+        -- Crear política de acceso total
+        EXECUTE format('DROP POLICY IF EXISTS "Enable all access" ON public.%I', t);
+        EXECUTE format('CREATE POLICY "Enable all access" ON public.%I FOR ALL USING (true) WITH CHECK (true)', t);
+    END LOOP;
+END $$;`;
+
+    const fuelTypeColumnQuery = `-- 4. AÑADIR CAMPO TIPO DE GASOIL (GASOIL A / GASOIL B) EN MÁQUINAS
+-- Ejecuta esto en el SQL Editor de Supabase
+ALTER TABLE public.mant_maquinas
+ADD COLUMN IF NOT EXISTS tipo_gasoil TEXT DEFAULT 'GASOIL_B';
+
+UPDATE public.mant_maquinas
+SET tipo_gasoil = 'GASOIL_B'
+WHERE tipo_gasoil IS NULL;`;
+
     const runDiagnostic = async () => {
         setLoading(true);
         try {
@@ -87,6 +113,40 @@ WHERE id IN (
                         <button 
                             onClick={() => copyToClipboard(duplicateDeleteQuery, "Consulta de ELIMINACIÓN copiada.")}
                             className="absolute top-2 right-2 p-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg transition-all"
+                        >
+                            <Clipboard size={14} />
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex items-center gap-2 mb-2 text-indigo-400 font-black uppercase text-[10px] tracking-widest">
+                        <Terminal size={14} /> Paso 3: Reparar Permisos (401 Unauthorized)
+                    </div>
+                    <div className="relative group">
+                        <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono overflow-x-auto text-indigo-200 border border-indigo-900/30">
+                            {rlsFixQuery}
+                        </pre>
+                        <button 
+                            onClick={() => copyToClipboard(rlsFixQuery, "Consulta de REPARACIÓN DE PERMISOS copiada.")}
+                            className="absolute top-2 right-2 p-2 bg-indigo-500/20 hover:bg-indigo-500/40 rounded-lg transition-all"
+                        >
+                            <Clipboard size={14} />
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex items-center gap-2 mb-2 text-green-400 font-black uppercase text-[10px] tracking-widest">
+                        <Terminal size={14} /> Paso 4: Columna Tipo de Gasoil (A / B) en Máquinas
+                    </div>
+                    <div className="relative group">
+                        <pre className="bg-black/50 p-4 rounded-xl text-[10px] font-mono overflow-x-auto text-green-200 border border-green-900/30">
+                            {fuelTypeColumnQuery}
+                        </pre>
+                        <button 
+                            onClick={() => copyToClipboard(fuelTypeColumnQuery, "Consulta para TIPO DE GASOIL copiada.")}
+                            className="absolute top-2 right-2 p-2 bg-green-500/20 hover:bg-green-500/40 rounded-lg transition-all"
                         >
                             <Clipboard size={14} />
                         </button>
