@@ -64,9 +64,12 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
             machineLiters[log.machineId] = (machineLiters[log.machineId] || 0) + (log.fuelLitres || 0);
         });
 
-        // 2. Procesar cada máquina que consumió gasoil
+        // 2. Procesar cada máquina que consumió gasoil (solo máquinas con Gasoil B)
         Object.entries(machineLiters).forEach(([machineId, totalLiters]) => {
             const machine = machines.find(m => m.id === machineId);
+            if (!machine || (machine.fuelType || 'GASOIL_B') !== 'GASOIL_B') {
+                return;
+            }
             // Prioridad para el código interno, si no nombre
             const sourceMachineCode = machine?.companyCode || machine?.name || 'Desconocida';
 
@@ -185,7 +188,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                         <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-700"><ArrowLeft size={24} /></button>
                         <div>
                             <h3 className="text-xl font-black text-slate-800 uppercase leading-none">Reparto Gasoil</h3>
-                            <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Lógica por Ratios y Reglas Fijas</p>
+                            <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Lógica por Ratios y Reglas Fijas (Solo Gasoil B)</p>
                         </div>
                     </div>
                     <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="p-2 border rounded-xl font-bold bg-slate-50" />
@@ -247,7 +250,7 @@ export const FuelCostDistributionReport: React.FC<Props> = ({ onBack }) => {
                 <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-3 no-print">
                     <AlertCircle className="text-blue-600 flex-shrink-0" size={20}/>
                     <p className="text-[10px] text-blue-800 leading-relaxed italic">
-                        <b>Lógica aplicada:</b> Las unidades se identifican por su <b>Código Interno</b>. Si una regla de coste específico no tiene máquina de destino, el sistema imputa el coste bajo el código de la unidad de origen.
+                        <b>Lógica aplicada:</b> Solo se incluyen máquinas configuradas con <b>Gasoil B</b> (se excluyen máquinas de Gasoil A). Las unidades se identifican por su <b>Código Interno</b>. Si una regla de coste específico no tiene máquina de destino, el sistema imputa el coste bajo el código de la unidad de origen.
                     </p>
                 </div>
             </div>
