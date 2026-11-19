@@ -129,6 +129,8 @@ export interface MaintenanceDefinition {
   notifiedOverdue?: boolean;
 }
 
+export type FuelType = 'GASOIL_A' | 'GASOIL_B';
+
 export interface Machine {
   id: string;
   costCenterId: string;
@@ -143,6 +145,7 @@ export interface Machine {
   responsibleWorkerId?: string;
   activo?: boolean;
   vinculadaProduccion?: boolean; 
+  fuelType?: FuelType;
   
   maintenanceDefs: MaintenanceDefinition[];
 }
