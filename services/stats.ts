@@ -1,4 +1,4 @@
-import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs, getAllOperationLogsByRange, getAllMachines } from './db';
+import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs, getAllOperationLogsByRange, getAllMachines, toLocalDateString } from './db';
 import { CPDailyReport, CPWeeklyPlan, OperationLog, Machine } from '../types';
 
 export interface ProductionStat {
@@ -188,6 +188,71 @@ export const getMachineFuelStats = async (machineId: string) => {
     const yearly = calculateFuelConsumptionFromLogs(allLogs);
     const deviation = yearly.consumptionPerHour > 0 ? ((monthly.consumptionPerHour - yearly.consumptionPerHour) / yearly.consumptionPerHour) * 100 : 0;
     return { fuelDeviation: deviation, monthly: { ...monthly, consumedLiters: monthly.totalLiters, workedHours: monthly.workedHours }, yearly, logs: allLogs };
+};
+
+export const getFleetFuelStatsForMonth = async (targetMonthStr: string): Promise<{ machine: Machine; stats: any }[]> => {
+    const [year, month] = targetMonthStr.split('-').map(Number);
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0);
+    const monthStartStr = toLocalDateString(monthStart);
+    const monthEndStr = toLocalDateString(monthEnd);
+    const historyStart = new Date(2020, 0, 1);
+
+    const [allMachines, allLogs] = await Promise.all([
+        getAllMachines(false),
+        getAllOperationLogsByRange(historyStart, monthEnd, ['REFUELING'])
+    ]);
+
+    const logsByMachine = new Map<string, OperationLog[]>();
+    allLogs.forEach(log => {
+        const list = logsByMachine.get(log.machineId) || [];
+        list.push(log);
+        logsByMachine.set(log.machineId, list);
+    });
+
+    const sortedMachines = [...allMachines].sort((a, b) =>
+        (a.companyCode || a.name).localeCompare(b.companyCode || b.name)
+    );
+
+    const consolidated: { machine: Machine; stats: any }[] = [];
+
+    for (const machine of sortedMachines) {
+        const machineHistory = (logsByMachine.get(machine.id) || []).filter(
+            l => toLocalDateString(l.date) <= monthEndStr
+        );
+        if (machineHistory.length === 0) continue;
+
+        const monthlyLogs = machineHistory.filter(l => {
+            const dStr = toLocalDateString(l.date);
+            return dStr >= monthStartStr && dStr <= monthEndStr;
+        });
+
+        // Incluir unidades con código interno o con actividad en el mes analizado
+        if (!machine.companyCode && monthlyLogs.length === 0) continue;
+
+        const monthly = calculateFuelConsumptionFromLogs(monthlyLogs);
+        const yearly = calculateFuelConsumptionFromLogs(machineHistory);
+        const deviation =
+            yearly.consumptionPerHour > 0
+                ? ((monthly.consumptionPerHour - yearly.consumptionPerHour) / yearly.consumptionPerHour) * 100
+                : 0;
+
+        consolidated.push({
+            machine,
+            stats: {
+                fuelDeviation: deviation,
+                monthly: {
+                    ...monthly,
+                    consumedLiters: monthly.totalLiters,
+                    workedHours: monthly.workedHours
+                },
+                yearly,
+                logs: monthlyLogs
+            }
+        });
+    }
+
+    return consolidated;
 };
 
 export const getMachineFluidStats = async (machineId: string) => {
