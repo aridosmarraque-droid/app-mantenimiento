@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createMachine, getCostCenters, getSubCentersByCenter, getWorkers } from '../../services/db';
-import { CostCenter, SubCenter, MaintenanceDefinition, Worker } from '../../types';
-import { Save, ArrowLeft, Plus, Trash2, ToggleRight, ToggleLeft, LayoutGrid, Calculator, Truck, Clock, Calendar, Activity, ClipboardList } from 'lucide-react';
+import { CostCenter, SubCenter, MaintenanceDefinition, Worker, FuelType } from '../../types';
+import { Save, ArrowLeft, Plus, Trash2, ToggleRight, ToggleLeft, LayoutGrid, Calculator, Truck, Clock, Calendar, Activity, ClipboardList, Fuel } from 'lucide-react';
 
 interface Props {
     onBack: () => void;
@@ -27,6 +27,7 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
     const [transportExpenses, setTransportExpenses] = useState(false);
     const [selectableForReports, setSelectableForReports] = useState(true); 
     const [activo, setActivo] = useState(true);
+    const [fuelType, setFuelType] = useState<FuelType>('GASOIL_B');
 
     // Maintenance Defs State
     const [defs, setDefs] = useState<MaintenanceDefinition[]>([]);
@@ -116,12 +117,13 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                 transportExpenses,
                 selectableForReports,
                 maintenanceDefs: defs,
-                activo: activo
+                activo: activo,
+                fuelType
             });
             onSuccess();
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("Error al crear máquina.");
+            alert(error?.message || "Error al crear máquina.");
         } finally {
             setLoading(false);
         }
@@ -254,6 +256,23 @@ export const CreateMachineForm: React.FC<Props> = ({ onBack, onSuccess }) => {
                         <option value="">-- Sin Responsable --</option>
                         {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>
+                </div>
+
+                <div className="p-4 bg-green-50/70 rounded-xl border border-green-200">
+                    <label className="block text-sm font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Fuel size={16} className="text-green-600" /> Tipo de Gasoil
+                    </label>
+                    <select
+                        value={fuelType}
+                        onChange={e => setFuelType(e.target.value as FuelType)}
+                        className="w-full p-3 border border-green-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-green-500"
+                    >
+                        <option value="GASOIL_B">Gasoil B</option>
+                        <option value="GASOIL_A">Gasoil A</option>
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                        Solo las máquinas con <b>Gasoil B</b> se incluyen en el reparto de costes de gasoil (Matriz Diaria y Reparto Ratios).
+                    </p>
                 </div>
             </div>
 
