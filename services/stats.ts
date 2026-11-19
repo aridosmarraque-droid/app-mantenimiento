@@ -1,4 +1,4 @@
-import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs, getAllOperationLogsByRange, getAllMachines, toLocalDateString } from './db';
+import { getCPReportsByRange, getCPWeeklyPlan, getMachineLogs, getAllOperationLogsByRange, getAllMachines } from './db';
 import { CPDailyReport, CPWeeklyPlan, OperationLog, Machine } from '../types';
 
 export interface ProductionStat {
@@ -173,7 +173,10 @@ export const formatDecimal = (num: number, decimals: number = 3): string => {
 
 export const calculateFuelConsumptionFromLogs = (logs: OperationLog[]): FuelConsumptionStat => {
     if (logs.length < 2) return { totalLiters: 0, workedHours: 0, consumptionPerHour: 0, logsCount: logs.length };
-    const sorted = [...logs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const sorted = [...logs].sort((a, b) => {
+        const timeDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+        return timeDiff !== 0 ? timeDiff : a.hoursAtExecution - b.hoursAtExecution;
+    });
     const workedHours = sorted[sorted.length - 1].hoursAtExecution - sorted[0].hoursAtExecution;
     const totalLiters = sorted.slice(1).reduce((sum, log) => sum + (log.fuelLitres || 0), 0);
     return { totalLiters, workedHours, consumptionPerHour: workedHours > 0 ? totalLiters / workedHours : 0, logsCount: logs.length };
@@ -194,20 +197,26 @@ export const getFleetFuelStatsForMonth = async (targetMonthStr: string): Promise
     const [year, month] = targetMonthStr.split('-').map(Number);
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0);
-    const monthStartStr = toLocalDateString(monthStart);
-    const monthEndStr = toLocalDateString(monthEnd);
     const historyStart = new Date(2020, 0, 1);
 
-    const [allMachines, allLogs] = await Promise.all([
+    const [allMachines, historyLogs, monthRangeLogs] = await Promise.all([
         getAllMachines(false),
-        getAllOperationLogsByRange(historyStart, monthEnd, ['REFUELING'])
+        getAllOperationLogsByRange(historyStart, monthEnd, ['REFUELING']),
+        getAllOperationLogsByRange(monthStart, monthEnd, ['REFUELING'])
     ]);
 
-    const logsByMachine = new Map<string, OperationLog[]>();
-    allLogs.forEach(log => {
-        const list = logsByMachine.get(log.machineId) || [];
+    const historyByMachine = new Map<string, OperationLog[]>();
+    historyLogs.forEach(log => {
+        const list = historyByMachine.get(log.machineId) || [];
         list.push(log);
-        logsByMachine.set(log.machineId, list);
+        historyByMachine.set(log.machineId, list);
+    });
+
+    const monthlyByMachine = new Map<string, OperationLog[]>();
+    monthRangeLogs.forEach(log => {
+        const list = monthlyByMachine.get(log.machineId) || [];
+        list.push(log);
+        monthlyByMachine.set(log.machineId, list);
     });
 
     const sortedMachines = [...allMachines].sort((a, b) =>
@@ -217,20 +226,28 @@ export const getFleetFuelStatsForMonth = async (targetMonthStr: string): Promise
     const consolidated: { machine: Machine; stats: any }[] = [];
 
     for (const machine of sortedMachines) {
-        const machineHistory = (logsByMachine.get(machine.id) || []).filter(
-            l => toLocalDateString(l.date) <= monthEndStr
-        );
-        if (machineHistory.length === 0) continue;
-
-        const monthlyLogs = machineHistory.filter(l => {
-            const dStr = toLocalDateString(l.date);
-            return dStr >= monthStartStr && dStr <= monthEndStr;
-        });
+        const machineHistory = historyByMachine.get(machine.id) || [];
+        const monthlyLogs = monthlyByMachine.get(machine.id) || [];
+        if (machineHistory.length === 0 && monthlyLogs.length === 0) continue;
 
         // Incluir unidades con código interno o con actividad en el mes analizado
         if (!machine.companyCode && monthlyLogs.length === 0) continue;
 
-        const monthly = calculateFuelConsumptionFromLogs(monthlyLogs);
+        let logsForMonthlyCalc = monthlyLogs;
+        if (monthlyLogs.length > 0) {
+            const monthlyIds = new Set(monthlyLogs.map(l => l.id));
+            const priorLogs = machineHistory
+                .filter(l => !monthlyIds.has(l.id))
+                .sort((a, b) => {
+                    const timeDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+                    return timeDiff !== 0 ? timeDiff : a.hoursAtExecution - b.hoursAtExecution;
+                });
+            if (priorLogs.length > 0) {
+                logsForMonthlyCalc = [priorLogs[priorLogs.length - 1], ...monthlyLogs];
+            }
+        }
+
+        const monthly = calculateFuelConsumptionFromLogs(logsForMonthlyCalc);
         const yearly = calculateFuelConsumptionFromLogs(machineHistory);
         const deviation =
             yearly.consumptionPerHour > 0
