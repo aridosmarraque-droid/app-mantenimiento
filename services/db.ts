@@ -149,7 +149,8 @@ const mapMachine = (m: any): Machine => {
         selectableForReports: !!m.es_parte_trabajo,
         responsibleWorkerId: m.responsable_id,
         activo: m.activo !== undefined ? m.activo : true,
-        vinculadaProduccion: !!m.vinculada_produccion
+        vinculadaProduccion: !!m.vinculada_produccion,
+        fuelType: m.tipo_gasoil === 'GASOIL_A' ? 'GASOIL_A' : 'GASOIL_B'
     };
 };
 
@@ -368,7 +369,7 @@ export const getAllMachines = async (onlyActive: boolean = true): Promise<Machin
 
 export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> & { maintenanceDefs: MaintenanceDefinition[] }): Promise<void> => {
     if (!isConfigured) return;
-    const { data: machineData, error: machineError } = await supabase.from('mant_maquinas').insert({
+    const basePayload: any = {
         nombre: m.name,
         codigo_empresa: m.companyCode,
         centro_id: m.costCenterId,
@@ -380,8 +381,21 @@ export const createMachine = async (m: Omit<Machine, 'id' | 'maintenanceDefs'> &
         gastos_transporte: m.transportExpenses,
         es_parte_trabajo: m.selectableForReports,
         activo: m.activo,
-        vinculada_produccion: m.vinculadaProduccion
-    }).select().single();
+        vinculada_produccion: m.vinculadaProduccion,
+        tipo_gasoil: m.fuelType || 'GASOIL_B'
+    };
+
+    let { data: machineData, error: machineError } = await supabase.from('mant_maquinas').insert(basePayload).select().single();
+
+    if (machineError && String(machineError.message || '').includes('tipo_gasoil')) {
+        if (m.fuelType === 'GASOIL_A') {
+            throw new Error("Falta la columna 'tipo_gasoil' en Supabase (tabla mant_maquinas). Ejecute el SQL en Sistema > Diagnóstico DB para habilitar Gasoil A/B.");
+        }
+        delete basePayload.tipo_gasoil;
+        const retry = await supabase.from('mant_maquinas').insert(basePayload).select().single();
+        machineData = retry.data;
+        machineError = retry.error;
+    }
 
     if (machineError) throw machineError;
 
@@ -417,8 +431,17 @@ export const updateMachineAttributes = async (id: string, updates: Partial<Machi
     if (updates.selectableForReports !== undefined) p.es_parte_trabajo = updates.selectableForReports;
     if (updates.activo !== undefined) p.activo = updates.activo;
     if (updates.vinculadaProduccion !== undefined) p.vinculada_produccion = updates.vinculadaProduccion;
+    if (updates.fuelType !== undefined) p.tipo_gasoil = updates.fuelType;
 
-    const { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
+    let { error } = await supabase.from('mant_maquinas').update(p).eq('id', id);
+    if (error && String(error.message || '').includes('tipo_gasoil')) {
+        if (updates.fuelType === 'GASOIL_A') {
+            throw new Error("Falta la columna 'tipo_gasoil' en Supabase (tabla mant_maquinas). Ejecute el SQL en Sistema > Diagnóstico DB para habilitar Gasoil A/B.");
+        }
+        delete p.tipo_gasoil;
+        const retry = await supabase.from('mant_maquinas').update(p).eq('id', id);
+        error = retry.error;
+    }
     if (error) throw error;
 };
 
