@@ -12,6 +12,7 @@ import {
 import { checkPRLThresholds } from './services/notifications';
 import { getQueue } from './services/offlineQueue';
 import { sendCPTriggerEmails } from './services/cpReportEmails';
+import { checkAndSendMonthlyFleetReports } from './services/automation';
 
 // Iconos
 import { 
@@ -140,6 +141,12 @@ const App: React.FC = () => {
       checkPRLThresholds();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (isOnline) {
+      checkAndSendMonthlyFleetReports(currentUser?.role);
+    }
+  }, [isOnline, currentUser]);
 
   const handleLogin = (worker: Worker) => {
     setCurrentUser(worker);
