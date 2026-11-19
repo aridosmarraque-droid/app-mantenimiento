@@ -24,7 +24,7 @@ const MOCK_MAINTENANCE_DEFS: MaintenanceDefinition[] = [
 ];
 
 export const MACHINES: Machine[] = [
-  { id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false, selectableForReports: true, maintenanceDefs: MOCK_MAINTENANCE_DEFS },
+  { id: 'm1', costCenterId: 'c1', name: 'Volvo L150H (Pala)', companyCode: 'VOL-001', currentHours: 4960, requiresHours: true, adminExpenses: false, transportExpenses: false, selectableForReports: true, fuelType: 'GASOIL_B', maintenanceDefs: MOCK_MAINTENANCE_DEFS },
 ];
 
 export const SERVICE_PROVIDERS: ServiceProvider[] = [
